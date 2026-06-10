@@ -1,0 +1,125 @@
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { signOut, useSession } from "next-auth/react";
+import {
+  FolderKanban,
+  CalendarDays,
+  BookOpen,
+  LogOut,
+  ChevronRight,
+  Plus,
+} from "lucide-react";
+
+interface Project {
+  id: string;
+  name: string;
+  color: string;
+}
+
+interface SidebarProps {
+  projects: Project[];
+  onNewProject: () => void;
+}
+
+export default function Sidebar({ projects, onNewProject }: SidebarProps) {
+  const pathname = usePathname();
+  const { data: session } = useSession();
+
+  return (
+    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
+      {/* Logo */}
+      <div className="px-5 py-5 border-b border-gray-100">
+        <h1 className="text-lg font-bold text-gray-900">문화위원회</h1>
+        <p className="text-xs text-gray-400 mt-0.5">내부 업무 관리</p>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+        {/* 사업(프로젝트) 목록 */}
+        <div className="mt-4">
+          <div className="flex items-center justify-between px-3 py-1 mb-1">
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              사업
+            </span>
+            <button
+              onClick={onNewProject}
+              className="text-gray-400 hover:text-indigo-600 transition-colors"
+              title="새 사업 추가"
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+          {projects.map((p) => {
+            const base = `/dashboard/projects/${p.id}`;
+            const isActive = pathname.startsWith(base);
+            return (
+              <div key={p.id}>
+                <Link
+                  href={`${base}/kanban`}
+                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                    isActive
+                      ? "bg-indigo-50 text-indigo-700 font-medium"
+                      : "text-gray-600 hover:bg-gray-100"
+                  }`}
+                >
+                  <span
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ backgroundColor: p.color }}
+                  />
+                  <span className="truncate flex-1">{p.name}</span>
+                  {isActive && <ChevronRight size={12} className="flex-shrink-0" />}
+                </Link>
+
+                {isActive && (
+                  <div className="ml-6 mt-0.5 space-y-0.5">
+                    {[
+                      { href: `${base}/kanban`, label: "칸반", Icon: FolderKanban },
+                      { href: `${base}/schedule`, label: "일정", Icon: CalendarDays },
+                      { href: `${base}/archive`, label: "아카이브", Icon: BookOpen },
+                    ].map(({ href, label, Icon: SubIcon }) => (
+                      <Link
+                        key={href}
+                        href={href}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors ${
+                          pathname === href
+                            ? "bg-indigo-50 text-indigo-700 font-medium"
+                            : "text-gray-500 hover:bg-gray-50"
+                        }`}
+                      >
+                        <SubIcon size={13} />
+                        {label}
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </nav>
+
+      {/* User info */}
+      <div className="px-3 py-4 border-t border-gray-100">
+        <div className="flex items-center gap-3 px-3 py-2">
+          <div className="w-7 h-7 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 text-xs font-bold flex-shrink-0">
+            {session?.user?.name?.[0] ?? "U"}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-gray-800 truncate">
+              {session?.user?.name ?? "사용자"}
+            </p>
+            <p className="text-xs text-gray-400 truncate">{session?.user?.email}</p>
+          </div>
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="text-gray-400 hover:text-red-500 transition-colors"
+            title="로그아웃"
+          >
+            <LogOut size={15} />
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}
