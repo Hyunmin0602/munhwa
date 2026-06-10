@@ -162,8 +162,8 @@ function AddTaskInline({ onAdd, onCancel }: { onAdd: (t: string) => void; onCanc
         placeholder="태스크 제목 입력 후 Enter..." rows={2}
         className="w-full text-sm text-gray-800 resize-none outline-none placeholder-gray-300" />
       <div className="flex gap-2 mt-2">
-        <button onClick={submit} className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-medium rounded-lg transition-colors">추가</button>
-        <button onClick={onCancel} className="flex-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-xs rounded-lg transition-colors">취소</button>
+        <button onClick={submit} className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">추가</button>
+        <button onClick={onCancel} className="flex-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded-xl hover:-translate-y-0.5 transition-all">취소</button>
       </div>
     </div>
   );
@@ -419,8 +419,8 @@ export default function KanbanBoard({ projectId }: Props) {
                   onKeyDown={(e) => { if (e.key === "Enter") addColumn(); if (e.key === "Escape") { setAddingColumn(false); setNewColName(""); } }}
                   placeholder="컬럼 이름..." className="w-full text-sm font-semibold text-gray-700 bg-white border border-indigo-300 rounded-xl px-3 py-2 outline-none ring-1 ring-indigo-200 mb-2" />
                 <div className="flex gap-2">
-                  <button onClick={addColumn} className="flex-1 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors">추가</button>
-                  <button onClick={() => { setAddingColumn(false); setNewColName(""); }} className="flex-1 py-1.5 bg-gray-100 text-gray-600 text-xs rounded-lg hover:bg-gray-200 transition-colors">취소</button>
+                  <button onClick={addColumn} className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">추가</button>
+                  <button onClick={() => { setAddingColumn(false); setNewColName(""); }} className="flex-1 py-1.5 bg-gray-100 text-gray-700 text-xs rounded-xl hover:bg-gray-200 hover:-translate-y-0.5 transition-all">취소</button>
                 </div>
               </div>
             ) : (

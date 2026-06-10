@@ -213,9 +213,9 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
           <button
             onClick={togglePublish}
             disabled={publishing}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium transition-colors ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium hover:-translate-y-0.5 transition-all ${
               post.published
-                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm hover:shadow"
                 : "bg-gray-100 text-gray-600 hover:bg-gray-200"
             }`}
           >
@@ -236,7 +236,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
           <button
             onClick={save}
             disabled={saving}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-semibold transition-colors disabled:opacity-60"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
           >
             <Save size={12} />
             {saving ? "저장 중…" : "저장"}

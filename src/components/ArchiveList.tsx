@@ -81,7 +81,7 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
         <button
           onClick={createPost}
           disabled={creating}
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors"
+          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
         >
           <Plus size={14} />
           {creating ? "생성 중..." : "새 문서"}

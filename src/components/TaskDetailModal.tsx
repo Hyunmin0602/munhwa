@@ -107,7 +107,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
           <div className="flex items-center gap-2">
             <button
               onClick={handleDelete}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition-colors"
+              className="p-1.5 rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition-all hover:scale-110"
               title="삭제"
             >
               <Trash2 size={14} />
@@ -208,7 +208,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
           <button
             onClick={save}
             disabled={saving || !dirty}
-            className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-colors disabled:opacity-40"
+            className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
           >
             {saving ? "저장 중..." : "저장"}
           </button>
