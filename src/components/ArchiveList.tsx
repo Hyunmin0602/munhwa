@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import dayjs from "dayjs";
 import "dayjs/locale/ko";
+import { Skeleton } from "./ui/Skeleton";
 
 dayjs.locale("ko");
 
@@ -89,9 +90,28 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center flex-1">
-          <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-        </div>
+        <>
+          <Skeleton className="h-4 w-24 mb-5 rounded" />
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
+                <div className="p-5 flex-1 space-y-3">
+                  <div className="flex justify-between items-start gap-2">
+                    <Skeleton className="h-4 w-3/4 rounded-lg" />
+                    <Skeleton className="w-4 h-4 rounded flex-shrink-0" />
+                  </div>
+                  <Skeleton className="h-3 w-full rounded" />
+                  <Skeleton className="h-3 w-5/6 rounded" />
+                  <Skeleton className="h-3 w-2/3 rounded" />
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-50">
+                    <Skeleton className="h-3 w-16 rounded" />
+                    <Skeleton className="h-5 w-12 rounded-full" />
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       ) : posts.length === 0 ? (
         <div className="flex-1 flex flex-col items-center justify-center text-center">
           <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">

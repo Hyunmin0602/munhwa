@@ -23,6 +23,7 @@ import {
   ChevronLeft, ChevronRight, Pencil, Check, X as XIcon,
 } from "lucide-react";
 import TaskDetailModal from "./TaskDetailModal";
+import { Skeleton } from "./ui/Skeleton";
 
 interface Task {
   id: string;
@@ -357,8 +358,38 @@ export default function KanbanBoard({ projectId }: Props) {
   };
 
   if (loading) return (
-    <div className="flex items-center justify-center h-full">
-      <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+    <div className="flex gap-4 h-full overflow-x-auto pb-2">
+      {[
+        { cards: 3, w: "2/3" },
+        { cards: 2, w: "1/2" },
+        { cards: 4, w: "3/4" },
+      ].map((col, i) => (
+        <div key={i} className="flex-shrink-0 w-[300px] flex flex-col">
+          <div className="flex-1 flex flex-col bg-gray-50/80 rounded-2xl border border-gray-200 border-t-4 border-t-gray-200 overflow-hidden">
+            {/* column header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-4 w-20 rounded-lg" />
+                <Skeleton className="h-4 w-6 rounded-full" />
+              </div>
+              <Skeleton className="w-6 h-6 rounded-lg" />
+            </div>
+            {/* cards */}
+            <div className="flex-1 px-3 py-3 space-y-2">
+              {[...Array(col.cards)].map((_, j) => (
+                <div key={j} className="bg-white rounded-xl border border-gray-100 p-3.5 space-y-2">
+                  <Skeleton className={`h-4 w-${col.w} rounded-lg`} />
+                  <Skeleton className="h-3 w-full rounded" />
+                  <div className="flex gap-1.5 mt-1">
+                    <Skeleton className="h-5 w-12 rounded-md" />
+                    <Skeleton className="h-5 w-16 rounded-md" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 

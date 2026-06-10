@@ -11,6 +11,7 @@ import {
   CheckSquare, ImageIcon, LayoutPanelLeft,
 } from "lucide-react";
 import Link from "next/link";
+import { Skeleton } from "./ui/Skeleton";
 
 interface Post {
   id: string;
@@ -164,8 +165,48 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
 
   if (!post) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+      <div className="flex flex-col h-full bg-white">
+        {/* Top bar skeleton */}
+        <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
+          <div className="flex items-center gap-3 flex-1">
+            <Skeleton className="w-5 h-5 rounded-lg flex-shrink-0" />
+            <Skeleton className="h-6 w-48 rounded-lg" />
+          </div>
+          <div className="flex items-center gap-2 mx-4">
+            <Skeleton className="h-8 w-32 rounded-xl" />
+          </div>
+          <div className="flex items-center gap-2">
+            <Skeleton className="h-7 w-16 rounded-xl" />
+            <Skeleton className="h-7 w-14 rounded-xl" />
+          </div>
+        </div>
+        {/* Toolbar skeleton */}
+        <div className="flex items-center gap-1 px-5 py-2 border-b border-gray-100 bg-gray-50/80">
+          {[...Array(12)].map((_, i) => (
+            <Skeleton key={i} className="w-7 h-7 rounded-lg" />
+          ))}
+        </div>
+        {/* Editor area skeleton */}
+        <div className="flex-1 flex overflow-hidden">
+          <div className="w-1/2 border-r border-gray-100 p-6 space-y-3">
+            <Skeleton className="h-5 w-1/3 rounded-lg" />
+            <Skeleton className="h-4 w-full rounded" />
+            <Skeleton className="h-4 w-5/6 rounded" />
+            <Skeleton className="h-4 w-full rounded" />
+            <Skeleton className="h-4 w-4/5 rounded" />
+            <div className="pt-4 space-y-2">
+              <Skeleton className="h-4 w-full rounded" />
+              <Skeleton className="h-4 w-3/4 rounded" />
+            </div>
+          </div>
+          <div className="w-1/2 p-8 space-y-4">
+            <Skeleton className="h-8 w-2/3 rounded-xl" />
+            <Skeleton className="h-1 w-full rounded" />
+            <Skeleton className="h-4 w-full rounded" />
+            <Skeleton className="h-4 w-5/6 rounded" />
+            <Skeleton className="h-4 w-full rounded" />
+          </div>
+        </div>
       </div>
     );
   }

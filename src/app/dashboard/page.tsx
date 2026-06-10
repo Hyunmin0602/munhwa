@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { FolderKanban, CalendarDays, BookOpen, Users, ArrowRight, Plus } from "lucide-react";
 import Link from "next/link";
 import dayjs from "dayjs";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 interface Project {
   id: string;
@@ -39,9 +40,32 @@ export default function DashboardPage() {
 
       <div className="flex-1 overflow-y-auto px-8 py-6">
         {loading ? (
-          <div className="flex items-center justify-center h-64">
-            <div className="w-6 h-6 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin" />
-          </div>
+          <>
+            <Skeleton className="h-4 w-32 mb-5 rounded" />
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                  <Skeleton className="h-1.5 w-full rounded-none" />
+                  <div className="p-5 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div className="space-y-1.5 flex-1">
+                        <Skeleton className="h-5 w-2/3 rounded-lg" />
+                        <Skeleton className="h-3 w-full rounded" />
+                        <Skeleton className="h-3 w-4/5 rounded" />
+                      </div>
+                      <Skeleton className="w-8 h-8 rounded-xl ml-3 flex-shrink-0" />
+                    </div>
+                    <Skeleton className="h-3 w-1/3 rounded" />
+                    <div className="grid grid-cols-3 gap-2">
+                      <Skeleton className="h-8 rounded-xl" />
+                      <Skeleton className="h-8 rounded-xl" />
+                      <Skeleton className="h-8 rounded-xl" />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         ) : projects.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-center">
             <div className="w-16 h-16 bg-indigo-50 rounded-2xl flex items-center justify-center mb-4">
