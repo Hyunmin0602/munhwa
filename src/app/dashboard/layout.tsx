@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
+import { Menu } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import NewProjectModal from "@/components/NewProjectModal";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -17,6 +18,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -90,8 +92,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
-      <Sidebar projects={projects} onNewProject={() => setShowModal(true)} />
-      <main className="flex-1 overflow-hidden flex flex-col">{children}</main>
+      <Sidebar
+        projects={projects}
+        onNewProject={() => setShowModal(true)}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
+      />
+      <main className="flex-1 overflow-hidden flex flex-col min-w-0">
+        {/* 모바일 상단바 */}
+        <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
+          >
+            <Menu size={20} />
+          </button>
+          <h1 className="text-base font-bold text-gray-900">문화위원회</h1>
+        </div>
+        {children}
+      </main>
       {showModal && (
         <NewProjectModal
           onClose={() => setShowModal(false)}

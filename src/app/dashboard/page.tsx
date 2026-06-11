@@ -33,12 +33,12 @@ export default function DashboardPage() {
   return (
     <div className="h-full flex flex-col">
       {/* Top bar */}
-      <div className="px-8 py-6 border-b border-gray-100 bg-white">
+      <div className="px-4 md:px-8 py-4 md:py-6 border-b border-gray-100 bg-white">
         <p className="text-xs text-gray-400 mb-1">{today}</p>
         <h1 className="text-xl font-bold text-gray-900">대시보드</h1>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-8 py-6">
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-4 md:py-6">
         {loading ? (
           <>
             <Skeleton className="h-4 w-32 mb-5 rounded" />

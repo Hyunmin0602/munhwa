@@ -206,8 +206,8 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
         </div>
       </div>
 
-      {/* Right panel */}
-      <div className="w-64 flex-shrink-0 flex flex-col gap-4">
+      {/* Right panel - 데스크탑에서만 표시 */}
+      <div className="hidden lg:flex w-64 flex-shrink-0 flex-col gap-4">
         {/* Selected day events */}
         {selectedDay && (
           <div className="bg-white rounded-2xl border border-gray-200 p-4">

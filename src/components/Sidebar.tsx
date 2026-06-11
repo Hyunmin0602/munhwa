@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -9,6 +10,7 @@ import {
   LogOut,
   ChevronRight,
   Plus,
+  X,
 } from "lucide-react";
 
 interface Project {
@@ -20,28 +22,35 @@ interface Project {
 interface SidebarProps {
   projects: Project[];
   onNewProject: () => void;
+  open?: boolean;
+  onClose?: () => void;
 }
 
-export default function Sidebar({ projects, onNewProject }: SidebarProps) {
+function SidebarContent({ projects, onNewProject, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col h-screen sticky top-0">
+    <aside className="w-64 bg-white flex flex-col h-full">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-gray-100">
-        <h1 className="text-lg font-bold text-gray-900">문화위원회</h1>
-        <p className="text-xs text-gray-400 mt-0.5">내부 업무 관리</p>
+      <div className="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-gray-900">문화위원회</h1>
+          <p className="text-xs text-gray-400 mt-0.5">내부 업무 관리</p>
+        </div>
+        {/* 모바일 닫기 버튼 */}
+        {onClose && (
+          <button onClick={onClose} className="md:hidden p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
+            <X size={18} />
+          </button>
+        )}
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
-        {/* 사업(프로젝트) 목록 */}
         <div className="mt-4">
           <div className="flex items-center justify-between px-3 py-1 mb-1">
-            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-              사업
-            </span>
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">사업</span>
             <button
               onClick={onNewProject}
               className="text-gray-400 hover:text-indigo-600 transition-colors"
@@ -57,20 +66,15 @@ export default function Sidebar({ projects, onNewProject }: SidebarProps) {
               <div key={p.id}>
                 <Link
                   href={`${base}/kanban`}
+                  onClick={onClose}
                   className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-                    isActive
-                      ? "bg-indigo-50 text-indigo-700 font-medium"
-                      : "text-gray-600 hover:bg-gray-100"
+                    isActive ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-600 hover:bg-gray-100"
                   }`}
                 >
-                  <span
-                    className="w-2 h-2 rounded-full flex-shrink-0"
-                    style={{ backgroundColor: p.color }}
-                  />
+                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
                   <span className="truncate flex-1">{p.name}</span>
                   {isActive && <ChevronRight size={12} className="flex-shrink-0" />}
                 </Link>
-
                 {isActive && (
                   <div className="ml-6 mt-0.5 space-y-0.5">
                     {[
@@ -81,10 +85,9 @@ export default function Sidebar({ projects, onNewProject }: SidebarProps) {
                       <Link
                         key={href}
                         href={href}
+                        onClick={onClose}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-colors ${
-                          pathname === href
-                            ? "bg-indigo-50 text-indigo-700 font-medium"
-                            : "text-gray-500 hover:bg-gray-50"
+                          pathname === href ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-500 hover:bg-gray-50"
                         }`}
                       >
                         <SubIcon size={13} />
@@ -106,9 +109,7 @@ export default function Sidebar({ projects, onNewProject }: SidebarProps) {
             {session?.user?.name?.[0] ?? "U"}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-gray-800 truncate">
-              {session?.user?.name ?? "사용자"}
-            </p>
+            <p className="text-sm font-medium text-gray-800 truncate">{session?.user?.name ?? "사용자"}</p>
             <p className="text-xs text-gray-400 truncate">{session?.user?.email}</p>
           </div>
           <button
@@ -121,5 +122,28 @@ export default function Sidebar({ projects, onNewProject }: SidebarProps) {
         </div>
       </div>
     </aside>
+  );
+}
+
+export default function Sidebar({ projects, onNewProject, open = false, onClose }: SidebarProps) {
+  return (
+    <>
+      {/* 데스크탑 사이드바 */}
+      <div className="hidden md:flex border-r border-gray-200 h-screen sticky top-0">
+        <SidebarContent projects={projects} onNewProject={onNewProject} />
+      </div>
+
+      {/* 모바일 오버레이 드로어 */}
+      {open && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          {/* backdrop */}
+          <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+          {/* drawer */}
+          <div className="absolute left-0 top-0 h-full shadow-xl">
+            <SidebarContent projects={projects} onNewProject={onNewProject} onClose={onClose} />
+          </div>
+        </div>
+      )}
+    </>
   );
 }

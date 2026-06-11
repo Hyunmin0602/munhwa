@@ -214,7 +214,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   return (
     <div className="flex flex-col h-full bg-white">
       {/* ── Top Bar ── */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0 bg-white z-10">
+      <div className="flex items-center justify-between px-3 md:px-5 py-3 border-b border-gray-100 flex-shrink-0 bg-white z-10">
         {/* Left */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Link
@@ -232,7 +232,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         </div>
 
         {/* Center: view mode toggle */}
-        <div className="flex items-center bg-gray-100 rounded-xl p-0.5 mx-4 flex-shrink-0">
+        <div className="hidden md:flex items-center bg-gray-100 rounded-xl p-0.5 mx-4 flex-shrink-0">
           {(["editor", "split", "preview"] as const).map((m) => (
             <button
               key={m}
@@ -311,9 +311,9 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
 
       {/* ── Editor / Preview Body ── */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Editor pane */}
+        {/* Editor pane - 모바일에서 split일 때 editor만 표시 */}
         {(viewMode === "editor" || viewMode === "split") && (
-          <div className={`flex flex-col ${viewMode === "split" ? "w-1/2 border-r border-gray-100" : "w-full"} overflow-hidden`}>
+          <div className={`flex flex-col ${viewMode === "split" ? "hidden md:flex w-1/2 border-r border-gray-100" : "w-full"} overflow-hidden`}>
             {viewMode === "split" && (
               <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex-shrink-0">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">편집</span>
@@ -325,7 +325,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
               spellCheck={false}
-              className="flex-1 p-6 text-sm text-gray-800 leading-relaxed resize-none outline-none font-mono bg-white placeholder-gray-300"
+              className="flex-1 p-4 md:p-6 text-sm text-gray-800 leading-relaxed resize-none outline-none font-mono bg-white placeholder-gray-300"
               placeholder={`# 문서 제목\n\n내용을 마크다운으로 작성하세요...\n\n**굵게**, _기울임_, \`코드\`, [링크](url)\n\n- 목록 항목\n- [ ] 체크리스트\n\n> 인용문`}
             />
           </div>
@@ -333,14 +333,14 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
 
         {/* Preview pane */}
         {(viewMode === "preview" || viewMode === "split") && (
-          <div className={`flex flex-col ${viewMode === "split" ? "w-1/2" : "w-full"} overflow-hidden`}>
+          <div className={`flex flex-col ${viewMode === "split" ? "w-full md:w-1/2" : "w-full"} overflow-hidden`}>
             {viewMode === "split" && (
               <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex-shrink-0">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">미리보기</span>
               </div>
             )}
             <div className="flex-1 overflow-y-auto">
-              <div className="max-w-2xl mx-auto px-8 py-8">
+              <div className="max-w-2xl mx-auto px-4 md:px-8 py-6 md:py-8">
                 {viewMode === "preview" && title && (
                   <h1 className="text-3xl font-bold text-gray-900 mb-8 pb-4 border-b border-gray-100">
                     {title}
