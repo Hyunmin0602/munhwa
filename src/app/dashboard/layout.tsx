@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Menu } from "lucide-react";
+import { Plus } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
+import BottomTabBar from "@/components/BottomTabBar";
 import NewProjectModal from "@/components/NewProjectModal";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -18,7 +19,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [showModal, setShowModal] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const pathname = usePathname();
+  const match = pathname?.match(/\/dashboard\/projects\/([^/]+)/);
+  const currentProjectId = match?.[1];
+  const currentProject = currentProjectId ? projects.find((p) => p.id === currentProjectId) : null;
 
   useEffect(() => {
     if (status === "unauthenticated") router.push("/login");
@@ -92,25 +96,26 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
-      <Sidebar
-        projects={projects}
-        onNewProject={() => setShowModal(true)}
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-      />
-      <main className="flex-1 overflow-hidden flex flex-col min-w-0">
+      <Sidebar projects={projects} onNewProject={() => setShowModal(true)} />
+      <main className="flex-1 overflow-hidden flex flex-col min-w-0 pb-14 md:pb-0">
         {/* 모바일 상단바 */}
-        <div className="md:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className="p-1.5 rounded-lg text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition-all"
-          >
-            <Menu size={20} />
-          </button>
-          <h1 className="text-base font-bold text-gray-900">문화위원회</h1>
+        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
+          <h1 className="text-base font-bold text-gray-900">
+            {currentProject ? currentProject.name : "문화위원회"}
+          </h1>
+          {!currentProject && (
+            <button
+              onClick={() => setShowModal(true)}
+              className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition-all"
+              title="새 사업 추가"
+            >
+              <Plus size={20} />
+            </button>
+          )}
         </div>
         {children}
       </main>
+      <BottomTabBar projects={projects} />
       {showModal && (
         <NewProjectModal
           onClose={() => setShowModal(false)}

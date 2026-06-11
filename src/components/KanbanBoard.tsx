@@ -358,13 +358,13 @@ export default function KanbanBoard({ projectId }: Props) {
   };
 
   if (loading) return (
-    <div className="flex gap-4 h-full overflow-x-auto pb-2">
+    <div className="flex gap-3 md:gap-4 h-full overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
       {[
         { cards: 3, w: "2/3" },
         { cards: 2, w: "1/2" },
         { cards: 4, w: "3/4" },
       ].map((col, i) => (
-        <div key={i} className="flex-shrink-0 w-[300px] flex flex-col">
+        <div key={i} className="flex-shrink-0 w-[calc(100vw-2.5rem)] md:w-[300px] flex flex-col snap-center">
           <div className="flex-1 flex flex-col bg-gray-50/80 rounded-2xl border border-gray-200 border-t-4 border-t-gray-200 overflow-hidden">
             {/* column header */}
             <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
@@ -398,12 +398,12 @@ export default function KanbanBoard({ projectId }: Props) {
   return (
     <>
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-        <div className="flex gap-4 h-full overflow-x-auto pb-2">
+        <div className="flex gap-3 md:gap-4 h-full overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
           {sortedCols.map((column, colIdx) => {
             const prevCol = sortedCols[colIdx - 1];
             const nextCol = sortedCols[colIdx + 1];
             return (
-              <div key={column.id} className="flex-shrink-0 w-[300px] flex flex-col">
+              <div key={column.id} className="flex-shrink-0 w-[calc(100vw-2.5rem)] md:w-[300px] flex flex-col snap-center">
                 <div className={`flex-1 flex flex-col bg-gray-50/80 rounded-2xl border border-gray-200 border-t-4 ${COLUMN_COLORS[colIdx % COLUMN_COLORS.length]} overflow-hidden`}>
                   <ColumnHeader column={column} projectId={projectId}
                     onRename={(name) => setColumns((prev) => prev.map((c) => c.id === column.id ? { ...c, name } : c))}
@@ -443,7 +443,7 @@ export default function KanbanBoard({ projectId }: Props) {
           })}
 
           {/* Add column */}
-          <div className="flex-shrink-0 w-[300px]">
+          <div className="flex-shrink-0 w-72 md:w-[300px] snap-center">
             {addingColumn ? (
               <div className="bg-gray-50/80 rounded-2xl border border-gray-200 border-t-4 border-t-gray-300 p-3">
                 <input ref={newColRef} value={newColName} onChange={(e) => setNewColName(e.target.value)}
