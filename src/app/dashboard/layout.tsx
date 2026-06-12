@@ -97,7 +97,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       <Sidebar projects={projects} onNewProject={() => setShowModal(true)} />
-      <main className="flex-1 overflow-hidden flex flex-col min-w-0 pb-14 md:pb-0">
+      <main className="flex-1 overflow-hidden flex flex-col min-w-0 pb-[5.25rem] md:pb-0">
         {/* 모바일 상단바 */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
           <h1 className="text-base font-bold text-gray-900">
