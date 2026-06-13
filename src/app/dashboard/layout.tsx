@@ -6,11 +6,13 @@ import { Plus } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import BottomTabBar from "@/components/BottomTabBar";
 import NewProjectModal from "@/components/NewProjectModal";
+import ProjectEditModal from "@/components/ProjectEditModal";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 interface Project {
   id: string;
   name: string;
+  description: string | null;
   color: string;
 }
 
@@ -19,6 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
   const pathname = usePathname();
   const match = pathname?.match(/\/dashboard\/projects\/([^/]+)/);
   const currentProjectId = match?.[1];
@@ -104,9 +107,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     router.push(`/dashboard/projects/${project.id}/kanban`);
   };
 
+  const handleProjectUpdated = (project: Project) => {
+    setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, ...project } : p)));
+    setEditingProject(null);
+    window.dispatchEvent(new CustomEvent("project-updated", { detail: project }));
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
-      <Sidebar projects={projects} onNewProject={() => setShowModal(true)} />
+      <Sidebar
+        projects={projects}
+        onNewProject={() => setShowModal(true)}
+        onEditProject={setEditingProject}
+      />
       <main className="flex-1 overflow-hidden flex flex-col min-w-0 pb-[5.25rem] md:pb-0">
         {/* 모바일 상단바 */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
@@ -130,6 +143,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <NewProjectModal
           onClose={() => setShowModal(false)}
           onCreated={handleProjectCreated}
+        />
+      )}
+      {editingProject && (
+        <ProjectEditModal
+          project={editingProject}
+          onClose={() => setEditingProject(null)}
+          onUpdated={handleProjectUpdated}
         />
       )}
     </div>

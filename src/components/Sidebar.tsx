@@ -1,5 +1,4 @@
 "use client";
-import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -10,23 +9,26 @@ import {
   LogOut,
   ChevronRight,
   Plus,
+  Pencil,
   X,
 } from "lucide-react";
 
 interface Project {
   id: string;
   name: string;
+  description: string | null;
   color: string;
 }
 
 interface SidebarProps {
   projects: Project[];
   onNewProject: () => void;
+  onEditProject: (project: Project) => void;
   open?: boolean;
   onClose?: () => void;
 }
 
-function SidebarContent({ projects, onNewProject, onClose }: SidebarProps) {
+function SidebarContent({ projects, onNewProject, onEditProject, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
 
@@ -64,17 +66,36 @@ function SidebarContent({ projects, onNewProject, onClose }: SidebarProps) {
             const isActive = pathname.startsWith(base);
             return (
               <div key={p.id}>
-                <Link
-                  href={`${base}/kanban`}
-                  onClick={onClose}
-                  className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
+                <div
+                  className={`group flex items-center rounded-lg transition-colors ${
                     isActive ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-600 hover:bg-gray-100"
                   }`}
                 >
-                  <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
-                  <span className="truncate flex-1">{p.name}</span>
-                  {isActive && <ChevronRight size={12} className="flex-shrink-0" />}
-                </Link>
+                  <Link
+                    href={`${base}/kanban`}
+                    onClick={onClose}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-sm"
+                  >
+                    <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+                    <span className="truncate flex-1">{p.name}</span>
+                    {isActive && <ChevronRight size={12} className="flex-shrink-0" />}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onEditProject(p);
+                      onClose?.();
+                    }}
+                    className={`mr-1 rounded-md p-1.5 transition-all ${
+                      isActive
+                        ? "text-indigo-500 hover:bg-indigo-100"
+                        : "text-gray-300 hover:bg-white hover:text-gray-600 md:opacity-0 md:group-hover:opacity-100"
+                    }`}
+                    title="사업 수정"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                </div>
                 {isActive && (
                   <div className="ml-6 mt-0.5 space-y-0.5">
                     {[
@@ -125,12 +146,12 @@ function SidebarContent({ projects, onNewProject, onClose }: SidebarProps) {
   );
 }
 
-export default function Sidebar({ projects, onNewProject, open = false, onClose }: SidebarProps) {
+export default function Sidebar({ projects, onNewProject, onEditProject, open = false, onClose }: SidebarProps) {
   return (
     <>
       {/* 데스크탑 사이드바 */}
       <div className="hidden md:flex border-r border-gray-200 h-screen sticky top-0">
-        <SidebarContent projects={projects} onNewProject={onNewProject} />
+        <SidebarContent projects={projects} onNewProject={onNewProject} onEditProject={onEditProject} />
       </div>
 
       {/* 모바일 오버레이 드로어 */}
@@ -140,7 +161,12 @@ export default function Sidebar({ projects, onNewProject, open = false, onClose 
           <div className="absolute inset-0 bg-black/40" onClick={onClose} />
           {/* drawer */}
           <div className="absolute left-0 top-0 h-full shadow-xl">
-            <SidebarContent projects={projects} onNewProject={onNewProject} onClose={onClose} />
+            <SidebarContent
+              projects={projects}
+              onNewProject={onNewProject}
+              onEditProject={onEditProject}
+              onClose={onClose}
+            />
           </div>
         </div>
       )}
