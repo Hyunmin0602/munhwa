@@ -33,7 +33,7 @@ export default async function PublicArchivePage({
       <header className="border-b border-gray-100 sticky top-0 bg-white/95 backdrop-blur z-10">
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
           <Link href="/" className="text-sm font-semibold text-indigo-700">
-            문화위원회
+            문화체육위원회
           </Link>
           <span className="text-xs text-gray-400 bg-gray-100 px-2.5 py-1 rounded-full">
             {post.project.name}
@@ -55,7 +55,7 @@ export default async function PublicArchivePage({
       </article>
 
       <footer className="text-center py-8 text-xs text-gray-300 border-t border-gray-100 mt-12">
-        문화위원회 아카이브
+        문화체육위원회 아카이브
       </footer>
     </div>
   );

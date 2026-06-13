@@ -35,7 +35,7 @@ function SidebarContent({ projects, onNewProject, onClose }: SidebarProps) {
       {/* Logo */}
       <div className="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">문화위원회</h1>
+          <h1 className="text-lg font-bold text-gray-900">문화체육위원회</h1>
           <p className="text-xs text-gray-400 mt-0.5">내부 업무 관리</p>
         </div>
         {/* 모바일 닫기 버튼 */}

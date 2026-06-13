@@ -101,7 +101,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* 모바일 상단바 */}
         <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
           <h1 className="text-base font-bold text-gray-900">
-            {currentProject ? currentProject.name : "문화위원회"}
+            {currentProject ? currentProject.name : "문화체육위원회"}
           </h1>
           {!currentProject && (
             <button

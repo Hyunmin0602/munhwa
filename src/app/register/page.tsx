@@ -55,7 +55,7 @@ export default function RegisterPage() {
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <div className="mb-8 text-center">
             <h1 className="text-2xl font-bold text-gray-900">회원가입</h1>
-            <p className="text-sm text-gray-500 mt-1">문화위원회 업무 시스템</p>
+            <p className="text-sm text-gray-500 mt-1">문화체육위원회 업무 시스템</p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
             {/* 이름 */}

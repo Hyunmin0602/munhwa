@@ -9,7 +9,7 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "문화위원회 업무 시스템",
+  title: "문화체육위원회 업무 시스템",
   description: "위원회 내부 업무 관리 플랫폼",
 };
 

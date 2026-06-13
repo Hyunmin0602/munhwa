@@ -126,7 +126,7 @@ function LoginPageInner() {
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-lg p-8">
           <div className="mb-8 text-center">
-            <h1 className="text-2xl font-bold text-gray-900">문화위원회</h1>
+            <h1 className="text-2xl font-bold text-gray-900">문화체육위원회</h1>
             <p className="text-sm text-gray-500 mt-1">내부 업무 관리 시스템</p>
           </div>
           <form onSubmit={handleSubmit} className="space-y-4">
