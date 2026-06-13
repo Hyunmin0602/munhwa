@@ -37,6 +37,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [status]);
 
+  useEffect(() => {
+    const handleProjectUpdated = (event: Event) => {
+      const project = (event as CustomEvent<Project>).detail;
+      setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, ...project } : p)));
+    };
+
+    window.addEventListener("project-updated", handleProjectUpdated);
+    return () => window.removeEventListener("project-updated", handleProjectUpdated);
+  }, []);
+
   if (status === "loading") {
     return (
       <div className="flex h-screen overflow-hidden bg-gray-50">

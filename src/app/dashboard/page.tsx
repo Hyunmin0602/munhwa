@@ -1,9 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
-import { FolderKanban, CalendarDays, BookOpen, Users, ArrowRight, Plus } from "lucide-react";
+import { FolderKanban, CalendarDays, BookOpen, Users, Pencil } from "lucide-react";
 import Link from "next/link";
 import dayjs from "dayjs";
 import { Skeleton } from "@/components/ui/Skeleton";
+import ProjectEditModal from "@/components/ProjectEditModal";
 
 interface Project {
   id: string;
@@ -14,9 +15,12 @@ interface Project {
   createdAt: string;
 }
 
+type ProjectUpdate = Pick<Project, "id" | "name" | "description" | "color">;
+
 export default function DashboardPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
 
   useEffect(() => {
     fetch("/api/projects")
@@ -29,6 +33,12 @@ export default function DashboardPage() {
   }, []);
 
   const today = dayjs().format("YYYY년 M월 D일 dddd");
+
+  const handleProjectUpdated = (project: ProjectUpdate) => {
+    setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, ...project } : p)));
+    setEditingProject(null);
+    window.dispatchEvent(new CustomEvent("project-updated", { detail: project }));
+  };
 
   return (
     <div className="h-full flex flex-col">
@@ -93,12 +103,15 @@ export default function DashboardPage() {
                           <p className="text-xs text-gray-400 mt-0.5 line-clamp-2 leading-relaxed">{p.description}</p>
                         )}
                       </div>
-                      <div
+                      <button
+                        type="button"
+                        onClick={() => setEditingProject(p)}
                         className="w-8 h-8 rounded-xl flex items-center justify-center ml-3 flex-shrink-0"
                         style={{ backgroundColor: p.color + "20" }}
+                        title="사업 수정"
                       >
-                        <FolderKanban size={15} style={{ color: p.color }} />
-                      </div>
+                        <Pencil size={14} style={{ color: p.color }} />
+                      </button>
                     </div>
 
                     <div className="flex items-center gap-2 text-xs text-gray-400 mb-4">
@@ -131,6 +144,13 @@ export default function DashboardPage() {
           </>
         )}
       </div>
+      {editingProject && (
+        <ProjectEditModal
+          project={editingProject}
+          onClose={() => setEditingProject(null)}
+          onUpdated={handleProjectUpdated}
+        />
+      )}
     </div>
   );
 }

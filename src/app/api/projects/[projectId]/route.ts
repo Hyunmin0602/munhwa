@@ -39,9 +39,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const data = await req.json();
+  const name = typeof data.name === "string" ? data.name.trim() : undefined;
+  if (data.name !== undefined && !name) {
+    return NextResponse.json({ error: "프로젝트 이름이 필요합니다." }, { status: 400 });
+  }
+
   const project = await prisma.project.update({
     where: { id: projectId },
-    data: { name: data.name, description: data.description, color: data.color },
+    data: {
+      ...(name !== undefined ? { name } : {}),
+      ...(data.description !== undefined ? { description: data.description } : {}),
+      ...(data.color !== undefined ? { color: data.color } : {}),
+    },
   });
   return NextResponse.json(project);
 }
