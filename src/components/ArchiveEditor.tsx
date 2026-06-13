@@ -29,6 +29,36 @@ interface Props {
   postId: string;
 }
 
+type ToolbarAction =
+  | { type: "line"; prefix: string; placeholder: string }
+  | { type: "around"; before: string; after: string; placeholder: string }
+  | { type: "rule" };
+
+const TOOLBAR: { group: string; items: { icon: React.ReactNode; title: string; action: ToolbarAction }[] }[] = [
+  { group: "heading", items: [
+    { icon: <Heading1 size={14} />, title: "제목1", action: { type: "line", prefix: "# ", placeholder: "제목 1" } },
+    { icon: <Heading2 size={14} />, title: "제목2", action: { type: "line", prefix: "## ", placeholder: "제목 2" } },
+    { icon: <Heading3 size={14} />, title: "제목3", action: { type: "line", prefix: "### ", placeholder: "제목 3" } },
+  ]},
+  { group: "inline", items: [
+    { icon: <Bold size={14} />, title: "굵게 (⌘B)", action: { type: "around", before: "**", after: "**", placeholder: "굵은 텍스트" } },
+    { icon: <Italic size={14} />, title: "기울임 (⌘I)", action: { type: "around", before: "_", after: "_", placeholder: "기울임 텍스트" } },
+    { icon: <Strikethrough size={14} />, title: "취소선", action: { type: "around", before: "~~", after: "~~", placeholder: "텍스트" } },
+    { icon: <Code size={14} />, title: "인라인 코드", action: { type: "around", before: "`", after: "`", placeholder: "코드" } },
+  ]},
+  { group: "block", items: [
+    { icon: <List size={14} />, title: "목록", action: { type: "line", prefix: "- ", placeholder: "항목" } },
+    { icon: <ListOrdered size={14} />, title: "번호 목록", action: { type: "line", prefix: "1. ", placeholder: "항목" } },
+    { icon: <CheckSquare size={14} />, title: "체크리스트", action: { type: "line", prefix: "- [ ] ", placeholder: "항목" } },
+    { icon: <Quote size={14} />, title: "인용", action: { type: "line", prefix: "> ", placeholder: "인용 텍스트" } },
+  ]},
+  { group: "misc", items: [
+    { icon: <Link2 size={14} />, title: "링크", action: { type: "around", before: "[", after: "](https://)", placeholder: "링크 텍스트" } },
+    { icon: <ImageIcon size={14} />, title: "이미지", action: { type: "line", prefix: "![이미지](", placeholder: "https://이미지-url" } },
+    { icon: <Minus size={14} />, title: "구분선", action: { type: "rule" } },
+  ]},
+];
+
 // --- Toolbar helpers ---
 function insertAround(
   textarea: HTMLTextAreaElement,
@@ -124,33 +154,24 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
     return () => window.removeEventListener("keydown", handler);
   }, [save]);
 
-  // Toolbar action dispatcher
-  const ta = () => textareaRef.current!;
+  const runToolbarAction = (action: ToolbarAction) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
 
-  const TOOLBAR = [
-    { group: "heading", items: [
-      { icon: <Heading1 size={14} />, title: "제목1", action: () => insertLine(ta(), "# ", "제목 1", setContent) },
-      { icon: <Heading2 size={14} />, title: "제목2", action: () => insertLine(ta(), "## ", "제목 2", setContent) },
-      { icon: <Heading3 size={14} />, title: "제목3", action: () => insertLine(ta(), "### ", "제목 3", setContent) },
-    ]},
-    { group: "inline", items: [
-      { icon: <Bold size={14} />, title: "굵게 (⌘B)", action: () => insertAround(ta(), "**", "**", "굵은 텍스트", setContent) },
-      { icon: <Italic size={14} />, title: "기울임 (⌘I)", action: () => insertAround(ta(), "_", "_", "기울임 텍스트", setContent) },
-      { icon: <Strikethrough size={14} />, title: "취소선", action: () => insertAround(ta(), "~~", "~~", "텍스트", setContent) },
-      { icon: <Code size={14} />, title: "인라인 코드", action: () => insertAround(ta(), "`", "`", "코드", setContent) },
-    ]},
-    { group: "block", items: [
-      { icon: <List size={14} />, title: "목록", action: () => insertLine(ta(), "- ", "항목", setContent) },
-      { icon: <ListOrdered size={14} />, title: "번호 목록", action: () => insertLine(ta(), "1. ", "항목", setContent) },
-      { icon: <CheckSquare size={14} />, title: "체크리스트", action: () => insertLine(ta(), "- [ ] ", "항목", setContent) },
-      { icon: <Quote size={14} />, title: "인용", action: () => insertLine(ta(), "> ", "인용 텍스트", setContent) },
-    ]},
-    { group: "misc", items: [
-      { icon: <Link2 size={14} />, title: "링크", action: () => insertAround(ta(), "[", "](https://)", "링크 텍스트", setContent) },
-      { icon: <ImageIcon size={14} />, title: "이미지", action: () => insertLine(ta(), "![이미지](", "https://이미지-url", setContent) },
-      { icon: <Minus size={14} />, title: "구분선", action: () => { const t = ta(); const v = t.value; const s = t.selectionStart; setContent(v.slice(0, s) + "\n---\n" + v.slice(s)); setTimeout(() => { t.focus(); t.selectionStart = t.selectionEnd = s + 5; }, 0); } },
-    ]},
-  ];
+    if (action.type === "line") {
+      insertLine(textarea, action.prefix, action.placeholder, setContent);
+    } else if (action.type === "around") {
+      insertAround(textarea, action.before, action.after, action.placeholder, setContent);
+    } else {
+      const value = textarea.value;
+      const start = textarea.selectionStart;
+      setContent(value.slice(0, start) + "\n---\n" + value.slice(start));
+      setTimeout(() => {
+        textarea.focus();
+        textarea.selectionStart = textarea.selectionEnd = start + 5;
+      }, 0);
+    }
+  };
 
   // Tab key indentation
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -295,7 +316,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
                 <button
                   key={item.title}
                   title={item.title}
-                  onMouseDown={(e) => { e.preventDefault(); item.action(); }}
+                  onMouseDown={(e) => { e.preventDefault(); runToolbarAction(item.action); }}
                   className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:text-indigo-700 hover:bg-indigo-50 transition-colors"
                 >
                   {item.icon}

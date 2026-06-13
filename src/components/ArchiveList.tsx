@@ -3,8 +3,6 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Plus, Globe, Lock, Trash2, FileText, Clock } from "lucide-react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import dayjs from "dayjs";
 import "dayjs/locale/ko";
 import { Skeleton } from "./ui/Skeleton";

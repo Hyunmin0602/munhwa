@@ -6,7 +6,8 @@ import {
   DragOverEvent,
   DragOverlay,
   DragStartEvent,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   closestCorners,
@@ -15,6 +16,7 @@ import {
   SortableContext,
   arrayMove,
   useSortable,
+  horizontalListSortingStrategy,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -66,6 +68,9 @@ const COLUMN_COLORS = [
   "border-t-purple-400",
 ];
 
+const columnDragId = (columnId: string) => `column:${columnId}`;
+const getColumnIdFromDragId = (id: string) => id.startsWith("column:") ? id.slice("column:".length) : id;
+
 function TaskCard({
   task, onDelete, onMoveLeft, onMoveRight,
   canMoveLeft, canMoveRight, prevColName, nextColName, onClick,
@@ -74,7 +79,7 @@ function TaskCard({
   canMoveLeft: boolean; canMoveRight: boolean; prevColName: string; nextColName: string;
   onClick: () => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSortDragging } = useSortable({ id: task.id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSortDragging } = useSortable({ id: task.id, data: { type: "task", task } });
   const style = { transform: CSS.Transform.toString(transform), transition };
   const p = PRIORITY[task.priority] ?? PRIORITY.medium;
 
@@ -112,7 +117,7 @@ function TaskCard({
   const showLeft  = swipeDx < -12 && canMoveLeft;
 
   return (
-    <div ref={setNodeRef} style={style} className={`relative rounded-xl overflow-hidden ${isSortDragging ? "opacity-40 scale-95" : ""}`}>
+    <div ref={setNodeRef} style={style} className={`relative rounded-xl overflow-hidden select-none ${isSortDragging ? "opacity-40 scale-95" : ""}`}>
       <div className={`absolute inset-y-0 left-0 flex items-center justify-start px-3 rounded-l-xl pointer-events-none bg-indigo-500 text-white text-xs font-semibold gap-1 transition-all duration-100 ${showLeft ? "opacity-100 w-20" : "opacity-0 w-0"}`}>
         <ChevronLeft size={14} /><span className="truncate">{prevColName}</span>
       </div>
@@ -120,14 +125,16 @@ function TaskCard({
         <span className="truncate">{nextColName}</span><ChevronRight size={14} />
       </div>
       <div
+        {...attributes}
+        {...listeners}
         style={{ transform: `translateX(${swipeDx}px)`, transition: swiping ? "none" : "transform 0.2s ease" }}
         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
         onClick={() => { if (!didSwipe.current) onClick(); }}
-        className={`bg-white border border-gray-150 shadow-sm group rounded-xl cursor-pointer ${!isSortDragging ? "hover:shadow-md hover:border-indigo-200" : ""}`}
+        className={`bg-white border border-gray-150 shadow-sm group rounded-xl cursor-grab active:cursor-grabbing touch-none ${!isSortDragging ? "hover:shadow-md hover:border-indigo-200" : ""}`}
       >
         <div className="p-3.5">
           <div className="flex items-start gap-2">
-            <button {...attributes} {...listeners} onClick={(e) => e.stopPropagation()} className="mt-0.5 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing flex-shrink-0 touch-none">
+            <button type="button" tabIndex={-1} onClick={(e) => e.stopPropagation()} className="mt-0.5 text-gray-300 group-hover:text-gray-400 flex-shrink-0 pointer-events-none" aria-hidden="true">
               <GripVertical size={14} />
             </button>
             <div className="flex-1 min-w-0">
@@ -151,27 +158,44 @@ function TaskCard({
   );
 }
 
-function AddTaskInline({ onAdd, onCancel }: { onAdd: (t: string) => void; onCancel: () => void }) {
+function AddTaskInline({ onAdd, onAddDetails, onCancel }: {
+  onAdd: (title: string) => Promise<boolean>;
+  onAddDetails: (title: string) => Promise<boolean>;
+  onCancel: () => void;
+}) {
   const [title, setTitle] = useState("");
+  const [submitting, setSubmitting] = useState<"quick" | "details" | null>(null);
   const ref = useRef<HTMLTextAreaElement>(null);
   useEffect(() => { ref.current?.focus(); }, []);
-  const submit = () => { if (title.trim()) onAdd(title.trim()); else onCancel(); };
+  const submit = async (mode: "quick" | "details") => {
+    const trimmed = title.trim();
+    if (!trimmed) { onCancel(); return; }
+    setSubmitting(mode);
+    const added = mode === "details" ? await onAddDetails(trimmed) : await onAdd(trimmed);
+    if (!added) setSubmitting(null);
+  };
   return (
     <div className="bg-white rounded-xl border border-indigo-300 shadow-sm ring-1 ring-indigo-200 p-3">
       <textarea ref={ref} value={title} onChange={(e) => setTitle(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } if (e.key === "Escape") onCancel(); }}
+        disabled={submitting !== null}
+        onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit("quick"); } if (e.key === "Escape") onCancel(); }}
         placeholder="태스크 제목 입력 후 Enter..." rows={2}
-        className="w-full text-sm text-gray-800 resize-none outline-none placeholder-gray-300" />
-      <div className="flex gap-2 mt-2">
-        <button onClick={submit} className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">추가</button>
-        <button onClick={onCancel} className="flex-1 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded-xl hover:-translate-y-0.5 transition-all">취소</button>
+        className="w-full text-sm text-gray-800 resize-none outline-none placeholder-gray-300 disabled:opacity-60" />
+      <div className="grid grid-cols-[1fr_1.5fr_auto] gap-2 mt-2">
+        <button disabled={submitting !== null} onClick={() => submit("quick")} className="py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0">
+          {submitting === "quick" ? "추가 중..." : "추가"}
+        </button>
+        <button disabled={submitting !== null} onClick={() => submit("details")} className="py-1.5 bg-white hover:bg-indigo-50 text-indigo-600 text-xs font-semibold rounded-xl border border-indigo-200 hover:border-indigo-300 shadow-sm hover:shadow hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0">
+          {submitting === "details" ? "여는 중..." : "세부사항 추가"}
+        </button>
+        <button disabled={submitting !== null} onClick={onCancel} className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:translate-y-0">취소</button>
       </div>
     </div>
   );
 }
 
-function ColumnHeader({ column, projectId, onRename, onDelete }: {
-  column: Column; projectId: string; onRename: (name: string) => void; onDelete: () => void;
+function ColumnHeader({ column, projectId, dragHandleProps, onRename, onDelete }: {
+  column: Column; projectId: string; dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>; onRename: (name: string) => void; onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(column.name);
@@ -206,7 +230,10 @@ function ColumnHeader({ column, projectId, onRename, onDelete }: {
             className="text-sm font-semibold text-gray-700 bg-white border border-indigo-300 rounded-lg px-2 py-0.5 outline-none ring-1 ring-indigo-200 w-full" />
         ) : (
           <>
-            <h3 className="text-sm font-semibold text-gray-700 truncate cursor-pointer hover:text-indigo-600 transition-colors" onClick={() => setEditing(true)} title="클릭하여 이름 변경">{column.name}</h3>
+            <button type="button" {...dragHandleProps} onClick={(e) => e.stopPropagation()} title="컬럼 이동" className="w-8 h-8 -my-1.5 -ml-1.5 flex items-center justify-center rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-grab active:cursor-grabbing touch-none select-none flex-shrink-0 transition-colors">
+              <GripVertical size={16} />
+            </button>
+            <h3 className="text-sm font-semibold text-gray-700 truncate cursor-pointer hover:text-indigo-600 transition-colors select-none" onClick={() => setEditing(true)} title="클릭하여 이름 변경">{column.name}</h3>
             <span className="text-xs text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">{column.tasks.length}</span>
           </>
         )}
@@ -228,6 +255,24 @@ function ColumnHeader({ column, projectId, onRename, onDelete }: {
   );
 }
 
+function SortableColumnContainer({ column, children }: {
+  column: Column;
+  children: (props: { dragHandleProps: React.ButtonHTMLAttributes<HTMLButtonElement>; isDragging: boolean }) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: columnDragId(column.id),
+    data: { type: "column", columnId: column.id },
+  });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  const dragHandleProps = { ...attributes, ...listeners } as React.ButtonHTMLAttributes<HTMLButtonElement>;
+
+  return (
+    <div ref={setNodeRef} style={style} className={`flex-shrink-0 w-[calc(100vw-2.5rem)] md:w-[300px] flex flex-col snap-center select-none ${isDragging ? "opacity-60" : ""}`}>
+      {children({ dragHandleProps, isDragging })}
+    </div>
+  );
+}
+
 export default function KanbanBoard({ projectId }: Props) {
   const [columns, setColumns] = useState<Column[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -239,7 +284,10 @@ export default function KanbanBoard({ projectId }: Props) {
   const [newColName, setNewColName] = useState("");
   const newColRef = useRef<HTMLInputElement>(null);
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 6 } }));
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 160, tolerance: 8 } })
+  );
 
   useEffect(() => {
     fetch(`/api/projects/${projectId}`)
@@ -255,6 +303,10 @@ export default function KanbanBoard({ projectId }: Props) {
   useEffect(() => { if (addingColumn) newColRef.current?.focus(); }, [addingColumn]);
 
   const handleDragStart = (e: DragStartEvent) => {
+    if (e.active.data.current?.type === "column") {
+      setActiveTask(null);
+      return;
+    }
     const task = columns.flatMap((c) => c.tasks).find((t) => t.id === e.active.id);
     setActiveTask(task ?? null);
   };
@@ -262,10 +314,12 @@ export default function KanbanBoard({ projectId }: Props) {
   const handleDragOver = (e: DragOverEvent) => {
     const { active, over } = e;
     if (!over) return;
+    if (active.data.current?.type === "column") return;
     const activeTaskId = active.id as string;
     const overId = over.id as string;
     const activeCol = columns.find((c) => c.tasks.some((t) => t.id === activeTaskId));
-    const overCol = columns.find((c) => c.tasks.some((t) => t.id === overId)) ?? columns.find((c) => c.id === overId);
+    const overColumnId = over.data.current?.type === "column" ? over.data.current.columnId as string : getColumnIdFromDragId(overId);
+    const overCol = columns.find((c) => c.tasks.some((t) => t.id === overId)) ?? columns.find((c) => c.id === overColumnId);
     if (!activeCol || !overCol || activeCol.id === overCol.id) return;
     setColumns((prev) => prev.map((col) => {
       if (col.id === activeCol.id) return { ...col, tasks: col.tasks.filter((t) => t.id !== activeTaskId) };
@@ -278,6 +332,30 @@ export default function KanbanBoard({ projectId }: Props) {
     setActiveTask(null);
     const { active, over } = e;
     if (!over) return;
+
+    if (active.data.current?.type === "column") {
+      const activeColumnId = active.data.current.columnId as string;
+      const overColumnId = over.data.current?.type === "column"
+        ? over.data.current.columnId as string
+        : getColumnIdFromDragId(over.id as string);
+      if (activeColumnId === overColumnId) return;
+
+      const sorted = [...columns].sort((a, b) => a.order - b.order);
+      const oldIndex = sorted.findIndex((c) => c.id === activeColumnId);
+      const newIndex = sorted.findIndex((c) => c.id === overColumnId);
+      if (oldIndex === -1 || newIndex === -1) return;
+
+      const reordered = arrayMove(sorted, oldIndex, newIndex).map((column, order) => ({ ...column, order }));
+      setColumns(reordered);
+      await Promise.all(reordered.map((column) =>
+        fetch(`/api/projects/${projectId}/columns/${column.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order: column.order }),
+        })
+      ));
+      return;
+    }
+
     const activeTaskId = active.id as string;
     const overId = over.id as string;
     const col = columns.find((c) => c.tasks.some((t) => t.id === activeTaskId));
@@ -306,7 +384,7 @@ export default function KanbanBoard({ projectId }: Props) {
     }
   };
 
-  const addTask = async (columnId: string, title: string) => {
+  const addTask = async (columnId: string, title: string, openDetails = false) => {
     const res = await fetch(`/api/projects/${projectId}/tasks`, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ title, columnId }),
@@ -314,8 +392,11 @@ export default function KanbanBoard({ projectId }: Props) {
     if (res.ok) {
       const task = await res.json();
       setColumns((prev) => prev.map((c) => c.id === columnId ? { ...c, tasks: [...c.tasks, task] } : c));
+      if (openDetails) setSelectedTask({ task, colId: columnId });
+      setAddingTo(null);
+      return true;
     }
-    setAddingTo(null);
+    return false;
   };
 
   const deleteTask = async (taskId: string, columnId: string) => {
@@ -398,14 +479,16 @@ export default function KanbanBoard({ projectId }: Props) {
   return (
     <>
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-        <div className="flex gap-3 md:gap-4 h-full overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth">
-          {sortedCols.map((column, colIdx) => {
-            const prevCol = sortedCols[colIdx - 1];
-            const nextCol = sortedCols[colIdx + 1];
-            return (
-              <div key={column.id} className="flex-shrink-0 w-[calc(100vw-2.5rem)] md:w-[300px] flex flex-col snap-center">
+        <div className="flex gap-3 md:gap-4 h-full overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth select-none">
+          <SortableContext items={sortedCols.map((column) => columnDragId(column.id))} strategy={horizontalListSortingStrategy}>
+            {sortedCols.map((column, colIdx) => {
+              const prevCol = sortedCols[colIdx - 1];
+              const nextCol = sortedCols[colIdx + 1];
+              return (
+                <SortableColumnContainer key={column.id} column={column}>
+                  {({ dragHandleProps }) => (
                 <div className={`flex-1 flex flex-col bg-gray-50/80 rounded-2xl border border-gray-200 border-t-4 ${COLUMN_COLORS[colIdx % COLUMN_COLORS.length]} overflow-hidden`}>
-                  <ColumnHeader column={column} projectId={projectId}
+                  <ColumnHeader column={column} projectId={projectId} dragHandleProps={dragHandleProps}
                     onRename={(name) => setColumns((prev) => prev.map((c) => c.id === column.id ? { ...c, name } : c))}
                     onDelete={() => setColumns((prev) => prev.filter((c) => c.id !== column.id))}
                   />
@@ -423,7 +506,13 @@ export default function KanbanBoard({ projectId }: Props) {
                         />
                       ))}
                     </SortableContext>
-                    {addingTo === column.id && <AddTaskInline onAdd={(title) => addTask(column.id, title)} onCancel={() => setAddingTo(null)} />}
+                    {addingTo === column.id && (
+                      <AddTaskInline
+                        onAdd={(title) => addTask(column.id, title)}
+                        onAddDetails={(title) => addTask(column.id, title, true)}
+                        onCancel={() => setAddingTo(null)}
+                      />
+                    )}
                     {column.tasks.length === 0 && addingTo !== column.id && (
                       <button onClick={() => setAddingTo(column.id)} className="w-full py-8 flex flex-col items-center gap-2 text-gray-300 hover:text-indigo-400 hover:bg-indigo-50/50 rounded-xl border-2 border-dashed border-gray-200 hover:border-indigo-200 transition-all">
                         <Plus size={20} /><span className="text-xs font-medium">클릭해서 추가</span>
@@ -438,9 +527,11 @@ export default function KanbanBoard({ projectId }: Props) {
                     </div>
                   )}
                 </div>
-              </div>
-            );
-          })}
+                  )}
+                </SortableColumnContainer>
+              );
+            })}
+          </SortableContext>
 
           {/* Add column */}
           <div className="flex-shrink-0 w-72 md:w-[300px] snap-center">

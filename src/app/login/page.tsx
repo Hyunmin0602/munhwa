@@ -85,21 +85,20 @@ export default function LoginPage() {
 
 function LoginPageInner() {
   const searchParams = useSearchParams();
+  const registeredToast = searchParams.get("registered") === "1" ? "가입이 완료되었습니다! 로그인하세요." : "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [toast, setToast] = useState("");
+  const [toast, setToast] = useState(registeredToast);
   const [showFindEmail, setShowFindEmail] = useState(false);
 
   useEffect(() => {
-    if (searchParams.get("registered") === "1") {
-      setToast("가입이 완료되었습니다! 로그인하세요.");
-      const t = setTimeout(() => setToast(""), 4000);
-      return () => clearTimeout(t);
-    }
-  }, [searchParams]);
+    if (!toast) return;
+    const t = setTimeout(() => setToast(""), 4000);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

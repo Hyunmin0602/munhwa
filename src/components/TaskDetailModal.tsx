@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { X, Trash2, Calendar, User, Flag, AlignLeft } from "lucide-react";
 
 interface Task {
@@ -48,8 +48,8 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
 
   const mark = () => setDirty(true);
 
-  const save = async () => {
-    if (!title.trim()) return;
+  const save = useCallback(async () => {
+    if (!title.trim()) return false;
     setSaving(true);
     const res = await fetch(`/api/projects/${projectId}/tasks/${task.id}`, {
       method: "PATCH",
@@ -68,7 +68,19 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
       const updated = await res.json();
       onUpdate(updated);
       setDirty(false);
+      return true;
     }
+    return false;
+  }, [assigneeId, description, dueDate, onUpdate, priority, projectId, task.columnId, task.id, title]);
+
+  const saveAndClose = async () => {
+    if (!dirty) {
+      onClose();
+      return;
+    }
+
+    const saved = await save();
+    if (saved) onClose();
   };
 
   const handleDelete = async () => {
@@ -80,7 +92,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
   // close on backdrop click
   const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.target === e.currentTarget) {
-      if (dirty) save().then(() => onClose());
+      if (dirty) save().then((saved) => { if (saved) onClose(); });
       else onClose();
     }
   };
@@ -89,11 +101,11 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); save(); }
-      if (e.key === "Escape") { if (dirty) save().then(() => onClose()); else onClose(); }
+      if (e.key === "Escape") { if (dirty) save().then((saved) => { if (saved) onClose(); }); else onClose(); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [title, description, priority, dueDate, assigneeId, dirty]);
+  }, [dirty, onClose, save]);
 
   return (
     <div
@@ -113,7 +125,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
               <Trash2 size={14} />
             </button>
             <button
-              onClick={() => { if (dirty) save().then(() => onClose()); else onClose(); }}
+              onClick={saveAndClose}
               className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
             >
               <X size={14} />
@@ -206,11 +218,11 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
             {dirty ? "저장되지 않은 변경사항" : "변경사항 없음"}
           </span>
           <button
-            onClick={save}
-            disabled={saving || !dirty}
+            onClick={saveAndClose}
+            disabled={saving}
             className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
           >
-            {saving ? "저장 중..." : "저장"}
+            {saving ? "저장 중..." : "저장 및 닫기"}
           </button>
         </div>
       </div>
