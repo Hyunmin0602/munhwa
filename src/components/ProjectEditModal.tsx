@@ -32,21 +32,26 @@ export default function ProjectEditModal({ project, onClose, onUpdated }: Props)
     setLoading(true);
     setError("");
 
-    const res = await fetch(`/api/projects/${project.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: nextName, description: description.trim() || null, color }),
-    });
+    try {
+      const res = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: nextName, description: description.trim() || null, color }),
+      });
 
-    setLoading(false);
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "수정 실패. 다시 시도해주세요.");
+        return;
+      }
 
-    if (!res.ok) {
-      setError("수정 실패. 다시 시도해주세요.");
-      return;
+      const updatedProject = await res.json();
+      onUpdated({ ...project, ...updatedProject });
+    } catch {
+      setError("네트워크 또는 서버 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
     }
-
-    const updatedProject = await res.json();
-    onUpdated({ ...project, ...updatedProject });
   };
 
   return (

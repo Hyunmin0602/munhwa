@@ -21,18 +21,26 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
     if (!name.trim()) return;
     setLoading(true);
     setError("");
-    const res = await fetch("/api/projects", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, description, color }),
-    });
-    setLoading(false);
-    if (!res.ok) {
-      setError("생성 실패. 다시 시도해주세요.");
-      return;
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, description, color }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "생성 실패. 다시 시도해주세요.");
+        return;
+      }
+
+      const project = await res.json();
+      onCreated(project);
+    } catch {
+      setError("네트워크 또는 서버 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
     }
-    const project = await res.json();
-    onCreated(project);
   };
 
   return (
