@@ -108,6 +108,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const [saved, setSaved] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [viewMode, setViewMode] = useState<"split" | "editor" | "preview">("split");
+  const [isMobile, setIsMobile] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -119,6 +120,25 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         setContent(data.content);
       });
   }, [projectId, postId]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(max-width: 767px)");
+
+    const updateMobileState = () => {
+      setIsMobile(mediaQuery.matches);
+    };
+
+    updateMobileState();
+    mediaQuery.addEventListener("change", updateMobileState);
+
+    return () => mediaQuery.removeEventListener("change", updateMobileState);
+  }, []);
+
+  useEffect(() => {
+    if (isMobile && viewMode === "split") {
+      setViewMode("editor");
+    }
+  }, [isMobile, viewMode]);
 
   const save = useCallback(async () => {
     setSaving(true);
@@ -329,6 +349,20 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
           </div>
         </div>
       )}
+
+      <div className="md:hidden flex items-center gap-1 px-3 py-3 border-b border-gray-100 bg-white flex-shrink-0">
+        {(["editor", "preview"] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setViewMode(m)}
+            className={`flex-1 px-3 py-2 rounded-xl text-xs font-medium transition-all ${
+              viewMode === m ? "bg-gray-900 text-white shadow-sm" : "bg-gray-100 text-gray-600"
+            }`}
+          >
+            {m === "editor" ? "편집" : "미리보기"}
+          </button>
+        ))}
+      </div>
 
       {/* ── Editor / Preview Body ── */}
       <div className="flex-1 flex overflow-hidden">
