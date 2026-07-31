@@ -4,6 +4,10 @@ import { prisma } from "@/lib/prisma";
 
 type Params = { params: Promise<{ projectId: string }> };
 
+function logApiError(action: string, error: unknown) {
+  console.error(`[api/projects/:projectId] ${action} failed`, error);
+}
+
 async function assertMember(userId: string, projectId: string) {
   const member = await prisma.projectMember.findUnique({
     where: { userId_projectId: { userId, projectId } },
@@ -16,6 +20,9 @@ export async function GET(_: NextRequest, { params }: Params) {
     const { projectId } = await params;
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session.user.id) {
+      return NextResponse.json({ error: "세션 정보가 유효하지 않습니다." }, { status: 401 });
+    }
     const userId = session.user.id;
     if (!(await assertMember(userId, projectId)))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -29,8 +36,9 @@ export async function GET(_: NextRequest, { params }: Params) {
     });
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(project);
-  } catch {
-    return NextResponse.json({ error: "외부 DB 연결 또는 서버 처리에 실패했습니다." }, { status: 500 });
+  } catch (error) {
+    logApiError("GET", error);
+    return NextResponse.json({ error: "프로젝트 정보를 불러오지 못했습니다." }, { status: 500 });
   }
 }
 
@@ -39,6 +47,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const { projectId } = await params;
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session.user.id) {
+      return NextResponse.json({ error: "세션 정보가 유효하지 않습니다." }, { status: 401 });
+    }
     const userId = session.user.id;
     if (!(await assertMember(userId, projectId)))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -58,8 +69,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       },
     });
     return NextResponse.json(project);
-  } catch {
-    return NextResponse.json({ error: "외부 DB 연결 또는 서버 처리에 실패했습니다." }, { status: 500 });
+  } catch (error) {
+    logApiError("PATCH", error);
+    return NextResponse.json({ error: "프로젝트 수정에 실패했습니다." }, { status: 500 });
   }
 }
 
@@ -68,6 +80,9 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     const { projectId } = await params;
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session.user.id) {
+      return NextResponse.json({ error: "세션 정보가 유효하지 않습니다." }, { status: 401 });
+    }
     const userId = session.user.id;
 
     const member = await prisma.projectMember.findUnique({
@@ -78,7 +93,8 @@ export async function DELETE(_: NextRequest, { params }: Params) {
 
     await prisma.project.delete({ where: { id: projectId } });
     return NextResponse.json({ ok: true });
-  } catch {
-    return NextResponse.json({ error: "외부 DB 연결 또는 서버 처리에 실패했습니다." }, { status: 500 });
+  } catch (error) {
+    logApiError("DELETE", error);
+    return NextResponse.json({ error: "프로젝트 삭제에 실패했습니다." }, { status: 500 });
   }
 }

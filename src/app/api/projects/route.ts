@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
+function logApiError(action: string, error: unknown) {
+  console.error(`[api/projects] ${action} failed`, error);
+}
+
 export async function GET() {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session.user.id) {
+      return NextResponse.json({ error: "세션 정보가 유효하지 않습니다." }, { status: 401 });
+    }
 
     const userId = session.user.id;
     const projects = await prisma.project.findMany({
@@ -14,8 +21,9 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
     return NextResponse.json(projects);
-  } catch {
-    return NextResponse.json({ error: "외부 DB 연결 또는 서버 처리에 실패했습니다." }, { status: 500 });
+  } catch (error) {
+    logApiError("GET", error);
+    return NextResponse.json({ error: "프로젝트 목록을 불러오지 못했습니다." }, { status: 500 });
   }
 }
 
@@ -23,6 +31,9 @@ export async function POST(req: NextRequest) {
   try {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session.user.id) {
+      return NextResponse.json({ error: "세션 정보가 유효하지 않습니다." }, { status: 401 });
+    }
 
     const userId = session.user.id;
     const { name, description, color } = await req.json();
@@ -45,7 +56,8 @@ export async function POST(req: NextRequest) {
       include: { members: true, columns: true },
     });
     return NextResponse.json(project, { status: 201 });
-  } catch {
-    return NextResponse.json({ error: "외부 DB 연결 또는 서버 처리에 실패했습니다." }, { status: 500 });
+  } catch (error) {
+    logApiError("POST", error);
+    return NextResponse.json({ error: "프로젝트 생성에 실패했습니다." }, { status: 500 });
   }
 }
