@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { assertProjectMember, assertProjectOwner } from "@/lib/server-utils";
 
 type Params = { params: Promise<{ projectId: string }> };
 
@@ -8,12 +9,7 @@ function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId] ${action} failed`, error);
 }
 
-async function assertMember(userId: string, projectId: string) {
-  const member = await prisma.projectMember.findUnique({
-    where: { userId_projectId: { userId, projectId } },
-  });
-  return !!member;
-}
+// use common assertProjectMember from server-utils
 
 export async function GET(_: NextRequest, { params }: Params) {
   try {
@@ -24,7 +20,7 @@ export async function GET(_: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "세션 정보가 유효하지 않습니다." }, { status: 401 });
     }
     const userId = session.user.id;
-    if (!(await assertMember(userId, projectId)))
+    if (!(await assertProjectMember(userId, projectId)))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const project = await prisma.project.findUnique({
@@ -51,7 +47,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "세션 정보가 유효하지 않습니다." }, { status: 401 });
     }
     const userId = session.user.id;
-    if (!(await assertMember(userId, projectId)))
+    if (!(await assertProjectMember(userId, projectId)))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const data = await req.json();
@@ -85,10 +81,8 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     }
     const userId = session.user.id;
 
-    const member = await prisma.projectMember.findUnique({
-      where: { userId_projectId: { userId, projectId } },
-    });
-    if (!member || member.role !== "owner")
+    const isOwner = await assertProjectOwner(userId, projectId);
+    if (!isOwner)
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     await prisma.project.delete({ where: { id: projectId } });

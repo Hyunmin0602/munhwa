@@ -40,7 +40,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
     }),
   ],
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    // Keep users signed in across long sessions while still refreshing token metadata.
+    maxAge: 60 * 60 * 24 * 14,
+    updateAge: 60 * 60 * 12,
+  },
+  jwt: {
+    maxAge: 60 * 60 * 24 * 14,
+  },
   callbacks: {
     jwt({ token, user }) {
       if (user) token.id = user.id;
