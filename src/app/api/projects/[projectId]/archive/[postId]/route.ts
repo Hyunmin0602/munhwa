@@ -12,10 +12,14 @@ type Params = { params: Promise<{ projectId: string; postId: string }> };
 
 export async function GET(_: NextRequest, { params }: Params) {
   const { postId } = await params;
-  const post = await prisma.archivePost.findUnique({
-    where: { id: postId },
-    include: { author: { select: { id: true, name: true } } },
-  });
+  const post = await withDbRetry(
+    () =>
+      prisma.archivePost.findUnique({
+        where: { id: postId },
+        include: { author: { select: { id: true, name: true } } },
+      }),
+    { operation: `archive:get:${postId}` }
+  );
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
   return NextResponse.json(post);
 }

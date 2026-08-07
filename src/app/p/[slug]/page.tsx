@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { withDbRetry } from "@/lib/db-retry";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -17,13 +18,17 @@ export default async function PublicArchivePage({
 }) {
   const { slug: rawSlug } = await params;
   const slug = decodeURIComponent(rawSlug);
-  const post = await prisma.archivePost.findUnique({
-    where: { slug },
-    include: {
-      author: { select: { name: true } },
-      project: { select: { name: true } },
-    },
-  });
+  const post = await withDbRetry(
+    () =>
+      prisma.archivePost.findUnique({
+        where: { slug },
+        include: {
+          author: { select: { name: true } },
+          project: { select: { name: true } },
+        },
+      }),
+    { operation: `public-archive:get:${slug}` }
+  );
 
   if (!post || !post.published) notFound();
 

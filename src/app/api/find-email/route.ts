@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { withDbRetry } from "@/lib/db-retry";
 
 export async function POST(req: NextRequest) {
   try {
@@ -8,10 +9,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "이름을 입력해주세요." }, { status: 400 });
     }
 
-    const users = await prisma.user.findMany({
-      where: { name: { contains: name.trim() } },
-      select: { email: true },
-    });
+    const users = await withDbRetry(
+      () =>
+        prisma.user.findMany({
+          where: { name: { contains: name.trim() } },
+          select: { email: true },
+        }),
+      { operation: `find-email:find-users` }
+    );
 
     if (users.length === 0) {
       return NextResponse.json({ error: "해당 이름으로 등록된 계정이 없습니다." }, { status: 404 });

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { withDbRetry } from "@/lib/db-retry";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects] ${action} failed`, error);
@@ -15,11 +16,15 @@ export async function GET() {
     }
 
     const userId = session.user.id;
-    const projects = await prisma.project.findMany({
-      where: { members: { some: { userId } } },
-      include: { members: { include: { user: { select: { id: true, name: true, image: true } } } } },
-      orderBy: { createdAt: "desc" },
-    });
+    const projects = await withDbRetry(
+      () =>
+        prisma.project.findMany({
+          where: { members: { some: { userId } } },
+          include: { members: { include: { user: { select: { id: true, name: true, image: true } } } } },
+          orderBy: { createdAt: "desc" },
+        }),
+      { operation: `projects:list:${userId}` }
+    );
     return NextResponse.json(projects);
   } catch (error) {
     logApiError("GET", error);
@@ -39,22 +44,26 @@ export async function POST(req: NextRequest) {
     const { name, description, color } = await req.json();
     if (!name) return NextResponse.json({ error: "프로젝트 이름이 필요합니다." }, { status: 400 });
 
-    const project = await prisma.project.create({
-      data: {
-        name,
-        description,
-        color: color ?? "#6366f1",
-        members: { create: { userId, role: "owner" } },
-        columns: {
-          create: [
-            { name: "할 일", order: 0 },
-            { name: "진행 중", order: 1 },
-            { name: "완료", order: 2 },
-          ],
-        },
-      },
-      include: { members: true, columns: true },
-    });
+    const project = await withDbRetry(
+      () =>
+        prisma.project.create({
+          data: {
+            name,
+            description,
+            color: color ?? "#6366f1",
+            members: { create: { userId, role: "owner" } },
+            columns: {
+              create: [
+                { name: "할 일", order: 0 },
+                { name: "진행 중", order: 1 },
+                { name: "완료", order: 2 },
+              ],
+            },
+          },
+          include: { members: true, columns: true },
+        }),
+      { operation: `projects:create:${userId}` }
+    );
     return NextResponse.json(project, { status: 201 });
   } catch (error) {
     logApiError("POST", error);

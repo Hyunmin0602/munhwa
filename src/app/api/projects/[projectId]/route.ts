@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { withDbRetry } from "@/lib/db-retry";
 import { assertProjectMember, assertProjectOwner } from "@/lib/server-utils";
 
 type Params = { params: Promise<{ projectId: string }> };
@@ -23,13 +24,17 @@ export async function GET(_: NextRequest, { params }: Params) {
     if (!(await assertProjectMember(userId, projectId)))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const project = await prisma.project.findUnique({
-      where: { id: projectId },
-      include: {
-        members: { include: { user: { select: { id: true, name: true, image: true } } } },
-        columns: { include: { tasks: { include: { assignee: { select: { id: true, name: true } } }, orderBy: { order: "asc" } } }, orderBy: { order: "asc" } },
-      },
-    });
+    const project = await withDbRetry(
+      () =>
+        prisma.project.findUnique({
+          where: { id: projectId },
+          include: {
+            members: { include: { user: { select: { id: true, name: true, image: true } } } },
+            columns: { include: { tasks: { include: { assignee: { select: { id: true, name: true } } }, orderBy: { order: "asc" } } }, orderBy: { order: "asc" } },
+          },
+        }),
+      { operation: `project:get:${projectId}` }
+    );
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(project);
   } catch (error) {
@@ -56,14 +61,17 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "프로젝트 이름이 필요합니다." }, { status: 400 });
     }
 
-    const project = await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        ...(name !== undefined ? { name } : {}),
-        ...(data.description !== undefined ? { description: data.description } : {}),
-        ...(data.color !== undefined ? { color: data.color } : {}),
-      },
-    });
+    const project = await withDbRetry(() =>
+      prisma.project.update({
+        where: { id: projectId },
+        data: {
+          ...(name !== undefined ? { name } : {}),
+          ...(data.description !== undefined ? { description: data.description } : {}),
+          ...(data.color !== undefined ? { color: data.color } : {}),
+        },
+      }),
+      { operation: `project:update:${projectId}` }
+    );
     return NextResponse.json(project);
   } catch (error) {
     logApiError("PATCH", error);
@@ -85,7 +93,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     if (!isOwner)
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    await prisma.project.delete({ where: { id: projectId } });
+    await withDbRetry(() => prisma.project.delete({ where: { id: projectId } }), { operation: `project:delete:${projectId}` });
     return NextResponse.json({ ok: true });
   } catch (error) {
     logApiError("DELETE", error);
