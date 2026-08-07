@@ -1,6 +1,8 @@
 "use client";
 import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X } from "lucide-react";
+import { apiFetch } from "@/lib/client-fetch";
 
 const COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#8b5cf6"];
 
@@ -23,6 +25,26 @@ export default function ProjectEditModal({ project, onClose, onUpdated }: Props)
   const [color, setColor] = useState(project.color);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [members, setMembers] = useState<Array<any>>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteLoading, setInviteLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/projects/${project.id}/members`);
+        if (!res.ok) return setMembersLoading(false);
+        const data = await res.json();
+        if (mounted) setMembers(data);
+      } catch {
+      } finally {
+        if (mounted) setMembersLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [project.id]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +73,43 @@ export default function ProjectEditModal({ project, onClose, onUpdated }: Props)
       setError("네트워크 또는 서버 오류가 발생했습니다.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const invite = async () => {
+    const email = inviteEmail.trim();
+    if (!email) return;
+    setInviteLoading(true);
+    setError("");
+    try {
+      const res = await apiFetch(`/api/projects/${project.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "초대 실패");
+        return;
+      }
+      const member = await res.json();
+      setMembers((m) => [...m, member]);
+      setInviteEmail("");
+    } catch {
+      setError("초대 중 오류가 발생했습니다.");
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const removeMember = async (id: string) => {
+    if (!confirm("멤버를 삭제하시겠습니까?")) return;
+    try {
+      const res = await apiFetch(`/api/projects/${project.id}/members/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "삭제 실패");
+        return;
+      }
+      setMembers((m) => m.filter((x) => x.id !== id));
+    } catch {
+      setError("삭제 중 오류가 발생했습니다.");
     }
   };
 
@@ -120,6 +179,32 @@ export default function ProjectEditModal({ project, onClose, onUpdated }: Props)
             </button>
           </div>
         </form>
+
+        <div className="mt-6 border-t pt-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">멤버 관리</h3>
+          {membersLoading ? (
+            <p className="text-xs text-gray-400">로딩 중...</p>
+          ) : (
+            <div className="space-y-2">
+              {members.map((m) => (
+                <div key={m.id} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                  <div className="text-sm">
+                    <div className="font-medium">{m.user.name ?? m.user.email}</div>
+                    <div className="text-xs text-gray-400">{m.user.email} · {m.role}</div>
+                  </div>
+                  <div>
+                    <button onClick={() => removeMember(m.id)} className="text-sm text-rose-500">삭제</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="mt-3 flex gap-2">
+            <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="이메일로 초대" className="flex-1 px-3 py-2 border rounded" />
+            <button onClick={invite} disabled={inviteLoading} className="px-4 py-2 bg-indigo-600 text-white rounded">{inviteLoading ? "초대 중..." : "초대"}</button>
+          </div>
+        </div>
       </div>
     </div>
   );
