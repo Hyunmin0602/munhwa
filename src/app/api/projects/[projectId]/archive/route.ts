@@ -5,10 +5,6 @@ import { v4 as uuidv4 } from "uuid";
 import { withDbRetry } from "@/lib/db-retry";
 import { assertProjectMember } from "@/lib/server-utils";
 
-function logApiError(action: string, error: unknown) {
-  console.error(`[api/projects/:projectId/archive] ${action} failed`, error);
-}
-
 type Params = { params: Promise<{ projectId: string }> };
 
 export async function GET(_: NextRequest, { params }: Params) {

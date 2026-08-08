@@ -136,7 +136,8 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
 
   useEffect(() => {
     if (isMobile && viewMode === "split") {
-      setViewMode("editor");
+      // avoid synchronous setState in effect to prevent cascading renders
+      setTimeout(() => setViewMode("editor"), 0);
     }
   }, [isMobile, viewMode]);
 
