@@ -6,6 +6,7 @@ import { Plus, Globe, Lock, Trash2, FileText, Clock } from "lucide-react";
 import dayjs from "dayjs";
 import "dayjs/locale/ko";
 import { Skeleton } from "./ui/Skeleton";
+import { apiFetch } from "@/lib/client-fetch";
 
 dayjs.locale("ko");
 
@@ -26,23 +27,33 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
   const router = useRouter();
 
   useEffect(() => {
-    fetch(`/api/projects/${projectId}/archive`)
-      .then((r) => r.json())
-      .then((data) => { setPosts(Array.isArray(data) ? data : []); setLoading(false); })
-      .catch(() => setLoading(false));
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/projects/${projectId}/archive`);
+        const data = await res.json();
+        setPosts(Array.isArray(data) ? data : []);
+      } catch {
+      } finally {
+        setLoading(false);
+      }
+    })();
   }, [projectId]);
 
   const createPost = async () => {
     setCreating(true);
-    const res = await fetch(`/api/projects/${projectId}/archive`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: "제목 없음" }),
-    });
-    setCreating(false);
-    if (res.ok) {
-      const post = await res.json();
-      router.push(`/dashboard/projects/${projectId}/archive/${post.id}`);
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/archive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "제목 없음" }),
+      });
+      if (res.ok) {
+        const post = await res.json();
+        router.push(`/dashboard/projects/${projectId}/archive/${post.id}`);
+      }
+    } catch {
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -50,7 +61,10 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
     e.preventDefault();
     e.stopPropagation();
     if (!confirm("이 문서를 삭제하시겠습니까?")) return;
-    await fetch(`/api/projects/${projectId}/archive/${id}`, { method: "DELETE" });
+    try {
+      await apiFetch(`/api/projects/${projectId}/archive/${id}`, { method: "DELETE" });
+    } catch {
+    }
     setPosts((prev) => prev.filter((p) => p.id !== id));
   };
 

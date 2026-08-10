@@ -18,25 +18,13 @@ interface Props {
   onUpdated: (project: Project) => void;
 }
 
-interface MemberUser {
-  id: string;
-  name?: string | null;
-  email: string;
-}
-
-interface Member {
-  id: string;
-  role: string;
-  user: MemberUser;
-}
-
 export default function ProjectEditModal({ project, onClose, onUpdated }: Props) {
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? "");
   const [color, setColor] = useState(project.color);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [members, setMembers] = useState<Member[]>([]);
+  const [members, setMembers] = useState<Array<any>>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);

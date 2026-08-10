@@ -8,6 +8,7 @@ import BottomTabBar from "@/components/BottomTabBar";
 import NewProjectModal from "@/components/NewProjectModal";
 import ProjectEditModal from "@/components/ProjectEditModal";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { apiFetch, subscribeToToasts, showToast } from "@/lib/client-fetch";
 
 interface Project {
   id: string;
@@ -22,32 +23,54 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [projects, setProjects] = useState<Project[]>([]);
   const [showModal, setShowModal] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [toasts, setToasts] = useState<Array<{ id: number; type: "error" | "info"; message: string }>>([]);
   const pathname = usePathname();
   const match = pathname?.match(/\/dashboard\/projects\/([^/]+)/);
   const currentProjectId = match?.[1];
   const currentProject = currentProjectId ? projects.find((p) => p.id === currentProjectId) : null;
 
   useEffect(() => {
-    if (status === "unauthenticated") router.push("/login");
+    if (status === "unauthenticated") {
+      showToast("세션이 만료되어 로그인 화면으로 이동합니다.");
+      router.push("/login");
+    }
   }, [status, router]);
 
   useEffect(() => {
     if (status === "authenticated") {
-      fetch("/api/projects")
-        .then((r) => r.json())
-        .then(setProjects)
-        .catch(() => {});
+      (async () => {
+        try {
+          const check = await apiFetch("/api/session-check");
+          if (!check.ok) {
+            router.push("/login");
+            return;
+          }
+
+          const res = await apiFetch("/api/projects");
+          const data = await res.json();
+          setProjects(data);
+        } catch (e) {
+          // apiFetch redirects on 401; fallback to login route
+          try {
+            router.push("/login");
+          } catch {}
+        }
+      })();
     }
   }, [status]);
 
   useEffect(() => {
+    const unsubscribe = subscribeToToasts(setToasts);
     const handleProjectUpdated = (event: Event) => {
       const project = (event as CustomEvent<Project>).detail;
       setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, ...project } : p)));
     };
 
     window.addEventListener("project-updated", handleProjectUpdated);
-    return () => window.removeEventListener("project-updated", handleProjectUpdated);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("project-updated", handleProjectUpdated);
+    };
   }, []);
 
   if (status === "loading") {
@@ -139,6 +162,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {children}
       </main>
       <BottomTabBar projects={projects} />
+      <div className="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            className={`rounded-xl border px-4 py-3 text-sm shadow-lg backdrop-blur ${toast.type === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-indigo-200 bg-white text-gray-700"}`}
+          >
+            {toast.message}
+          </div>
+        ))}
+      </div>
       {showModal && (
         <NewProjectModal
           onClose={() => setShowModal(false)}

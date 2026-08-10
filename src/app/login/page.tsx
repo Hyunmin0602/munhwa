@@ -4,6 +4,7 @@ import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Eye, EyeOff, X } from "lucide-react";
+import { apiFetch } from "@/lib/client-fetch";
 
 const INPUT_CLS =
   "w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-colors";
@@ -17,15 +18,18 @@ function FindEmailModal({ onClose }: { onClose: () => void }) {
   const handleFind = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(""); setResult(null); setLoading(true);
-    const res = await fetch("/api/find-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    setLoading(false);
-    const data = await res.json();
-    if (!res.ok) setError(data.error ?? "오류가 발생했습니다.");
-    else setResult(data.emails);
+    try {
+      const res = await apiFetch("/api/find-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      const data = await res.json();
+      if (!res.ok) setError(data.error ?? "오류가 발생했습니다.");
+      else setResult(data.emails);
+    } catch (e) {
+      setError("네트워크 또는 서버 오류가 발생했습니다.");
+    } finally { setLoading(false); }
   };
 
   return (

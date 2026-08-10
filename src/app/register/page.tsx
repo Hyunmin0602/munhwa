@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
+import { apiFetch } from "@/lib/client-fetch";
 
 const INPUT_CLS =
   "w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-colors";
@@ -32,18 +33,21 @@ export default function RegisterPage() {
     }
 
     setLoading(true);
-    const res = await fetch("/api/register", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password }),
-    });
-    setLoading(false);
-    if (!res.ok) {
-      const data = await res.json();
-      setError(data.error ?? "오류가 발생했습니다.");
-    } else {
-      router.push("/login?registered=1");
-    }
+    try {
+      const res = await apiFetch("/api/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "오류가 발생했습니다.");
+      } else {
+        router.push("/login?registered=1");
+      }
+    } catch (e) {
+      setError("네트워크 또는 서버 오류가 발생했습니다.");
+    } finally { setLoading(false); }
   };
 
   const pwMatch = confirmPassword.length > 0 && password === confirmPassword;

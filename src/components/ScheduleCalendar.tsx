@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import dayjs from "dayjs";
 import "dayjs/locale/ko";
 import { ChevronLeft, ChevronRight, Plus, X, Clock, CalendarDays } from "lucide-react";
+import { apiFetch } from "@/lib/client-fetch";
 
 dayjs.locale("ko");
 
@@ -36,10 +37,14 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   const [selectedDay, setSelectedDay] = useState<dayjs.Dayjs | null>(null);
 
   useEffect(() => {
-    fetch(`/api/projects/${projectId}/events`)
-      .then((r) => r.json())
-      .then((data) => setEvents(Array.isArray(data) ? data : []))
-      .catch(() => {});
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/projects/${projectId}/events`);
+        const data = await res.json();
+        setEvents(Array.isArray(data) ? data : []);
+      } catch {
+      }
+    })();
   }, [projectId]);
 
   const startDay = current.startOf("month").day();
@@ -70,21 +75,26 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
-    const res = await fetch(`/api/projects/${projectId}/events`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setSaving(false);
-    if (res.ok) {
-      const ev = await res.json();
-      setEvents((prev) => [...prev, ev]);
-      setShowModal(false);
-    }
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/events`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (res.ok) {
+        const ev = await res.json();
+        setEvents((prev) => [...prev, ev]);
+        setShowModal(false);
+      }
+    } catch {
+    } finally { setSaving(false); }
   };
 
   const deleteEvent = async (id: string) => {
-    await fetch(`/api/projects/${projectId}/events/${id}`, { method: "DELETE" });
+    try {
+      await apiFetch(`/api/projects/${projectId}/events/${id}`, { method: "DELETE" });
+    } catch {
+    }
     setEvents((prev) => prev.filter((e) => e.id !== id));
   };
 

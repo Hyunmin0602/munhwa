@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Skeleton } from "./ui/Skeleton";
+import { apiFetch } from "@/lib/client-fetch";
 
 interface Post {
   id: string;
@@ -112,13 +113,16 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    fetch(`/api/projects/${projectId}/archive/${postId}`)
-      .then((r) => r.json())
-      .then((data: Post) => {
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`);
+        const data: Post = await res.json();
         setPost(data);
         setTitle(data.title);
         setContent(data.content);
-      });
+      } catch {
+      }
+    })();
   }, [projectId, postId]);
 
   useEffect(() => {
@@ -143,28 +147,36 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
 
   const save = useCallback(async () => {
     setSaving(true);
-    const res = await fetch(`/api/projects/${projectId}/archive/${postId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, content, published: post?.published }),
-    });
-    setSaving(false);
-    if (res.ok) {
-      setPost(await res.json());
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content, published: post?.published }),
+      });
+      if (res.ok) {
+        setPost(await res.json());
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      }
+    } catch {
+    } finally {
+      setSaving(false);
     }
   }, [projectId, postId, title, content, post?.published]);
 
   const togglePublish = async () => {
     setPublishing(true);
-    const res = await fetch(`/api/projects/${projectId}/archive/${postId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, content, published: !post?.published }),
-    });
-    setPublishing(false);
-    if (res.ok) setPost(await res.json());
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content, published: !post?.published }),
+      });
+      if (res.ok) setPost(await res.json());
+    } catch {
+    } finally {
+      setPublishing(false);
+    }
   };
 
   useEffect(() => {

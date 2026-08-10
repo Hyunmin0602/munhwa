@@ -1,67 +1,10 @@
-function isTransientError(err: unknown) {
-  if (!err) return false;
-  const maybeErr = err as { message?: unknown; code?: unknown };
-  const msg = String(maybeErr.message ?? "").toLowerCase();
-  const code = maybeErr.code ?? "";
-  if (typeof code === "string" && ["econnreset", "etimedout", "econnrefused", "enotfound"].includes(code.toLowerCase())) return true;
-  if (msg.includes("timed out") || msg.includes("connection reset") || msg.includes("connection refused") || msg.includes("socket hang up")) return true;
-  return false;
-}
-
-export async function withDbRetry<T>(
-  operation: () => Promise<T>,
-  opts?: { retries?: number; baseDelayMs?: number } | RetryContext
-) {
-  // If caller passed a RetryContext with `operation`, use the retry schedule configured by RETRY_DELAYS_MS
-  if (opts && typeof (opts as RetryContext).operation === "string") {
-    const context = opts as RetryContext;
-    let attempt = 0;
-    let lastError: unknown = null;
-
-    while (attempt <= RETRY_DELAYS_MS.length) {
-      try {
-        return await operation();
-      } catch (error) {
-        lastError = error;
-        const retryable = isRetryableDbError(error);
-        const canRetry = retryable && attempt < RETRY_DELAYS_MS.length;
-
-        if (!canRetry) {
-          throw error;
-        }
-
-        const delay = RETRY_DELAYS_MS[attempt];
-        console.warn(`[db-retry] ${context.operation} retry ${attempt + 1}/${RETRY_DELAYS_MS.length} after ${delay}ms`);
-        await sleep(delay);
-        attempt += 1;
-      }
-    }
-
-    throw lastError;
-  }
-
-  // Fallback simple exponential-backoff for callers that provided { retries, baseDelayMs } or nothing
-  const simpleOpts = (opts as { retries?: number; baseDelayMs?: number } | undefined) ?? {};
-  const retries = simpleOpts.retries ?? 2;
-  const base = simpleOpts.baseDelayMs ?? 150;
-  let attempt = 0;
-  while (true) {
-    try {
-      return await operation();
-    } catch (err) {
-      attempt++;
-      if (attempt > retries || !isTransientError(err)) throw err;
-      const delay = base * Math.pow(2, attempt - 1);
-      await new Promise((res) => setTimeout(res, delay));
-    }
-  }
-}
 type RetryContext = {
-  operation: string;
+  operation?: string;
+  retries?: number;
+  baseDelayMs?: number;
 };
 
-const RETRY_DELAYS_MS = [150, 400];
-
+const DEFAULT_RETRY_DELAYS_MS = [150, 400];
 const RETRYABLE_MESSAGE_PATTERNS = [
   /timed out/i,
   /timeout/i,
@@ -74,7 +17,6 @@ const RETRYABLE_MESSAGE_PATTERNS = [
   /SQLITE_IOERR/i,
   /server closed the connection/i,
 ];
-
 const RETRYABLE_PRISMA_CODES = new Set(["P1001", "P1002", "P1008", "P1017"]);
 
 function sleep(ms: number) {
@@ -101,13 +43,62 @@ function getErrorMessage(error: unknown) {
 function isRetryableDbError(error: unknown) {
   const code = getErrorCode(error);
   if (code && RETRYABLE_PRISMA_CODES.has(code)) return true;
-
-  if (code && /^P2\d{3}$/.test(code)) {
-    return false;
-  }
+  if (code && /^P2\d{3}$/.test(code)) return false;
 
   const message = getErrorMessage(error);
   return RETRYABLE_MESSAGE_PATTERNS.some((pattern) => pattern.test(message));
 }
 
-// Note: single `withDbRetry` implementation above supports both simple opts and `RetryContext`.
+function isTransientError(error: unknown) {
+  const code = getErrorCode(error);
+  if (code && ["econnreset", "etimedout", "econnrefused", "enotfound"].includes(code.toLowerCase())) return true;
+  const message = getErrorMessage(error).toLowerCase();
+  return ["timed out", "connection reset", "connection refused", "socket hang up"].some((token) => message.includes(token));
+}
+
+export async function withDbRetry<T>(
+  operation: () => Promise<T>,
+  context?: RetryContext
+) {
+  const operationName = context?.operation ?? "db-op";
+  const customRetries = context?.retries;
+  const customBaseDelayMs = context?.baseDelayMs;
+
+  if (typeof customRetries === "number") {
+    const retries = Math.max(0, customRetries);
+    const baseDelayMs = typeof customBaseDelayMs === "number" ? customBaseDelayMs : 150;
+    let attempt = 0;
+
+    while (true) {
+      try {
+        return await operation();
+      } catch (error) {
+        attempt += 1;
+        if (attempt > retries || !isTransientError(error)) throw error;
+        const delay = baseDelayMs * Math.pow(2, attempt - 1);
+        await sleep(delay);
+      }
+    }
+  }
+
+  let attempt = 0;
+  let lastError: unknown = null;
+
+  while (attempt <= DEFAULT_RETRY_DELAYS_MS.length) {
+    try {
+      return await operation();
+    } catch (error) {
+      lastError = error;
+      const retryable = isRetryableDbError(error);
+      const canRetry = retryable && attempt < DEFAULT_RETRY_DELAYS_MS.length;
+      if (!canRetry) throw error;
+
+      const delay = DEFAULT_RETRY_DELAYS_MS[attempt];
+      console.warn(`[db-retry] ${operationName} retry ${attempt + 1}/${DEFAULT_RETRY_DELAYS_MS.length} after ${delay}ms`);
+      await sleep(delay);
+      attempt += 1;
+    }
+  }
+
+  throw lastError;
+}

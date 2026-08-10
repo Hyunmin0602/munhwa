@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { X, Trash2, Calendar, User, Flag, AlignLeft } from "lucide-react";
+import { apiFetch } from "@/lib/client-fetch";
 
 interface Task {
   id: string;
@@ -51,25 +52,27 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
   const save = useCallback(async () => {
     if (!title.trim()) return false;
     setSaving(true);
-    const res = await fetch(`/api/projects/${projectId}/tasks/${task.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: title.trim(),
-        description: description || null,
-        priority,
-        dueDate: dueDate || null,
-        assigneeId: assigneeId || null,
-        columnId: task.columnId,
-      }),
-    });
-    setSaving(false);
-    if (res.ok) {
-      const updated = await res.json();
-      onUpdate(updated);
-      setDirty(false);
-      return true;
-    }
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/tasks/${task.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description || null,
+          priority,
+          dueDate: dueDate || null,
+          assigneeId: assigneeId || null,
+          columnId: task.columnId,
+        }),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        onUpdate(updated);
+        setDirty(false);
+        return true;
+      }
+    } catch {
+    } finally { setSaving(false); }
     return false;
   }, [assigneeId, description, dueDate, onUpdate, priority, projectId, task.columnId, task.id, title]);
 
@@ -85,7 +88,10 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
 
   const handleDelete = async () => {
     if (!confirm("이 카드를 삭제하시겠습니까?")) return;
-    await fetch(`/api/projects/${projectId}/tasks/${task.id}`, { method: "DELETE" });
+    try {
+      await apiFetch(`/api/projects/${projectId}/tasks/${task.id}`, { method: "DELETE" });
+    } catch {
+    }
     onDelete();
   };
 

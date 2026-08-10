@@ -25,6 +25,7 @@ import {
   ChevronLeft, ChevronRight, Pencil, Check, X as XIcon,
 } from "lucide-react";
 import TaskDetailModal from "./TaskDetailModal";
+import { apiFetch } from "@/lib/client-fetch";
 import { Skeleton } from "./ui/Skeleton";
 
 interface Task {
@@ -205,10 +206,13 @@ function ColumnHeader({ column, projectId, dragHandleProps, onRename, onDelete }
   const commit = async () => {
     const name = value.trim();
     if (name && name !== column.name) {
-      await fetch(`/api/projects/${projectId}/columns/${column.id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
+      try {
+        await apiFetch(`/api/projects/${projectId}/columns/${column.id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+      } catch {
+      }
       onRename(name);
     } else { setValue(column.name); }
     setEditing(false);
@@ -216,7 +220,10 @@ function ColumnHeader({ column, projectId, dragHandleProps, onRename, onDelete }
 
   const handleDelete = async () => {
     if (column.tasks.length > 0 && !confirm(`'${column.name}' 컬럼과 카드 ${column.tasks.length}개를 삭제하시겠습니까?`)) return;
-    await fetch(`/api/projects/${projectId}/columns/${column.id}`, { method: "DELETE" });
+    try {
+      await apiFetch(`/api/projects/${projectId}/columns/${column.id}`, { method: "DELETE" });
+    } catch {
+    }
     onDelete();
   };
 
@@ -290,14 +297,17 @@ export default function KanbanBoard({ projectId }: Props) {
   );
 
   useEffect(() => {
-    fetch(`/api/projects/${projectId}`)
-      .then((r) => r.json())
-      .then((data) => {
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/projects/${projectId}`);
+        const data = await res.json();
         setColumns(data.columns ?? []);
         setMembers((data.members ?? []).map((m: { user: Member }) => m.user));
+      } catch {
+      } finally {
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+    })();
   }, [projectId]);
 
   useEffect(() => { if (addingColumn) newColRef.current?.focus(); }, [addingColumn]);
@@ -348,7 +358,7 @@ export default function KanbanBoard({ projectId }: Props) {
       const reordered = arrayMove(sorted, oldIndex, newIndex).map((column, order) => ({ ...column, order }));
       setColumns(reordered);
       await Promise.all(reordered.map((column) =>
-        fetch(`/api/projects/${projectId}/columns/${column.id}`, {
+        apiFetch(`/api/projects/${projectId}/columns/${column.id}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ order: column.order }),
         })
@@ -368,7 +378,7 @@ export default function KanbanBoard({ projectId }: Props) {
       const reordered = arrayMove(col.tasks, oldIndex, newIndex);
       setColumns((prev) => prev.map((c) => c.id === col.id ? { ...c, tasks: reordered } : c));
       await Promise.all(reordered.map((t, i) =>
-        fetch(`/api/projects/${projectId}/tasks/${t.id}`, {
+        apiFetch(`/api/projects/${projectId}/tasks/${t.id}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ order: i, columnId: col.id }),
         })
@@ -376,7 +386,7 @@ export default function KanbanBoard({ projectId }: Props) {
     } else {
       const task = col.tasks.find((t) => t.id === activeTaskId);
       if (task) {
-        await fetch(`/api/projects/${projectId}/tasks/${task.id}`, {
+        await apiFetch(`/api/projects/${projectId}/tasks/${task.id}`, {
           method: "PATCH", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ columnId: task.columnId }),
         });
@@ -385,22 +395,28 @@ export default function KanbanBoard({ projectId }: Props) {
   };
 
   const addTask = async (columnId: string, title: string, openDetails = false) => {
-    const res = await fetch(`/api/projects/${projectId}/tasks`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title, columnId }),
-    });
-    if (res.ok) {
-      const task = await res.json();
-      setColumns((prev) => prev.map((c) => c.id === columnId ? { ...c, tasks: [...c.tasks, task] } : c));
-      if (openDetails) setSelectedTask({ task, colId: columnId });
-      setAddingTo(null);
-      return true;
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/tasks`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, columnId }),
+      });
+      if (res.ok) {
+        const task = await res.json();
+        setColumns((prev) => prev.map((c) => c.id === columnId ? { ...c, tasks: [...c.tasks, task] } : c));
+        if (openDetails) setSelectedTask({ task, colId: columnId });
+        setAddingTo(null);
+        return true;
+      }
+    } catch {
     }
     return false;
   };
 
   const deleteTask = async (taskId: string, columnId: string) => {
-    await fetch(`/api/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" });
+    try {
+      await apiFetch(`/api/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" });
+    } catch {
+    }
     setColumns((prev) => prev.map((c) => c.id === columnId ? { ...c, tasks: c.tasks.filter((t) => t.id !== taskId) } : c));
     if (selectedTask?.task.id === taskId) setSelectedTask(null);
   };
@@ -418,22 +434,28 @@ export default function KanbanBoard({ projectId }: Props) {
       if (col.id === toCol.id) return { ...col, tasks: [...col.tasks, { ...task, columnId: toCol.id }] };
       return col;
     }));
-    await fetch(`/api/projects/${projectId}/tasks/${taskId}`, {
-      method: "PATCH", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ columnId: toCol.id }),
-    });
+    try {
+      await apiFetch(`/api/projects/${projectId}/tasks/${taskId}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ columnId: toCol.id }),
+      });
+    } catch {
+    }
   };
 
   const addColumn = async () => {
     const name = newColName.trim();
     if (!name) { setAddingColumn(false); return; }
-    const res = await fetch(`/api/projects/${projectId}/columns`, {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (res.ok) {
-      const col = await res.json();
-      setColumns((prev) => [...prev, { ...col, tasks: [] }]);
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/columns`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      });
+      if (res.ok) {
+        const col = await res.json();
+        setColumns((prev) => [...prev, { ...col, tasks: [] }]);
+      }
+    } catch {
     }
     setNewColName(""); setAddingColumn(false);
   };

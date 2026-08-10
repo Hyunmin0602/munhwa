@@ -4,6 +4,7 @@ import { FolderKanban, CalendarDays, BookOpen, Users, Pencil } from "lucide-reac
 import Link from "next/link";
 import dayjs from "dayjs";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { apiFetch } from "@/lib/client-fetch";
 import ProjectEditModal from "@/components/ProjectEditModal";
 
 interface Project {
@@ -23,13 +24,17 @@ export default function DashboardPage() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
 
   useEffect(() => {
-    fetch("/api/projects")
-      .then((r) => r.json())
-      .then((data) => {
+    (async () => {
+      try {
+        const res = await apiFetch("/api/projects");
+        const data = await res.json();
         setProjects(Array.isArray(data) ? data : []);
+      } catch {
+        // ignore, leave projects empty
+      } finally {
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+    })();
   }, []);
 
   const today = dayjs().format("YYYY년 M월 D일 dddd");
