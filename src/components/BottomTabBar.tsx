@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, LayoutGrid, FolderKanban, CalendarDays, BookOpen, ChevronUp, MoreHorizontal } from "lucide-react";
+import { LayoutDashboard, FolderKanban, CalendarDays, BookOpen, ChevronUp, MoreHorizontal } from "lucide-react";
 
 interface Project { id: string; name: string; color: string; }
 
@@ -24,13 +24,6 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
 
   const tabs = [
     {
-      href: "/dashboard" as string | null,
-      label: "홈",
-      Icon: LayoutGrid,
-      active: !projectId,
-      fallbackPath: null,
-    },
-    {
       href: "/dashboard/integrated" as string | null,
       label: "통합",
       Icon: LayoutDashboard,
@@ -38,11 +31,11 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
       fallbackPath: null,
     },
     {
-      href: projectId ? `/dashboard/projects/${projectId}/kanban` : null,
+      href: "/dashboard/projects" as string | null,
       label: "사업",
       Icon: FolderKanban,
-      active: !!projectId,
-      fallbackPath: "kanban",
+      active: pathname === "/dashboard/projects" || !!projectId,
+      fallbackPath: null,
     },
     {
       href: null,

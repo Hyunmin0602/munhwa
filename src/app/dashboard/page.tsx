@@ -24,6 +24,12 @@ export default function DashboardPage() {
   const [editingProject, setEditingProject] = useState<Project | null>(null);
 
   useEffect(() => {
+    if (window.matchMedia("(max-width: 1023px)").matches) {
+      window.location.replace("/dashboard/integrated");
+    }
+  }, []);
+
+  useEffect(() => {
     (async () => {
       try {
         const res = await apiFetch("/api/projects");
