@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 import { AlertCircle, BookOpen, CalendarDays, CheckSquare, FileText, RotateCw, SlidersHorizontal, X } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import { Skeleton } from "@/components/ui/Skeleton";
+import IntegratedOverview from "@/components/IntegratedOverview";
 
 type ItemType = "task" | "event" | "archive" | "meeting";
 interface IntegratedItem {
@@ -29,6 +30,13 @@ interface ProjectFilter {
   color: string;
   status: string;
 }
+interface IntegratedSummary {
+  counts: Record<ItemType, number>;
+  kanban: Array<{
+    project: { id: string; name: string; color: string; status: string };
+    columns: Array<{ id: string; name: string; order: number; tasks: Array<{ id: string; title: string; dueDate: string | null }> }>;
+  }>;
+}
 
 const tabs: Array<{ type: "all" | ItemType; label: string }> = [
   { type: "all", label: "전체" }, { type: "task", label: "칸반" }, { type: "event", label: "일정" }, { type: "archive", label: "문서" }, { type: "meeting", label: "회의록" },
@@ -47,6 +55,7 @@ export default function IntegratedPage() {
   const [type, setType] = useState<"all" | ItemType>(() => tabs.some((tab) => tab.type === initialType) ? initialType as "all" | ItemType : "all");
   const [range, setRange] = useState(() => ["today", "7d", "30d", "all"].includes(initialRange ?? "") ? initialRange! : "7d");
   const [items, setItems] = useState<IntegratedItem[]>([]);
+  const [summary, setSummary] = useState<IntegratedSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [projects, setProjects] = useState<ProjectFilter[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(() => searchParams.get("projectIds")?.split(",").filter(Boolean) ?? []);
@@ -135,6 +144,7 @@ export default function IntegratedPage() {
       .then((data) => {
         if (cancelled) return;
         setItems(Array.isArray(data.items) ? data.items : []);
+        setSummary(data.summary && typeof data.summary === "object" ? data.summary : null);
         setProjects(Array.isArray(data.filters?.projects) ? data.filters.projects : []);
         setNextCursor(typeof data.nextCursor === "string" ? data.nextCursor : null);
       })
@@ -146,6 +156,20 @@ export default function IntegratedPage() {
       });
     return () => { cancelled = true; };
   }, [getQuery, requestNonce]);
+
+  if (!loading && !error && !showFilters && items.length > 0 && summary && type === "all") {
+    return (
+      <IntegratedOverview
+        items={items}
+        summary={summary}
+        range={range}
+        selectedProjectCount={selectedProjectIds.length}
+        onOpenFilters={openFilters}
+        onSelectRange={selectRange}
+        onFocusType={selectType}
+      />
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">

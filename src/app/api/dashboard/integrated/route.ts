@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
+import { assertAdmin } from "@/lib/server-utils";
 
 const ITEM_TYPES = ["task", "event", "archive", "meeting"] as const;
 type ItemType = (typeof ITEM_TYPES)[number];
@@ -46,6 +47,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const userId = session.user.id;
+  const isAdmin = await assertAdmin(userId);
   const types = parseTypes(searchParams.get("type") ?? searchParams.get("types"));
   const requestedProjectIds = searchParams.get("projectIds")?.split(",").filter(Boolean) ?? [];
   const status = searchParams.get("status")?.split(",").filter(Boolean) ?? [];
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
   const projects = await withDbRetry(() =>
     prisma.project.findMany({
       where: {
-        members: { some: { userId } },
+        ...(isAdmin ? {} : { members: { some: { userId } } }),
         ...(requestedProjectIds.length ? { id: { in: requestedProjectIds } } : {}),
         ...(status.length ? { status: { in: status } } : {}),
       },
@@ -68,6 +70,52 @@ export async function GET(request: NextRequest) {
   if (!projectIds.length) return NextResponse.json({ items: [], nextCursor: null, filters: { projects } });
 
   const projectById = new Map(projects.map((project) => [project.id, project]));
+  const [taskCount, eventCount, archiveCount, meetingCount, kanbanColumns] = await withDbRetry(() =>
+    Promise.all([
+      prisma.task.count({
+        where: { column: { projectId: { in: projectIds } }, dueDate: rangeWindow ? { gte: rangeWindow.start, lte: rangeWindow.end } : undefined },
+      }),
+      prisma.event.count({
+        where: { projectId: { in: projectIds }, startDate: rangeWindow ? { gte: rangeWindow.start, lte: rangeWindow.end } : undefined },
+      }),
+      prisma.archivePost.count({
+        where: {
+          projectId: { in: projectIds },
+          kind: { not: "MEETING" },
+          OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }],
+          ...(rangeWindow ? { updatedAt: { gte: rangeWindow.start, lte: rangeWindow.end } } : {}),
+        },
+      }),
+      prisma.archivePost.count({
+        where: {
+          projectId: { in: projectIds },
+          kind: "MEETING",
+          OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }],
+          ...(rangeWindow ? { updatedAt: { gte: rangeWindow.start, lte: rangeWindow.end } } : {}),
+        },
+      }),
+      prisma.kanbanColumn.findMany({
+        where: { projectId: { in: projectIds } },
+        orderBy: { order: "asc" },
+        select: {
+          id: true,
+          name: true,
+          order: true,
+          projectId: true,
+          tasks: {
+            where: rangeWindow ? { dueDate: { gte: rangeWindow.start, lte: rangeWindow.end } } : undefined,
+            orderBy: [{ dueDate: "asc" }, { order: "asc" }],
+            take: 2,
+            select: { id: true, title: true, dueDate: true },
+          },
+        },
+      }),
+    ])
+  );
+  const kanban = projects.slice(0, 3).map((project) => ({
+    project,
+    columns: kanbanColumns.filter((column) => column.projectId === project.id).slice(0, 3),
+  }));
   const [tasks, events, archives, meetings] = await withDbRetry(() =>
     Promise.all([
       types.includes("task")
@@ -176,5 +224,13 @@ export async function GET(request: NextRequest) {
     || archives.length > (returnedCounts.archive ?? 0)
     || meetings.length > (returnedCounts.meeting ?? 0);
   const nextCursor = hasMore ? Buffer.from(JSON.stringify(nextCursorState)).toString("base64url") : null;
-  return NextResponse.json({ items: page, nextCursor, filters: { projects } });
+  return NextResponse.json({
+    items: page,
+    nextCursor,
+    filters: { projects },
+    summary: {
+      counts: { task: taskCount, event: eventCount, archive: archiveCount, meeting: meetingCount },
+      kanban,
+    },
+  });
 }
