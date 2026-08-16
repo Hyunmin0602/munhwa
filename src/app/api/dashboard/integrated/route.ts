@@ -2,23 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { assertAdmin } from "@/lib/server-utils";
 
 const ITEM_TYPES = ["task", "event", "archive", "meeting"] as const;
 type ItemType = (typeof ITEM_TYPES)[number];
 
-function getRangeWindow(range: string | null) {
+function getDayRange(range: string | null) {
   const now = new Date();
-  if (range === "today") {
-    const start = new Date(now);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(now);
+  const start = new Date(now);
+  start.setHours(0, 0, 0, 0);
+  const endOfDay = (date: Date) => {
+    const end = new Date(date);
     end.setHours(23, 59, 59, 999);
-    return { start, end };
+    return end;
+  };
+  if (range === "today") {
+    return { start, end: endOfDay(start) };
   }
-  if (range === "30d") return { start: now, end: new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) };
+  if (range === "30d") {
+    const end = new Date(start);
+    end.setDate(end.getDate() + 29);
+    return { start, end: endOfDay(end) };
+  }
   if (range === "all") return null;
-  return { start: now, end: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) };
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return { start, end: endOfDay(end) };
+}
+
+function getRecentRange(range: string | null) {
+  const now = new Date();
+  const end = new Date(now);
+  end.setHours(23, 59, 59, 999);
+  if (range === "all") return null;
+  const days = range === "today" ? 1 : range === "30d" ? 30 : 7;
+  const start = new Date(end);
+  start.setDate(start.getDate() - (days - 1));
+  start.setHours(0, 0, 0, 0);
+  return { start, end };
 }
 
 function parseTypes(value: string | null): ItemType[] {
@@ -47,18 +67,21 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const userId = session.user.id;
-  const isAdmin = await assertAdmin(userId);
-  const types = parseTypes(searchParams.get("type") ?? searchParams.get("types"));
+  const requestedType = searchParams.get("type") ?? searchParams.get("types");
+  const types = parseTypes(requestedType);
+  const isOverview = !requestedType;
   const requestedProjectIds = searchParams.get("projectIds")?.split(",").filter(Boolean) ?? [];
   const status = searchParams.get("status")?.split(",").filter(Boolean) ?? [];
-  const rangeWindow = getRangeWindow(searchParams.get("range"));
+  const range = searchParams.get("range");
+  const dayRange = getDayRange(range);
+  const recentRange = getRecentRange(range);
   const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 20, 1), 50);
   const cursor = parseCursor(searchParams.get("cursor"));
 
   const projects = await withDbRetry(() =>
     prisma.project.findMany({
       where: {
-        ...(isAdmin ? {} : { members: { some: { userId } } }),
+        members: { some: { userId } },
         ...(requestedProjectIds.length ? { id: { in: requestedProjectIds } } : {}),
         ...(status.length ? { status: { in: status } } : {}),
       },
@@ -76,14 +99,14 @@ export async function GET(request: NextRequest) {
         where: { column: { projectId: { in: projectIds } } },
       }),
       prisma.event.count({
-        where: { projectId: { in: projectIds }, startDate: rangeWindow ? { gte: rangeWindow.start, lte: rangeWindow.end } : undefined },
+        where: { projectId: { in: projectIds }, startDate: dayRange ? { gte: dayRange.start, lte: dayRange.end } : undefined },
       }),
       prisma.archivePost.count({
         where: {
           projectId: { in: projectIds },
           kind: { not: "MEETING" },
           OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }],
-          ...(rangeWindow ? { updatedAt: { gte: rangeWindow.start, lte: rangeWindow.end } } : {}),
+          ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
         },
       }),
       prisma.archivePost.count({
@@ -91,7 +114,7 @@ export async function GET(request: NextRequest) {
           projectId: { in: projectIds },
           kind: "MEETING",
           OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }],
-          ...(rangeWindow ? { updatedAt: { gte: rangeWindow.start, lte: rangeWindow.end } } : {}),
+          ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
         },
       }),
       prisma.kanbanColumn.findMany({
@@ -132,11 +155,11 @@ export async function GET(request: NextRequest) {
     }));
   const [tasks, events, archives, meetings] = await withDbRetry(() =>
     Promise.all([
-      types.includes("task")
+      !isOverview && types.includes("task")
         ? prisma.task.findMany({
-            where: { column: { projectId: { in: projectIds } }, dueDate: rangeWindow ? { gte: rangeWindow.start, lte: rangeWindow.end } : undefined },
+        where: { column: { projectId: { in: projectIds } }, dueDate: dayRange ? { gte: dayRange.start, lte: dayRange.end } : undefined },
             select: { id: true, title: true, dueDate: true, priority: true, column: { select: { name: true, projectId: true } }, assignee: { select: { name: true } } },
-            orderBy: [{ dueDate: "desc" }, { id: "desc" }],
+            orderBy: [{ dueDate: "asc" }, { id: "asc" }],
             cursor: cursor.task ? { id: cursor.task } : undefined,
             skip: cursor.task ? 1 : 0,
             take: limit + 1,
@@ -144,9 +167,9 @@ export async function GET(request: NextRequest) {
         : [],
       types.includes("event")
         ? prisma.event.findMany({
-            where: { projectId: { in: projectIds }, startDate: rangeWindow ? { gte: rangeWindow.start, lte: rangeWindow.end } : undefined },
+        where: { projectId: { in: projectIds }, startDate: dayRange ? { gte: dayRange.start, lte: dayRange.end } : undefined },
             select: { id: true, title: true, startDate: true, endDate: true, projectId: true, creator: { select: { name: true } } },
-            orderBy: [{ startDate: "desc" }, { id: "desc" }],
+            orderBy: [{ startDate: "asc" }, { id: "asc" }],
             cursor: cursor.event ? { id: cursor.event } : undefined,
             skip: cursor.event ? 1 : 0,
             take: limit + 1,
@@ -158,7 +181,7 @@ export async function GET(request: NextRequest) {
               projectId: { in: projectIds },
               kind: { not: "MEETING" },
               OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }],
-              ...(rangeWindow ? { updatedAt: { gte: rangeWindow.start, lte: rangeWindow.end } } : {}),
+              ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
             },
             select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },
             orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -173,7 +196,7 @@ export async function GET(request: NextRequest) {
               projectId: { in: projectIds },
               kind: "MEETING",
               OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }],
-              ...(rangeWindow ? { updatedAt: { gte: rangeWindow.start, lte: rangeWindow.end } } : {}),
+              ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
             },
             select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },
             orderBy: [{ updatedAt: "desc" }, { id: "desc" }],

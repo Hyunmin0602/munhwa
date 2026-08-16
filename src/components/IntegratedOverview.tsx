@@ -37,10 +37,8 @@ interface IntegratedSummary {
 interface Props {
   items: IntegratedItem[];
   summary: IntegratedSummary;
-  range: string;
   selectedProjectCount: number;
   onOpenFilters: () => void;
-  onSelectRange: (range: string) => void;
   onFocusType: (type: ItemType) => void;
   projects: Array<{ id: string; name: string; color: string; status: string }>;
   showFilters: boolean;
@@ -50,13 +48,6 @@ interface Props {
   onApplyProjectFilters: () => void;
   onCloseFilters: () => void;
 }
-
-const ranges = [
-  { value: "today", label: "오늘" },
-  { value: "7d", label: "7일" },
-  { value: "30d", label: "30일" },
-  { value: "all", label: "전체" },
-];
 
 const typeDetails = {
   task: { Icon: CheckSquare, label: "작업" },
@@ -95,10 +86,8 @@ function ProjectDot({ item }: { item: IntegratedItem }) {
 export default function IntegratedOverview({
   items,
   summary,
-  range,
   selectedProjectCount,
   onOpenFilters,
-  onSelectRange,
   onFocusType,
   projects,
   showFilters,
@@ -129,18 +118,6 @@ export default function IntegratedOverview({
             <SlidersHorizontal size={18} />
             {selectedProjectCount > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-indigo-600" />}
           </button>
-        </div>
-        <div className="mx-auto mt-4 flex max-w-6xl gap-2 overflow-x-auto pb-1">
-          {ranges.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onSelectRange(option.value)}
-              className={`h-9 min-w-14 rounded-lg px-3 text-xs font-medium transition-colors ${range === option.value ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
-            >
-              {option.label}
-            </button>
-          ))}
         </div>
       </header>
 

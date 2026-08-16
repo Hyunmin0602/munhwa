@@ -19,7 +19,6 @@ export async function assertProjectMember(userId: string, projectId: string) {
 }
 
 export async function assertProjectAccess(userId: string, projectId: string) {
-  if (await assertAdmin(userId)) return true;
   return assertProjectMember(userId, projectId);
 }
 
