@@ -14,6 +14,7 @@ model User {
   password      String?
   image         String?
   role          String    @default("member")
+  cohortId      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -24,6 +25,20 @@ model User {
   createdTasks Task[]         @relation("TaskCreator")
   archivePosts ArchivePost[]
   events       Event[]
+  cohort       Cohort?   @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  sentInvites  ProjectInvitation[] @relation("InvitationSender")
+  receivedInvites ProjectInvitation[] @relation("InvitationRecipient")
+}
+
+model Cohort {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
 }
 
 model Account {
@@ -66,7 +81,11 @@ model Project {
   id          String   @id @default(cuid())
   name        String
   description String?
+  summary     String?
+  status      String    @default("planning")
   color       String   @default("#6366f1")
+  order       Int       @default(0)
+  sharingMode String    @default("PUBLIC")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -74,6 +93,7 @@ model Project {
   columns      KanbanColumn[]
   archivePosts ArchivePost[]
   events       Event[]
+  invitations  ProjectInvitation[]
 }
 
 model ProjectMember {
@@ -87,6 +107,26 @@ model ProjectMember {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
   @@unique([userId, projectId])
+}
+
+model ProjectInvitation {
+  id         String   @id @default(cuid())
+  projectId  String
+  inviteeId  String
+  invitedBy  String
+  status     String   @default("PENDING")
+  expiresAt  DateTime
+  respondedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitee User    @relation("InvitationRecipient", fields: [inviteeId], references: [id], onDelete: Cascade)
+  sender  User    @relation("InvitationSender", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, inviteeId, status])
+  @@index([inviteeId, status])
+  @@index([projectId, status])
 }
 
 model KanbanColumn {
@@ -116,6 +156,8 @@ model Task {
   column   KanbanColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
   assignee User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
   creator  User         @relation("TaskCreator", fields: [creatorId], references: [id])
+
+  @@index([dueDate])
 }
 
 model ArchivePost {
@@ -123,6 +165,10 @@ model ArchivePost {
   title       String
   content     String    @default("")
   slug        String    @unique
+  kind        String    @default("DOCUMENT")
+  visibility  String    @default("PRIVATE")
+  shareToken  String?   @unique
+  shareEnabled Boolean  @default(false)
   published   Boolean   @default(false)
   publishedAt DateTime?
   projectId   String
@@ -132,6 +178,9 @@ model ArchivePost {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   author  User    @relation(fields: [authorId], references: [id])
+
+  @@index([projectId, kind, updatedAt])
+  @@index([authorId, visibility])
 }
 
 model Event {
@@ -149,4 +198,6 @@ model Event {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   creator User    @relation(fields: [creatorId], references: [id])
+
+  @@index([projectId, startDate])
 }

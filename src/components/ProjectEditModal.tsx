@@ -12,19 +12,26 @@ interface Project {
   color: string;
 }
 
+interface Member {
+  id: string;
+  role: string;
+  user: { name: string | null; email: string };
+}
+
 interface Props {
   project: Project;
   onClose: () => void;
   onUpdated: (project: Project) => void;
+  onDeleted: (projectId: string) => void;
 }
 
-export default function ProjectEditModal({ project, onClose, onUpdated }: Props) {
+export default function ProjectEditModal({ project, onClose, onUpdated, onDeleted }: Props) {
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? "");
   const [color, setColor] = useState(project.color);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [members, setMembers] = useState<Array<any>>([]);
+  const [members, setMembers] = useState<Member[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteLoading, setInviteLoading] = useState(false);
@@ -112,6 +119,25 @@ export default function ProjectEditModal({ project, onClose, onUpdated }: Props)
     }
   };
 
+  const deleteProject = async () => {
+    if (!confirm("이 사업과 칸반, 일정, 아카이브를 모두 삭제하시겠습니까?")) return;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await apiFetch(`/api/projects/${project.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "사업 삭제에 실패했습니다.");
+        return;
+      }
+      onDeleted(project.id);
+    } catch {
+      setError("네트워크 또는 서버 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
@@ -162,6 +188,14 @@ export default function ProjectEditModal({ project, onClose, onUpdated }: Props)
           </div>
           {error && <p className="text-sm text-red-500">{error}</p>}
           <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={deleteProject}
+              disabled={loading}
+              className="px-3 py-2.5 text-rose-500 hover:bg-rose-50 rounded-xl text-sm disabled:opacity-50"
+            >
+              삭제
+            </button>
             <button
               type="button"
               onClick={onClose}

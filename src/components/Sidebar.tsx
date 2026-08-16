@@ -11,6 +11,9 @@ import {
   Plus,
   Pencil,
   X,
+  ChevronUp,
+  ChevronDown,
+  LayoutGrid,
 } from "lucide-react";
 
 interface Project {
@@ -24,11 +27,12 @@ interface SidebarProps {
   projects: Project[];
   onNewProject: () => void;
   onEditProject: (project: Project) => void;
+  onMoveProject: (projectId: string, direction: "up" | "down") => void;
   open?: boolean;
   onClose?: () => void;
 }
 
-function SidebarContent({ projects, onNewProject, onEditProject, onClose }: SidebarProps) {
+function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
 
@@ -42,7 +46,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onClose }: Side
         </div>
         {/* 모바일 닫기 버튼 */}
         {onClose && (
-          <button onClick={onClose} className="md:hidden p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
+          <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
             <X size={18} />
           </button>
         )}
@@ -51,6 +55,26 @@ function SidebarContent({ projects, onNewProject, onEditProject, onClose }: Side
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
         <div className="mt-4">
+          <Link
+            href="/dashboard/integrated"
+            onClick={onClose}
+            className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+              pathname === "/dashboard/integrated" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            <LayoutGrid size={16} />
+            통합 화면
+          </Link>
+          <Link
+            href="/dashboard/meetings"
+            onClick={onClose}
+            className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+              pathname === "/dashboard/meetings" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            <BookOpen size={16} />
+            회의록
+          </Link>
           <div className="flex items-center justify-between px-3 py-1 mb-1">
             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">사업</span>
             <button
@@ -61,7 +85,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onClose }: Side
               <Plus size={14} />
             </button>
           </div>
-          {projects.map((p) => {
+          {projects.map((p, index) => {
             const base = `/dashboard/projects/${p.id}`;
             const isActive = pathname.startsWith(base);
             return (
@@ -95,6 +119,14 @@ function SidebarContent({ projects, onNewProject, onEditProject, onClose }: Side
                   >
                     <Pencil size={12} />
                   </button>
+                  <div className="hidden group-hover:flex items-center mr-1">
+                    <button type="button" onClick={() => onMoveProject(p.id, "up")} disabled={index === 0} className="p-1 text-gray-300 hover:text-gray-600 disabled:opacity-30" title="위로 이동">
+                      <ChevronUp size={12} />
+                    </button>
+                    <button type="button" onClick={() => onMoveProject(p.id, "down")} disabled={index === projects.length - 1} className="p-1 text-gray-300 hover:text-gray-600 disabled:opacity-30" title="아래로 이동">
+                      <ChevronDown size={12} />
+                    </button>
+                  </div>
                 </div>
                 {isActive && (
                   <div className="ml-6 mt-0.5 space-y-0.5">
@@ -146,17 +178,17 @@ function SidebarContent({ projects, onNewProject, onEditProject, onClose }: Side
   );
 }
 
-export default function Sidebar({ projects, onNewProject, onEditProject, open = false, onClose }: SidebarProps) {
+export default function Sidebar({ projects, onNewProject, onEditProject, onMoveProject, open = false, onClose }: SidebarProps) {
   return (
     <>
       {/* 데스크탑 사이드바 */}
-      <div className="hidden md:flex border-r border-gray-200 h-screen sticky top-0">
-        <SidebarContent projects={projects} onNewProject={onNewProject} onEditProject={onEditProject} />
+      <div className="hidden lg:flex border-r border-gray-200 h-screen sticky top-0">
+        <SidebarContent projects={projects} onNewProject={onNewProject} onEditProject={onEditProject} onMoveProject={onMoveProject} />
       </div>
 
       {/* 모바일 오버레이 드로어 */}
       {open && (
-        <div className="fixed inset-0 z-50 md:hidden">
+        <div className="fixed inset-0 z-50 lg:hidden">
           {/* backdrop */}
           <div className="absolute inset-0 bg-black/40" onClick={onClose} />
           {/* drawer */}
@@ -165,6 +197,7 @@ export default function Sidebar({ projects, onNewProject, onEditProject, open = 
               projects={projects}
               onNewProject={onNewProject}
               onEditProject={onEditProject}
+              onMoveProject={onMoveProject}
               onClose={onClose}
             />
           </div>

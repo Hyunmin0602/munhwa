@@ -11,13 +11,13 @@ export async function GET(
   const post = await withDbRetry(
     () =>
       prisma.archivePost.findUnique({
-        where: { slug },
+        where: { shareToken: slug },
         include: { author: { select: { name: true } }, project: { select: { name: true } } },
       }),
     { operation: `public-post:find-by-slug` }
   );
 
-  if (!post || !post.published) {
+  if (!post || post.visibility !== "EXTERNAL" || !post.shareEnabled) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   return NextResponse.json(post);

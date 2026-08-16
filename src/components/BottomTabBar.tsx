@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { LayoutGrid, FolderKanban, CalendarDays, BookOpen, ChevronUp } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, FolderKanban, CalendarDays, BookOpen, ChevronUp, MoreHorizontal } from "lucide-react";
 
 interface Project { id: string; name: string; color: string; }
 
@@ -10,6 +10,7 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const [showPicker, setShowPicker] = useState(false);
+  const [showMore, setShowMore] = useState(false);
 
   const match = pathname.match(/\/dashboard\/projects\/([^/]+)/);
   const projectId = match?.[1];
@@ -30,25 +31,25 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
       fallbackPath: null,
     },
     {
+      href: "/dashboard/integrated" as string | null,
+      label: "통합",
+      Icon: LayoutDashboard,
+      active: pathname === "/dashboard/integrated",
+      fallbackPath: null,
+    },
+    {
       href: projectId ? `/dashboard/projects/${projectId}/kanban` : null,
-      label: "칸반",
+      label: "사업",
       Icon: FolderKanban,
-      active: !!projectId && pathname.includes("/kanban"),
+      active: !!projectId,
       fallbackPath: "kanban",
     },
     {
-      href: projectId ? `/dashboard/projects/${projectId}/schedule` : null,
-      label: "일정",
-      Icon: CalendarDays,
-      active: !!projectId && pathname.includes("/schedule"),
-      fallbackPath: "schedule",
-    },
-    {
-      href: projectId ? `/dashboard/projects/${projectId}/archive` : null,
-      label: "아카이브",
-      Icon: BookOpen,
-      active: !!projectId && pathname.includes("/archive"),
-      fallbackPath: "archive",
+      href: null,
+      label: "더보기",
+      Icon: MoreHorizontal,
+      active: pathname === "/dashboard/meetings",
+      fallbackPath: null,
     },
   ];
 
@@ -58,10 +59,10 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
       {showPicker && (
         <>
           <div
-            className="md:hidden fixed inset-0 z-50 bg-black/40"
+            className="lg:hidden fixed inset-0 z-50 bg-black/40"
             onClick={() => setShowPicker(false)}
           />
-          <div className="md:hidden fixed bottom-[5.25rem] left-0 right-0 z-50 bg-white rounded-t-2xl shadow-xl border-t border-gray-200 overflow-hidden">
+          <div className="lg:hidden fixed bottom-[5.25rem] left-0 right-0 z-50 bg-white rounded-t-2xl shadow-xl border-t border-gray-200 overflow-hidden">
             <div className="px-4 pt-4 pb-2 border-b border-gray-100">
               <span className="text-sm font-semibold text-gray-700">프로젝트 전환</span>
             </div>
@@ -91,8 +92,23 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
         </>
       )}
 
+      {showMore && (
+        <>
+          <div className="lg:hidden fixed inset-0 z-50 bg-black/40" onClick={() => setShowMore(false)} />
+          <div className="lg:hidden fixed bottom-[3.5rem] left-0 right-0 z-50 overflow-hidden rounded-t-xl border-t border-gray-200 bg-white shadow-xl">
+            <div className="border-b border-gray-100 px-4 py-4"><span className="text-sm font-semibold text-gray-700">더보기</span></div>
+            <div className="p-2">
+              <Link href="/dashboard/meetings" onClick={() => setShowMore(false)} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-gray-700 hover:bg-gray-50"><BookOpen size={17} />회의록</Link>
+              {projectId && <Link href={`/dashboard/projects/${projectId}/schedule`} onClick={() => setShowMore(false)} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-gray-700 hover:bg-gray-50"><CalendarDays size={17} />일정</Link>}
+              {projectId && <Link href={`/dashboard/projects/${projectId}/archive`} onClick={() => setShowMore(false)} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-gray-700 hover:bg-gray-50"><BookOpen size={17} />아카이브</Link>}
+              <button onClick={() => { setShowMore(false); setShowPicker(true); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm text-gray-700 hover:bg-gray-50"><FolderKanban size={17} />사업 전환</button>
+            </div>
+          </div>
+        </>
+      )}
+
       <nav
-        className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-gray-200"
+        className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-gray-200"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
       >
         {/* 현재 프로젝트 표시 (프로젝트 뷰일 때만) */}
@@ -114,6 +130,9 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
                 ? `/dashboard/projects/${projects[0].id}/${fallbackPath}`
                 : null;
 
+            if (label === "더보기") {
+              return <button key={label} onClick={() => setShowMore((value) => !value)} className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative ${active || showMore ? "text-indigo-600" : "text-gray-400 active:text-gray-600"}`}><Icon size={21} strokeWidth={active || showMore ? 2.5 : 2} /><span className="text-[10px] font-medium">{label}</span>{(active || showMore) && <span className="absolute bottom-0 w-8 h-0.5 bg-indigo-500 rounded-t-full" />}</button>;
+            }
             return href || fallback ? (
               <Link
                 key={label}

@@ -21,7 +21,7 @@ export default async function PublicArchivePage({
   const post = await withDbRetry(
     () =>
       prisma.archivePost.findUnique({
-        where: { slug },
+        where: { shareToken: slug },
         include: {
           author: { select: { name: true } },
           project: { select: { name: true } },
@@ -30,7 +30,7 @@ export default async function PublicArchivePage({
     { operation: `public-archive:get:${slug}` }
   );
 
-  if (!post || !post.published) notFound();
+  if (!post || post.visibility !== "EXTERNAL" || !post.shareEnabled) notFound();
 
   return (
     <div className="min-h-screen bg-white">

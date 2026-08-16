@@ -15,7 +15,8 @@ interface Post {
   title: string;
   content: string;
   slug: string;
-  published: boolean;
+  visibility: "PRIVATE" | "INTERNAL" | "EXTERNAL";
+  published?: boolean;
   updatedAt: string;
   author: { name: string | null };
 }
@@ -143,9 +144,12 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
                   href={`/dashboard/projects/${projectId}/archive/${post.id}`}
                   className="group relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col"
                 >
-                  {/* Published bar */}
-                  {post.published && (
+                  {/* Visibility bar */}
+                  {post.visibility === "EXTERNAL" && (
                     <div className="h-1 w-full bg-gradient-to-r from-emerald-400 to-teal-400" />
+                  )}
+                  {post.visibility === "INTERNAL" && (
+                    <div className="h-1 w-full bg-gradient-to-r from-sky-400 to-indigo-400" />
                   )}
 
                   <div className="p-5 flex-1 flex flex-col">
@@ -176,10 +180,15 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
                         <span>{dayjs(post.updatedAt).format("MM.DD HH:mm")}</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        {post.published ? (
+                        {post.visibility === "EXTERNAL" ? (
                           <span className="flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-medium">
                             <Globe size={9} />
-                            공개
+                            외부
+                          </span>
+                        ) : post.visibility === "INTERNAL" ? (
+                          <span className="flex items-center gap-1 text-xs text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full font-medium">
+                            <Globe size={9} />
+                            내부
                           </span>
                         ) : (
                           <span className="flex items-center gap-1 text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">

@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
-import { Plus } from "lucide-react";
+import { Menu, Plus } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import BottomTabBar from "@/components/BottomTabBar";
 import NewProjectModal from "@/components/NewProjectModal";
@@ -22,6 +22,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
   const [toasts, setToasts] = useState<Array<{ id: number; type: "error" | "info"; message: string }>>([]);
   const pathname = usePathname();
@@ -49,7 +50,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           const res = await apiFetch("/api/projects");
           const data = await res.json();
           setProjects(data);
-        } catch (e) {
+        } catch {
           // apiFetch redirects on 401; fallback to login route
           try {
             router.push("/login");
@@ -57,7 +58,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         }
       })();
     }
-  }, [status]);
+  }, [status, router]);
 
   useEffect(() => {
     const unsubscribe = subscribeToToasts(setToasts);
@@ -136,16 +137,51 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     window.dispatchEvent(new CustomEvent("project-updated", { detail: project }));
   };
 
+  const handleProjectDeleted = (projectId: string) => {
+    setProjects((prev) => prev.filter((project) => project.id !== projectId));
+    setEditingProject(null);
+    if (currentProjectId === projectId) router.push("/dashboard");
+  };
+
+  const handleMoveProject = async (projectId: string, direction: "up" | "down") => {
+    const index = projects.findIndex((project) => project.id === projectId);
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (index < 0 || targetIndex < 0 || targetIndex >= projects.length) return;
+    const next = [...projects];
+    [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+    setProjects(next);
+    const res = await apiFetch("/api/projects/order", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ projectIds: next.map((project) => project.id) }),
+    });
+    if (!res.ok) {
+      setProjects(projects);
+      showToast("사업 순서를 저장하지 못했습니다.");
+    }
+  };
+
   return (
     <div className="flex h-screen overflow-hidden bg-gray-50">
       <Sidebar
         projects={projects}
         onNewProject={() => setShowModal(true)}
         onEditProject={setEditingProject}
+        onMoveProject={handleMoveProject}
+        open={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
-      <main className="flex-1 overflow-hidden flex flex-col min-w-0 pb-[5.25rem] md:pb-0">
+      <main className="flex-1 overflow-hidden flex flex-col min-w-0 pb-[5.25rem] lg:pb-0">
         {/* 모바일 상단바 */}
-        <div className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
+        <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+            aria-label="메뉴 열기"
+            title="메뉴"
+          >
+            <Menu size={20} />
+          </button>
           <h1 className="text-base font-bold text-gray-900">
             {currentProject ? currentProject.name : "문화체육위원회"}
           </h1>
@@ -183,6 +219,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           project={editingProject}
           onClose={() => setEditingProject(null)}
           onUpdated={handleProjectUpdated}
+          onDeleted={handleProjectDeleted}
         />
       )}
     </div>

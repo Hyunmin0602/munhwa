@@ -45,6 +45,11 @@ export default function DashboardPage() {
     window.dispatchEvent(new CustomEvent("project-updated", { detail: project }));
   };
 
+  const handleProjectDeleted = (projectId: string) => {
+    setProjects((prev) => prev.filter((project) => project.id !== projectId));
+    setEditingProject(null);
+  };
+
   return (
     <div className="h-full flex flex-col">
       {/* Top bar */}
@@ -154,6 +159,7 @@ export default function DashboardPage() {
           project={editingProject}
           onClose={() => setEditingProject(null)}
           onUpdated={handleProjectUpdated}
+          onDeleted={handleProjectDeleted}
         />
       )}
     </div>

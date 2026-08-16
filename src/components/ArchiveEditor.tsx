@@ -14,12 +14,19 @@ import Link from "next/link";
 import { Skeleton } from "./ui/Skeleton";
 import { apiFetch } from "@/lib/client-fetch";
 
+type ArchiveVisibility = "PRIVATE" | "INTERNAL" | "EXTERNAL";
+type ArchiveKind = "DOCUMENT" | "MEETING";
+
 interface Post {
   id: string;
   title: string;
   content: string;
   slug: string;
-  published: boolean;
+  kind: ArchiveKind;
+  visibility: ArchiveVisibility;
+  shareToken: string | null;
+  shareEnabled: boolean;
+  published?: boolean;
   publishedAt: string | null;
   author: { name: string | null };
   updatedAt: string;
@@ -108,6 +115,9 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [visibility, setVisibility] = useState<ArchiveVisibility>("PRIVATE");
+  const [kind, setKind] = useState<ArchiveKind>("DOCUMENT");
   const [viewMode, setViewMode] = useState<"split" | "editor" | "preview">("split");
   const [isMobile, setIsMobile] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -120,6 +130,8 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         setPost(data);
         setTitle(data.title);
         setContent(data.content);
+        setKind((data.kind ?? "DOCUMENT") as ArchiveKind);
+        setVisibility((data.visibility ?? (data.published ? "EXTERNAL" : "PRIVATE")) as ArchiveVisibility);
       } catch {
       }
     })();
@@ -151,10 +163,12 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content, published: post?.published }),
+        body: JSON.stringify({ title, content, visibility, kind }),
       });
       if (res.ok) {
-        setPost(await res.json());
+        const next = await res.json();
+        setPost(next);
+        setVisibility((next.visibility ?? (next.published ? "EXTERNAL" : "PRIVATE")) as ArchiveVisibility);
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
       }
@@ -162,20 +176,40 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [projectId, postId, title, content, post?.published]);
+  }, [projectId, postId, title, content, visibility, kind]);
 
   const togglePublish = async () => {
     setPublishing(true);
     try {
+      const nextVisibility = visibility === "EXTERNAL" ? "PRIVATE" : "EXTERNAL";
       const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content, published: !post?.published }),
+        body: JSON.stringify({ title, content, visibility: nextVisibility, kind }),
+      });
+      if (res.ok) {
+        const next = await res.json();
+        setPost(next);
+        setVisibility((next.visibility ?? (next.published ? "EXTERNAL" : "PRIVATE")) as ArchiveVisibility);
+      }
+    } catch {
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const updateShareLink = async (shareAction: "revoke" | "regenerate") => {
+    setSharing(true);
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shareAction }),
       });
       if (res.ok) setPost(await res.json());
     } catch {
     } finally {
-      setPublishing(false);
+      setSharing(false);
     }
   };
 
@@ -305,21 +339,42 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
           {saved && (
             <span className="text-xs text-emerald-600 font-medium animate-fade-in">저장됨 ✓</span>
           )}
-          <button
-            onClick={togglePublish}
-            disabled={publishing}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium hover:-translate-y-0.5 transition-all ${
-              post.published
-                ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm hover:shadow"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
-          >
-            {post.published ? <Globe size={12} /> : <Lock size={12} />}
-            {post.published ? "공개 중" : "비공개"}
-          </button>
-          {post.published && (
+          <div className="flex items-center gap-2">
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as ArchiveKind)}
+              className="rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 outline-none focus:border-indigo-300"
+            >
+              <option value="DOCUMENT">일반 문서</option>
+              <option value="MEETING">회의록</option>
+            </select>
+            <select
+              value={visibility}
+              onChange={(e) => setVisibility(e.target.value as ArchiveVisibility)}
+              className="rounded-xl border border-gray-200 bg-white px-2.5 py-1.5 text-xs font-medium text-gray-700 outline-none focus:border-indigo-300"
+            >
+              <option value="PRIVATE">비공개</option>
+              <option value="INTERNAL">내부 공유</option>
+              <option value="EXTERNAL">외부 공유</option>
+            </select>
+            <button
+              onClick={togglePublish}
+              disabled={publishing}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium hover:-translate-y-0.5 transition-all ${
+                visibility === "EXTERNAL"
+                  ? "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 shadow-sm hover:shadow"
+                  : visibility === "INTERNAL"
+                    ? "bg-sky-50 text-sky-700 hover:bg-sky-100 shadow-sm hover:shadow"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+              }`}
+            >
+              {visibility === "EXTERNAL" ? <Globe size={12} /> : visibility === "INTERNAL" ? <Globe size={12} /> : <Lock size={12} />}
+              {visibility === "EXTERNAL" ? "외부 공개" : visibility === "INTERNAL" ? "내부 공유" : "비공개"}
+            </button>
+          </div>
+          {visibility === "EXTERNAL" && post.shareEnabled && post.shareToken && (
             <a
-              href={`/p/${post.slug}`}
+              href={`/p/${post.shareToken}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1 text-xs text-indigo-600 hover:text-indigo-800 transition-colors"
@@ -327,6 +382,15 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
               <ExternalLink size={12} />
               공개 링크
             </a>
+          )}
+          {visibility === "EXTERNAL" && (
+            <button
+              onClick={() => updateShareLink(post.shareEnabled ? "revoke" : "regenerate")}
+              disabled={sharing}
+              className="text-xs font-medium text-gray-500 hover:text-gray-800 disabled:opacity-50"
+            >
+              {sharing ? "처리 중..." : post.shareEnabled ? "링크 폐기" : "링크 재생성"}
+            </button>
           )}
           <button
             onClick={save}

@@ -26,6 +26,14 @@ export async function assertProjectOwner(userId: string, projectId: string) {
   return member?.role === "owner";
 }
 
+export async function assertAdmin(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+  return user?.role === "admin";
+}
+
 export async function findUserByEmail(email: string) {
   return prisma.user.findUnique({ where: { email } });
 }

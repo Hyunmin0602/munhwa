@@ -5,10 +5,6 @@ import { v4 as uuidv4 } from "uuid";
 import { withDbRetry } from "@/lib/db-retry";
 import { assertProjectMember } from "@/lib/server-utils";
 
-function logApiError(action: string, error: unknown) {
-  console.error(`[api/projects/:projectId/archive] ${action} failed`, error);
-}
-
 type Params = { params: Promise<{ projectId: string }> };
 
 export async function GET(_: NextRequest, { params }: Params) {
@@ -20,7 +16,13 @@ export async function GET(_: NextRequest, { params }: Params) {
 
   const posts = await withDbRetry(() =>
     prisma.archivePost.findMany({
-      where: { projectId },
+      where: {
+        projectId,
+        OR: [
+          { authorId: userId },
+          { visibility: { not: "PRIVATE" } },
+        ],
+      },
       include: { author: { select: { id: true, name: true } } },
       orderBy: { updatedAt: "desc" },
     })
@@ -40,7 +42,10 @@ export async function POST(req: NextRequest, { params }: Params) {
 
   const slug = uuidv4().replace(/-/g, "").slice(0, 12);
   const post = await withDbRetry(() =>
-    prisma.archivePost.create({ data: { title, slug, projectId, authorId: userId }, include: { author: { select: { id: true, name: true } } } })
+    prisma.archivePost.create({
+      data: { title, slug, projectId, authorId: userId, visibility: "PRIVATE", published: false },
+      include: { author: { select: { id: true, name: true } } },
+    })
   );
   return NextResponse.json(post, { status: 201 });
 }

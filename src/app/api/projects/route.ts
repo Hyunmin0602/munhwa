@@ -41,7 +41,7 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = session.user.id;
-    const { name, description, color } = await req.json();
+    const { name, description, summary, status, color } = await req.json();
     if (!name) return NextResponse.json({ error: "프로젝트 이름이 필요합니다." }, { status: 400 });
 
     const project = await withDbRetry(
@@ -50,6 +50,8 @@ export async function POST(req: NextRequest) {
           data: {
             name,
             description,
+            summary: typeof summary === "string" ? summary.trim() || null : null,
+            status: typeof status === "string" && status.trim() ? status.trim() : "planning",
             color: color ?? "#6366f1",
             members: { create: { userId, role: "owner" } },
             columns: {

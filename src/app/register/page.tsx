@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
@@ -14,10 +14,21 @@ export default function RegisterPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [cohortId, setCohortId] = useState("");
+  const [cohorts, setCohorts] = useState<Array<{ id: string; name: string }>>([]);
   const [showPw, setShowPw] = useState(false);
   const [showPw2, setShowPw2] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    apiFetch("/api/cohorts")
+      .then(async (res) => {
+        if (!res.ok) throw new Error("cohorts");
+        setCohorts(await res.json());
+      })
+      .catch(() => setError("가입 가능한 기수 목록을 불러오지 못했습니다."));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,7 +48,7 @@ export default function RegisterPage() {
       const res = await apiFetch("/api/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, email, password, cohortId }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
@@ -45,7 +56,7 @@ export default function RegisterPage() {
       } else {
         router.push("/login?registered=1");
       }
-    } catch (e) {
+    } catch {
       setError("네트워크 또는 서버 오류가 발생했습니다.");
     } finally { setLoading(false); }
   };
@@ -87,6 +98,19 @@ export default function RegisterPage() {
                 className={INPUT_CLS}
                 placeholder="name@example.com"
               />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">기수</label>
+              <select
+                value={cohortId}
+                onChange={(e) => setCohortId(e.target.value)}
+                required
+                className={INPUT_CLS + " bg-white"}
+              >
+                <option value="">기수를 선택해주세요</option>
+                {cohorts.map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}
+              </select>
+              {cohorts.length === 0 && <p className="text-xs text-gray-500 mt-1">현재 가입 가능한 기수가 없습니다.</p>}
             </div>
             {/* 비밀번호 */}
             <div>
