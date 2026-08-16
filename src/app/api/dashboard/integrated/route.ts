@@ -90,13 +90,23 @@ export async function GET(request: NextRequest) {
     })
   );
   const projectIds = projects.map((project) => project.id);
-  if (!projectIds.length) return NextResponse.json({ items: [], nextCursor: null, filters: { projects } });
+  if (!projectIds.length) {
+    return NextResponse.json({
+      items: [],
+      nextCursor: null,
+      filters: { projects },
+      summary: { counts: { task: 0, event: 0, archive: 0, meeting: 0 }, kanban: [] },
+    });
+  }
 
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const [taskCount, eventCount, archiveCount, meetingCount, kanbanColumns] = await withDbRetry(() =>
     Promise.all([
       prisma.task.count({
-        where: { column: { projectId: { in: projectIds } } },
+        where: {
+          column: { projectId: { in: projectIds } },
+          ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
+        },
       }),
       prisma.event.count({
         where: { projectId: { in: projectIds }, startDate: dayRange ? { gte: dayRange.start, lte: dayRange.end } : undefined },
@@ -126,6 +136,7 @@ export async function GET(request: NextRequest) {
           order: true,
           projectId: true,
           tasks: {
+            where: recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : undefined,
             orderBy: [{ updatedAt: "desc" }, { order: "asc" }],
             take: 2,
             select: { id: true, title: true, dueDate: true, updatedAt: true },

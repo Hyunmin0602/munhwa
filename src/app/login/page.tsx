@@ -27,7 +27,7 @@ function FindEmailModal({ onClose }: { onClose: () => void }) {
       const data = await res.json();
       if (!res.ok) setError(data.error ?? "오류가 발생했습니다.");
       else setResult(data.emails);
-    } catch (e) {
+    } catch {
       setError("네트워크 또는 서버 오류가 발생했습니다.");
     } finally { setLoading(false); }
   };
@@ -113,7 +113,7 @@ function LoginPageInner() {
     if (res?.error) {
       setError("이메일 또는 비밀번호가 올바르지 않습니다.");
     } else {
-      window.location.href = "/dashboard";
+      window.location.href = "/dashboard/integrated";
     }
   };
 

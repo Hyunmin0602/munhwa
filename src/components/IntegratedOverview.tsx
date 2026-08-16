@@ -37,8 +37,10 @@ interface IntegratedSummary {
 interface Props {
   items: IntegratedItem[];
   summary: IntegratedSummary;
+  range: string;
   selectedProjectCount: number;
   onOpenFilters: () => void;
+  onSelectRange: (range: string) => void;
   onFocusType: (type: ItemType) => void;
   projects: Array<{ id: string; name: string; color: string; status: string }>;
   showFilters: boolean;
@@ -56,12 +58,19 @@ const typeDetails = {
   meeting: { Icon: BookOpen, label: "회의록" },
 };
 
+const ranges = [
+  { value: "today", label: "오늘" },
+  { value: "7d", label: "7일" },
+  { value: "30d", label: "30일" },
+  { value: "all", label: "전체" },
+];
+
 function SectionTitle({ title, count, onShowAll, actionLabel = "전체 보기" }: { title: string; count: number; onShowAll: () => void; actionLabel?: string }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
       <div className="min-w-0">
         <h2 className="text-base font-bold text-gray-900">{title}</h2>
-        <p className="mt-0.5 text-xs text-gray-400">전체 {count}개</p>
+        <p className="mt-0.5 text-xs text-gray-400">이 기간 {count}개</p>
       </div>
       <button
         type="button"
@@ -86,8 +95,10 @@ function ProjectDot({ item }: { item: IntegratedItem }) {
 export default function IntegratedOverview({
   items,
   summary,
+  range,
   selectedProjectCount,
   onOpenFilters,
+  onSelectRange,
   onFocusType,
   projects,
   showFilters,
@@ -118,6 +129,18 @@ export default function IntegratedOverview({
             <SlidersHorizontal size={18} />
             {selectedProjectCount > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-indigo-600" />}
           </button>
+        </div>
+        <div className="mx-auto mt-4 flex max-w-6xl gap-2 overflow-x-auto pb-1">
+          {ranges.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onSelectRange(option.value)}
+              className={`h-9 min-w-14 rounded-lg px-3 text-xs font-medium transition-colors ${range === option.value ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            >
+              {option.label}
+            </button>
+          ))}
         </div>
       </header>
 
@@ -189,7 +212,7 @@ export default function IntegratedOverview({
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="text-base font-bold text-gray-900">최근 문서와 회의록</h2>
-                  <p className="mt-0.5 text-xs text-gray-400">전체 {summary.counts.archive + summary.counts.meeting}개</p>
+                  <p className="mt-0.5 text-xs text-gray-400">이 기간 {summary.counts.archive + summary.counts.meeting}개</p>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-1">
                   <button type="button" onClick={() => onFocusType("archive")} className="inline-flex h-10 items-center px-2 text-xs font-medium text-indigo-600 hover:text-indigo-700">문서</button>

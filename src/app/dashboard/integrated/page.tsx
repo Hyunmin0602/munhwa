@@ -7,6 +7,7 @@ import dayjs from "dayjs";
 import { AlertCircle, BookOpen, CalendarDays, CheckSquare, FileText, RotateCw, SlidersHorizontal, X } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import { Skeleton } from "@/components/ui/Skeleton";
+import IntegratedFocusedView from "@/components/IntegratedFocusedView";
 import IntegratedOverview from "@/components/IntegratedOverview";
 
 type ItemType = "task" | "event" | "archive" | "meeting";
@@ -71,7 +72,7 @@ export default function IntegratedPage() {
 
   const getQuery = useCallback((cursor?: string) => {
     const query = new URLSearchParams();
-    if (type !== "all") query.set("range", range);
+    query.set("range", range);
     if (type !== "all") query.set("type", type);
     if (selectedProjectIds.length) query.set("projectIds", selectedProjectIds.join(","));
     if (cursor) query.set("cursor", cursor);
@@ -80,7 +81,7 @@ export default function IntegratedPage() {
 
   const syncUrl = (nextType: "all" | ItemType, nextRange: string, nextProjectIds: string[]) => {
     const query = new URLSearchParams();
-    if (nextType !== "all") query.set("range", nextRange);
+    query.set("range", nextRange);
     if (nextType !== "all") query.set("type", nextType);
     if (nextProjectIds.length) query.set("projectIds", nextProjectIds.join(","));
     router.replace(`${pathname}?${query}`, { scroll: false });
@@ -159,13 +160,43 @@ export default function IntegratedPage() {
     return () => { cancelled = true; };
   }, [getQuery, requestNonce]);
 
+  if (type !== "all") {
+    return (
+      <IntegratedFocusedView
+        type={type}
+        items={items}
+        range={range}
+        loading={loading}
+        error={error}
+        nextCursor={nextCursor}
+        loadingMore={loadingMore}
+        loadMoreError={loadMoreError}
+        selectedProjectCount={selectedProjectIds.length}
+        projects={projects}
+        showFilters={showFilters}
+        draftProjectIds={draftProjectIds}
+        onSelectType={selectType}
+        onSelectRange={selectRange}
+        onOpenFilters={openFilters}
+        onCloseFilters={() => setShowFilters(false)}
+        onToggleProject={toggleDraftProject}
+        onResetProjectFilters={() => setDraftProjectIds([])}
+        onApplyProjectFilters={applyProjectFilters}
+        onRetry={retry}
+        onLoadMore={loadMore}
+      />
+    );
+  }
+
   if (!error && summary && type === "all") {
     return (
       <IntegratedOverview
         items={items}
         summary={summary}
+        range={range}
         selectedProjectCount={selectedProjectIds.length}
         onOpenFilters={openFilters}
+        onSelectRange={selectRange}
         onFocusType={selectType}
         projects={projects}
         showFilters={showFilters}
@@ -175,6 +206,20 @@ export default function IntegratedPage() {
         onApplyProjectFilters={applyProjectFilters}
         onCloseFilters={() => setShowFilters(false)}
       />
+    );
+  }
+
+  if (type === "all") {
+    return (
+      <div className="flex h-full flex-col">
+        <header className="border-b border-gray-100 bg-white px-4 py-4 md:px-6 lg:px-8">
+          <div className="mx-auto flex max-w-6xl items-start justify-between gap-3">
+            <div><p className="mb-1 text-xs text-gray-400">참여 중인 전체 사업</p><h1 className="text-xl font-bold text-gray-900 md:text-2xl">통합 화면</h1></div>
+            <button type="button" onClick={openFilters} aria-label="사업 필터 열기" title="사업 필터" className="relative flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"><SlidersHorizontal size={18} />{selectedProjectIds.length > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-indigo-600" />}</button>
+          </div>
+        </header>
+        <main className="flex-1 overflow-y-auto px-4 py-5 md:px-6 md:py-6 lg:px-8"><div className="mx-auto max-w-6xl">{error ? <div className="flex h-64 flex-col items-center justify-center text-center"><AlertCircle size={28} className="mb-3 text-rose-400" /><p className="font-medium text-gray-700">{error}</p><button type="button" onClick={retry} className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-600 hover:bg-gray-50"><RotateCw size={14} />다시 시도</button></div> : <div className="space-y-3">{[...Array(5)].map((_, index) => <Skeleton key={index} className="h-16 rounded" />)}</div>}</div></main>
+      </div>
     );
   }
 
@@ -192,7 +237,7 @@ export default function IntegratedPage() {
       <main className="flex-1 overflow-y-auto px-4 py-4 md:px-8 md:py-6">
         <div className="mx-auto max-w-6xl">
           <div className="mb-4 flex gap-2 overflow-x-auto">
-            {([{ value: "today", label: type === "archive" || type === "meeting" ? "오늘 수정" : "오늘" }, { value: "7d", label: type === "archive" || type === "meeting" ? "최근 7일" : "다음 7일" }, { value: "30d", label: type === "archive" || type === "meeting" ? "최근 30일" : "다음 30일" }, { value: "all", label: "전체" }]).map((option) => <button key={option.value} onClick={() => selectRange(option.value)} className={`min-w-14 rounded-full px-3 py-1.5 text-xs font-medium ${range === option.value ? "bg-indigo-600 text-white" : "bg-white text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50"}`}>{option.label}</button>)}
+            {[{ value: "today", label: "오늘" }, { value: "7d", label: "다음 7일" }, { value: "30d", label: "다음 30일" }, { value: "all", label: "전체" }].map((option) => <button key={option.value} onClick={() => selectRange(option.value)} className={`min-w-14 rounded-full px-3 py-1.5 text-xs font-medium ${range === option.value ? "bg-indigo-600 text-white" : "bg-white text-gray-500 ring-1 ring-gray-200 hover:bg-gray-50"}`}>{option.label}</button>)}
           </div>
           {loading ? <div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-white">{[...Array(6)].map((_, index) => <Skeleton key={index} className="mx-4 my-3 h-12 rounded" />)}</div> : error ? <div className="flex h-64 flex-col items-center justify-center text-center"><AlertCircle size={28} className="mb-3 text-rose-400" /><p className="font-medium text-gray-700">{error}</p><button onClick={retry} className="mt-3 flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"><RotateCw size={14} />다시 시도</button></div> : items.length === 0 ? <div className="flex h-64 flex-col items-center justify-center text-center"><CalendarDays size={28} className="mb-3 text-gray-300" /><p className="font-medium text-gray-600">표시할 업무가 없습니다</p><p className="mt-1 text-sm text-gray-400">기간이나 유형을 바꿔 다시 확인하세요.</p></div> : <><div className="divide-y divide-gray-100 rounded-xl border border-gray-100 bg-white">{items.map((item) => { const { Icon, label } = typeDetails[item.type]; return <Link key={`${item.type}-${item.id}`} href={item.href} className="flex min-h-[72px] items-center gap-3 px-4 py-3 transition-colors hover:bg-gray-50"><div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ color: item.project.color, backgroundColor: `${item.project.color}18` }}><Icon size={17} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900">{item.title}</p><p className="mt-1 truncate text-xs text-gray-400"><span className="font-medium text-gray-600">{item.project.name}</span> · {item.dueDate ? dayjs(item.dueDate).format("M월 D일") : dayjs(item.timestamp).format("M월 D일")} · {item.assigneeName ?? item.authorName ?? label}</p></div><span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">{item.status ?? label}</span></Link>; })}</div>{nextCursor && <div className="mt-4 flex flex-col items-center gap-2"><button onClick={loadMore} disabled={loadingMore} className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">{loadingMore ? "불러오는 중..." : "더 불러오기"}</button>{loadMoreError && <button onClick={loadMore} className="text-xs font-medium text-rose-600 hover:text-rose-700">{loadMoreError} 다시 시도</button>}</div>}</>}
         </div>
