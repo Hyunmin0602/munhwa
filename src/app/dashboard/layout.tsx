@@ -21,6 +21,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { data: session, status } = useSession();
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsError, setProjectsError] = useState<string | null>(null);
+  const [projectsRequestNonce, setProjectsRequestNonce] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
@@ -41,24 +43,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (status === "authenticated") {
       (async () => {
         try {
-          const check = await apiFetch("/api/session-check");
-          if (!check.ok) {
-            router.push("/login");
-            return;
-          }
-
           const res = await apiFetch("/api/projects");
+          if (!res.ok) throw new Error("Project list request failed");
           const data = await res.json();
-          setProjects(data);
+          setProjects(Array.isArray(data) ? data : []);
+          setProjectsError(null);
         } catch {
-          // apiFetch redirects on 401; fallback to login route
-          try {
-            router.push("/login");
-          } catch {}
+          setProjectsError("사업 목록을 불러오지 못했습니다.");
         }
       })();
     }
-  }, [status, router]);
+  }, [status, projectsRequestNonce]);
 
   useEffect(() => {
     const unsubscribe = subscribeToToasts(setToasts);
@@ -171,6 +166,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         open={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
       />
+      {projectsError && (
+        <div className="fixed left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-lg">
+          <span>{projectsError}</span>
+          <button type="button" onClick={() => setProjectsRequestNonce((current) => current + 1)} className="font-medium text-rose-700 underline hover:text-rose-900">다시 시도</button>
+        </div>
+      )}
       <main className="flex-1 overflow-hidden flex flex-col min-w-0 pb-[5.25rem] lg:pb-0">
         {/* 모바일 상단바 */}
         <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
