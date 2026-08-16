@@ -1,3 +1,16 @@
+## 문화체육위원회 업무 시스템
+
+사업별 칸반, 일정, 문서와 회의록을 관리하는 내부 업무 시스템입니다.
+
+### 화면 구성
+
+- 데스크톱에서는 대시보드에서 참여 사업 목록을 확인합니다.
+- 모바일과 태블릿에서 `/dashboard`로 접근하면 통합 화면이 기본으로 열립니다.
+- 모바일 하단 탭은 `통합`, `사업`, `더보기`로 구성됩니다.
+- `사업` 탭에서는 참여 중인 사업 목록을 확인하고, 선택한 사업의 칸반 화면으로 이동할 수 있습니다.
+
+---
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started
