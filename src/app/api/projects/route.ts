@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
+import { assertAdmin } from "@/lib/server-utils";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects] ${action} failed`, error);
@@ -16,14 +17,15 @@ export async function GET() {
     }
 
     const userId = session.user.id;
+    const isAdmin = await assertAdmin(userId);
     const projects = await withDbRetry(
       () =>
         prisma.project.findMany({
-          where: { members: { some: { userId } } },
+          where: isAdmin ? undefined : { members: { some: { userId } } },
           include: { members: { include: { user: { select: { id: true, name: true, image: true } } } } },
           orderBy: { createdAt: "desc" },
         }),
-      { operation: `projects:list:${userId}` }
+      { operation: `projects:list:${userId}:${isAdmin ? "admin" : "member"}` }
     );
     return NextResponse.json(projects);
   } catch (error) {

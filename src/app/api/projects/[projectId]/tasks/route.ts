@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { assertProjectMember } from "@/lib/server-utils";
+import { assertProjectAccess } from "@/lib/server-utils";
 import { withDbRetry } from "@/lib/db-retry";
 
 function logApiError(action: string, error: unknown) {
@@ -16,7 +16,7 @@ export async function GET(_: NextRequest, { params }: Params) {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
-    if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!(await assertProjectAccess(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const tasks = await withDbRetry(() =>
       prisma.task.findMany({
@@ -42,7 +42,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { title, description, columnId, assigneeId, priority, dueDate } = await req.json();
     if (!title || !columnId) return NextResponse.json({ error: "title/columnId required" }, { status: 400 });
 
-    if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!(await assertProjectAccess(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const column = await withDbRetry(() => prisma.kanbanColumn.findFirst({ where: { id: columnId, projectId } }));
     if (!column) return NextResponse.json({ error: "Column not found" }, { status: 404 });

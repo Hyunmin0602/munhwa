@@ -22,7 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   Plus, Trash2, Calendar, User, GripVertical,
-  ChevronLeft, ChevronRight, Pencil, Check, X as XIcon,
+  ChevronLeft, ChevronRight, Pencil, Check, RotateCw, AlertCircle, X as XIcon,
 } from "lucide-react";
 import TaskDetailModal from "./TaskDetailModal";
 import { apiFetch } from "@/lib/client-fetch";
@@ -284,6 +284,8 @@ export default function KanbanBoard({ projectId }: Props) {
   const [columns, setColumns] = useState<Column[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<{ task: Task; colId: string } | null>(null);
@@ -297,18 +299,25 @@ export default function KanbanBoard({ projectId }: Props) {
   );
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      setLoading(true);
+      setLoadError(null);
       try {
         const res = await apiFetch(`/api/projects/${projectId}`);
+        if (!res.ok) throw new Error("Kanban board request failed");
         const data = await res.json();
+        if (cancelled) return;
         setColumns(data.columns ?? []);
         setMembers((data.members ?? []).map((m: { user: Member }) => m.user));
       } catch {
+        if (!cancelled) setLoadError("칸반 데이터를 불러오지 못했습니다.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, [projectId]);
+    return () => { cancelled = true; };
+  }, [projectId, reloadKey]);
 
   useEffect(() => { if (addingColumn) newColRef.current?.focus(); }, [addingColumn]);
 
@@ -493,6 +502,21 @@ export default function KanbanBoard({ projectId }: Props) {
           </div>
         </div>
       ))}
+    </div>
+  );
+
+  if (loadError) return (
+    <div className="flex h-full flex-col items-center justify-center text-center">
+      <AlertCircle size={28} className="mb-3 text-rose-400" />
+      <p className="font-medium text-gray-700">{loadError}</p>
+      <button
+        type="button"
+        onClick={() => setReloadKey((current) => current + 1)}
+        className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+      >
+        <RotateCw size={14} />
+        다시 시도
+      </button>
     </div>
   );
 

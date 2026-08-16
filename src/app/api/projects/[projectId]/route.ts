@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { assertAdmin, assertProjectMember, assertProjectOwner } from "@/lib/server-utils";
+import { assertAdmin, assertProjectAccess, assertProjectOwner } from "@/lib/server-utils";
 
 type Params = { params: Promise<{ projectId: string }> };
 
@@ -21,7 +21,7 @@ export async function GET(_: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "세션 정보가 유효하지 않습니다." }, { status: 401 });
     }
     const userId = session.user.id;
-    if (!(await assertProjectMember(userId, projectId)))
+    if (!(await assertProjectAccess(userId, projectId)))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const project = await withDbRetry(

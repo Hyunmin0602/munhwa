@@ -18,6 +18,11 @@ export async function assertProjectMember(userId: string, projectId: string) {
   return !!member;
 }
 
+export async function assertProjectAccess(userId: string, projectId: string) {
+  if (await assertAdmin(userId)) return true;
+  return assertProjectMember(userId, projectId);
+}
+
 export async function assertProjectOwner(userId: string, projectId: string) {
   const member = await prisma.projectMember.findUnique({
     where: { userId_projectId: { userId, projectId } },
