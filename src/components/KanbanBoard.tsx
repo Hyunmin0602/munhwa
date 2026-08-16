@@ -34,6 +34,7 @@ interface Task {
   description: string | null;
   priority: string;
   dueDate: string | null;
+  updatedAt?: string;
   columnId: string;
   assignee: { id: string; name: string | null } | null;
 }
@@ -67,6 +68,13 @@ const COLUMN_COLORS = [
   "border-t-amber-400",
   "border-t-rose-400",
   "border-t-purple-400",
+];
+
+const RANGE_OPTIONS = [
+  { value: "today", label: "오늘" },
+  { value: "7d", label: "7일" },
+  { value: "30d", label: "30일" },
+  { value: "all", label: "전체" },
 ];
 
 const columnDragId = (columnId: string) => `column:${columnId}`;
@@ -195,8 +203,8 @@ function AddTaskInline({ onAdd, onAddDetails, onCancel }: {
   );
 }
 
-function ColumnHeader({ column, projectId, dragHandleProps, onRename, onDelete }: {
-  column: Column; projectId: string; dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>; onRename: (name: string) => void; onDelete: () => void;
+function ColumnHeader({ column, projectId, visibleTaskCount, dragHandleProps, onRename, onDelete }: {
+  column: Column; projectId: string; visibleTaskCount: number; dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>; onRename: (name: string) => void; onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(column.name);
@@ -241,7 +249,7 @@ function ColumnHeader({ column, projectId, dragHandleProps, onRename, onDelete }
               <GripVertical size={16} />
             </button>
             <h3 className="text-sm font-semibold text-gray-700 truncate cursor-pointer hover:text-indigo-600 transition-colors select-none" onClick={() => setEditing(true)} title="클릭하여 이름 변경">{column.name}</h3>
-            <span className="text-xs text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">{column.tasks.length}</span>
+            <span className="text-xs text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">{visibleTaskCount}</span>
           </>
         )}
       </div>
@@ -291,6 +299,7 @@ export default function KanbanBoard({ projectId }: Props) {
   const [selectedTask, setSelectedTask] = useState<{ task: Task; colId: string } | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColName, setNewColName] = useState("");
+  const [range, setRange] = useState("7d");
   const newColRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
@@ -521,27 +530,42 @@ export default function KanbanBoard({ projectId }: Props) {
   );
 
   const sortedCols = [...columns].sort((a, b) => a.order - b.order);
+  const isInRange = (task: Task) => {
+    if (range === "all") return true;
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = new Date(end);
+    start.setHours(0, 0, 0, 0);
+    start.setDate(start.getDate() - (range === "today" ? 0 : range === "30d" ? 29 : 6));
+    if (!task.updatedAt) return true;
+    const updatedAt = new Date(task.updatedAt);
+    return updatedAt >= start && updatedAt <= end;
+  };
 
   return (
     <>
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+        {RANGE_OPTIONS.map((option) => <button key={option.value} type="button" onClick={() => setRange(option.value)} className={`h-9 min-w-14 rounded-lg px-3 text-xs font-medium ${range === option.value ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>{option.label}</button>)}
+      </div>
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         <div className="flex gap-3 md:gap-4 h-full overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth select-none">
           <SortableContext items={sortedCols.map((column) => columnDragId(column.id))} strategy={horizontalListSortingStrategy}>
             {sortedCols.map((column, colIdx) => {
               const prevCol = sortedCols[colIdx - 1];
               const nextCol = sortedCols[colIdx + 1];
+              const visibleTasks = column.tasks.filter(isInRange);
               return (
                 <SortableColumnContainer key={column.id} column={column}>
                   {({ dragHandleProps }) => (
                 <div className={`flex-1 flex flex-col bg-gray-50/80 rounded-2xl border border-gray-200 border-t-4 ${COLUMN_COLORS[colIdx % COLUMN_COLORS.length]} overflow-hidden`}>
-                  <ColumnHeader column={column} projectId={projectId} dragHandleProps={dragHandleProps}
+                  <ColumnHeader column={column} projectId={projectId} visibleTaskCount={visibleTasks.length} dragHandleProps={dragHandleProps}
                     onRename={(name) => setColumns((prev) => prev.map((c) => c.id === column.id ? { ...c, name } : c))}
                     onDelete={() => setColumns((prev) => prev.filter((c) => c.id !== column.id))}
                   />
                   <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 min-h-[120px]"
                     onClick={(e) => { if (e.target === e.currentTarget && addingTo !== column.id) setAddingTo(column.id); }}>
-                    <SortableContext items={column.tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
-                      {column.tasks.map((task) => (
+                    <SortableContext items={visibleTasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
+                      {visibleTasks.map((task) => (
                         <TaskCard key={task.id} task={task}
                           canMoveLeft={!!prevCol} canMoveRight={!!nextCol}
                           prevColName={prevCol?.name ?? ""} nextColName={nextCol?.name ?? ""}
@@ -559,13 +583,13 @@ export default function KanbanBoard({ projectId }: Props) {
                         onCancel={() => setAddingTo(null)}
                       />
                     )}
-                    {column.tasks.length === 0 && addingTo !== column.id && (
+                    {visibleTasks.length === 0 && addingTo !== column.id && (
                       <button onClick={() => setAddingTo(column.id)} className="w-full py-8 flex flex-col items-center gap-2 text-gray-300 hover:text-indigo-400 hover:bg-indigo-50/50 rounded-xl border-2 border-dashed border-gray-200 hover:border-indigo-200 transition-all">
-                        <Plus size={20} /><span className="text-xs font-medium">클릭해서 추가</span>
+                        <Plus size={20} /><span className="text-xs font-medium">이 기간의 카드 없음 · 클릭해 추가</span>
                       </button>
                     )}
                   </div>
-                  {addingTo !== column.id && column.tasks.length > 0 && (
+                  {addingTo !== column.id && visibleTasks.length > 0 && (
                     <div className="px-3 pb-3">
                       <button onClick={() => setAddingTo(column.id)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-colors border border-transparent hover:border-gray-200">
                         <Plus size={13} />카드 추가
