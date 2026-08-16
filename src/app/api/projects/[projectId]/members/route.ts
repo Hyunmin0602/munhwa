@@ -10,18 +10,32 @@ function logApiError(action: string, error: unknown) {
 
 type Params = { params: Promise<{ projectId: string }> };
 
-export async function GET(_: NextRequest, { params }: Params) {
+export async function GET(request: NextRequest, { params }: Params) {
   try {
     const { projectId } = await params;
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
     if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canManage = await assertProjectOwner(userId, projectId);
+
+    const query = request.nextUrl.searchParams.get("query")?.trim();
+    if (query) {
+      if (!canManage) return NextResponse.json({ error: "사업 소유자만 사용자를 검색할 수 있습니다." }, { status: 403 });
+      const users = await withDbRetry(() =>
+        prisma.user.findMany({
+          where: { OR: [{ name: { contains: query } }, { email: { contains: query } }] },
+          select: { id: true, name: true, email: true },
+          take: 10,
+        })
+      );
+      return NextResponse.json({ users });
+    }
 
     const members = await withDbRetry(() =>
       prisma.projectMember.findMany({ where: { projectId }, include: { user: { select: { id: true, name: true, email: true } } } })
     );
-    return NextResponse.json(members);
+    return NextResponse.json(members, { headers: { "X-Project-Can-Manage-Members": String(canManage) } });
   } catch (error) {
     logApiError("GET", error);
     return NextResponse.json({ error: "멤버 목록을 불러오지 못했습니다." }, { status: 500 });
@@ -36,10 +50,12 @@ export async function POST(req: NextRequest, { params }: Params) {
     const userId = session.user.id;
     if (!(await assertProjectOwner(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const { email, role } = await req.json();
-    if (!email) return NextResponse.json({ error: "email required" }, { status: 400 });
+    const { email, userId: requestedUserId, role } = await req.json();
+    if (!email && !requestedUserId) return NextResponse.json({ error: "추가할 사용자가 필요합니다." }, { status: 400 });
 
-    const user = await withDbRetry(() => findUserByEmail(email));
+    const user = await withDbRetry(() => requestedUserId
+      ? prisma.user.findUnique({ where: { id: requestedUserId } })
+      : findUserByEmail(email));
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     // prevent duplicate

@@ -8,7 +8,6 @@ export async function POST(req: NextRequest) {
     if (!name?.trim()) {
       return NextResponse.json({ error: "이름을 입력해주세요." }, { status: 400 });
     }
-
     const users = await withDbRetry(
       () =>
         prisma.user.findMany({
@@ -22,14 +21,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "해당 이름으로 등록된 계정이 없습니다." }, { status: 404 });
     }
 
-    // Mask email: abc***@example.com
-    const masked = users.map(({ email }) => {
+    const emails = users.map(({ email }) => {
       const [local, domain] = email.split("@");
       const visible = local.slice(0, Math.min(3, local.length));
       return `${visible}${"*".repeat(Math.max(0, local.length - 3))}@${domain}`;
     });
-
-    return NextResponse.json({ emails: masked });
+    return NextResponse.json({ emails });
   } catch {
     return NextResponse.json({ error: "서버 오류가 발생했습니다." }, { status: 500 });
   }

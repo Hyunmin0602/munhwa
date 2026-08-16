@@ -157,7 +157,7 @@ export default function IntegratedPage() {
     return () => { cancelled = true; };
   }, [getQuery, requestNonce]);
 
-  if (!loading && !error && !showFilters && items.length > 0 && summary && type === "all") {
+  if (!error && summary && type === "all") {
     return (
       <IntegratedOverview
         items={items}
@@ -167,6 +167,13 @@ export default function IntegratedPage() {
         onOpenFilters={openFilters}
         onSelectRange={selectRange}
         onFocusType={selectType}
+        projects={projects}
+        showFilters={showFilters}
+        draftProjectIds={draftProjectIds}
+        onToggleProject={toggleDraftProject}
+        onResetProjectFilters={() => setDraftProjectIds([])}
+        onApplyProjectFilters={applyProjectFilters}
+        onCloseFilters={() => setShowFilters(false)}
       />
     );
   }

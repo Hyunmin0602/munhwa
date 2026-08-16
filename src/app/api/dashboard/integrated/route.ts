@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
         ...(status.length ? { status: { in: status } } : {}),
       },
       select: { id: true, name: true, color: true, status: true },
-      orderBy: [{ order: "asc" }, { createdAt: "desc" }],
+      orderBy: { updatedAt: "desc" },
     })
   );
   const projectIds = projects.map((project) => project.id);
@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
   const [taskCount, eventCount, archiveCount, meetingCount, kanbanColumns] = await withDbRetry(() =>
     Promise.all([
       prisma.task.count({
-        where: { column: { projectId: { in: projectIds } }, dueDate: rangeWindow ? { gte: rangeWindow.start, lte: rangeWindow.end } : undefined },
+        where: { column: { projectId: { in: projectIds } } },
       }),
       prisma.event.count({
         where: { projectId: { in: projectIds }, startDate: rangeWindow ? { gte: rangeWindow.start, lte: rangeWindow.end } : undefined },
@@ -103,19 +103,33 @@ export async function GET(request: NextRequest) {
           order: true,
           projectId: true,
           tasks: {
-            where: rangeWindow ? { dueDate: { gte: rangeWindow.start, lte: rangeWindow.end } } : undefined,
-            orderBy: [{ dueDate: "asc" }, { order: "asc" }],
+            orderBy: [{ updatedAt: "desc" }, { order: "asc" }],
             take: 2,
-            select: { id: true, title: true, dueDate: true },
+            select: { id: true, title: true, dueDate: true, updatedAt: true },
           },
         },
       }),
     ])
   );
-  const kanban = projects.slice(0, 3).map((project) => ({
-    project,
-    columns: kanbanColumns.filter((column) => column.projectId === project.id).slice(0, 3),
-  }));
+  const kanban = projects
+    .map((project) => {
+      const columnsWithTasks = kanbanColumns
+        .filter((column) => column.projectId === project.id && column.tasks.length > 0)
+        .sort((left, right) => Math.max(...right.tasks.map((task) => task.updatedAt.getTime())) - Math.max(...left.tasks.map((task) => task.updatedAt.getTime())))
+        .slice(0, 3)
+        .sort((left, right) => left.order - right.order);
+      return { project, columns: columnsWithTasks };
+    })
+    .filter(({ columns }) => columns.length > 0)
+    .sort((left, right) => {
+      const latestTaskUpdate = (columns: typeof left.columns) => Math.max(...columns.flatMap((column) => column.tasks.map((task) => task.updatedAt.getTime())));
+      return latestTaskUpdate(right.columns) - latestTaskUpdate(left.columns);
+    })
+    .slice(0, 3)
+    .map(({ project, columns }) => ({
+      project,
+      columns: columns.map(({ id, name, order, tasks }) => ({ id, name, order, tasks })),
+    }));
   const [tasks, events, archives, meetings] = await withDbRetry(() =>
     Promise.all([
       types.includes("task")

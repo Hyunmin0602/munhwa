@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dayjs from "dayjs";
-import { BookOpen, CalendarDays, CheckSquare, ChevronRight, FileText, SlidersHorizontal } from "lucide-react";
+import { BookOpen, CalendarDays, CheckSquare, ChevronRight, FileText, SlidersHorizontal, X } from "lucide-react";
 
 type ItemType = "task" | "event" | "archive" | "meeting";
 
@@ -42,6 +42,13 @@ interface Props {
   onOpenFilters: () => void;
   onSelectRange: (range: string) => void;
   onFocusType: (type: ItemType) => void;
+  projects: Array<{ id: string; name: string; color: string; status: string }>;
+  showFilters: boolean;
+  draftProjectIds: string[];
+  onToggleProject: (projectId: string) => void;
+  onResetProjectFilters: () => void;
+  onApplyProjectFilters: () => void;
+  onCloseFilters: () => void;
 }
 
 const ranges = [
@@ -93,6 +100,13 @@ export default function IntegratedOverview({
   onOpenFilters,
   onSelectRange,
   onFocusType,
+  projects,
+  showFilters,
+  draftProjectIds,
+  onToggleProject,
+  onResetProjectFilters,
+  onApplyProjectFilters,
+  onCloseFilters,
 }: Props) {
   const events = items.filter((item) => item.type === "event");
   const documents = items.filter((item) => item.type === "archive" || item.type === "meeting");
@@ -133,7 +147,7 @@ export default function IntegratedOverview({
       <main className="flex-1 overflow-y-auto px-4 py-5 pb-24 md:px-6 md:py-6 lg:px-8 lg:pb-8">
         <div className="mx-auto max-w-6xl space-y-8">
           <section>
-            <SectionTitle title="칸반 현황" count={summary.counts.task} onShowAll={() => onFocusType("task")} />
+            <SectionTitle title="최근 업데이트 칸반" count={summary.counts.task} onShowAll={() => onFocusType("task")} />
             {summary.kanban.length === 0 ? (
               <p className="py-6 text-sm text-gray-400">표시할 작업이 없습니다.</p>
             ) : (
@@ -230,6 +244,36 @@ export default function IntegratedOverview({
           </div>
         </div>
       </main>
+      {showFilters && (
+        <div className="fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/40" onClick={onCloseFilters} />
+          <section className="absolute bottom-0 left-0 right-0 max-h-[75vh] overflow-y-auto rounded-t-xl bg-white shadow-xl md:bottom-auto md:left-auto md:right-8 md:top-20 md:w-80 md:rounded-xl" aria-label="사업 필터">
+            <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">사업 필터</p>
+                <p className="mt-0.5 text-xs text-gray-400">선택하지 않으면 전체 사업을 표시합니다.</p>
+              </div>
+              <button type="button" onClick={onCloseFilters} aria-label="필터 닫기" title="필터 닫기" className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X size={18} /></button>
+            </div>
+            <div className="p-3">
+              {projects.map((project) => {
+                const selected = draftProjectIds.includes(project.id);
+                return (
+                  <button key={project.id} type="button" onClick={() => onToggleProject(project.id)} className={`flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm ${selected ? "bg-indigo-50 text-indigo-700" : "text-gray-700 hover:bg-gray-50"}`}>
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: project.color }} />
+                    <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                    <span className={`flex h-5 w-5 items-center justify-center rounded border ${selected ? "border-indigo-600 bg-indigo-600 text-white" : "border-gray-300"}`}>{selected && "✓"}</span>
+                  </button>
+                );
+              })}
+            </div>
+            <div className="sticky bottom-0 flex gap-2 border-t border-gray-100 bg-white p-4">
+              <button type="button" onClick={onResetProjectFilters} className="flex-1 rounded-lg bg-gray-100 px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-200">초기화</button>
+              <button type="button" onClick={onApplyProjectFilters} className="flex-1 rounded-lg bg-indigo-600 px-3 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500">적용</button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

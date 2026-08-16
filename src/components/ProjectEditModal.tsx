@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { X } from "lucide-react";
+import { Search, UserPlus, X } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 
 const COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#8b5cf6"];
@@ -18,6 +18,12 @@ interface Member {
   user: { name: string | null; email: string };
 }
 
+interface UserSearchResult {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
 interface Props {
   project: Project;
   onClose: () => void;
@@ -33,7 +39,11 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
   const [error, setError] = useState("");
   const [members, setMembers] = useState<Member[]>([]);
   const [membersLoading, setMembersLoading] = useState(true);
-  const [inviteEmail, setInviteEmail] = useState("");
+  const [canManageMembers, setCanManageMembers] = useState(false);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [userResults, setUserResults] = useState<UserSearchResult[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [hasSearchedUsers, setHasSearchedUsers] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
 
   useEffect(() => {
@@ -43,7 +53,10 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
         const res = await apiFetch(`/api/projects/${project.id}/members`);
         if (!res.ok) return setMembersLoading(false);
         const data = await res.json();
-        if (mounted) setMembers(data);
+        if (mounted) {
+          setMembers(data);
+          setCanManageMembers(res.headers.get("X-Project-Can-Manage-Members") === "true");
+        }
       } catch {
       } finally {
         if (mounted) setMembersLoading(false);
@@ -82,13 +95,36 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
     }
   };
 
-  const invite = async () => {
-    const email = inviteEmail.trim();
-    if (!email) return;
+  const searchUsers = async () => {
+    const query = memberQuery.trim();
+    if (!query) {
+      setUserResults([]);
+      return;
+    }
+    setSearchingUsers(true);
+    setHasSearchedUsers(true);
+    setError("");
+    try {
+      const res = await apiFetch(`/api/projects/${project.id}/members?query=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setUserResults([]);
+        setError(data?.error ?? "사용자를 검색하지 못했습니다.");
+        return;
+      }
+      setUserResults(Array.isArray(data.users) ? data.users : []);
+    } catch {
+      setError("사용자를 검색하지 못했습니다.");
+    } finally {
+      setSearchingUsers(false);
+    }
+  };
+
+  const addMember = async (user: UserSearchResult) => {
     setInviteLoading(true);
     setError("");
     try {
-      const res = await apiFetch(`/api/projects/${project.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
+      const res = await apiFetch(`/api/projects/${project.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.id }) });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
         setError(data?.error ?? "초대 실패");
@@ -96,7 +132,8 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
       }
       const member = await res.json();
       setMembers((m) => [...m, member]);
-      setInviteEmail("");
+      setMemberQuery("");
+      setUserResults([]);
     } catch {
       setError("초대 중 오류가 발생했습니다.");
     } finally {
@@ -225,18 +262,20 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
                     <div className="font-medium">{m.user.name ?? m.user.email}</div>
                     <div className="text-xs text-gray-400">{m.user.email} · {m.role}</div>
                   </div>
-                  <div>
-                    <button onClick={() => removeMember(m.id)} className="text-sm text-rose-500">삭제</button>
-                  </div>
+                  {canManageMembers && <button type="button" onClick={() => removeMember(m.id)} className="text-sm text-rose-500">삭제</button>}
                 </div>
               ))}
             </div>
           )}
 
-          <div className="mt-3 flex gap-2">
-            <input value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="이메일로 초대" className="flex-1 px-3 py-2 border rounded" />
-            <button onClick={invite} disabled={inviteLoading} className="px-4 py-2 bg-indigo-600 text-white rounded">{inviteLoading ? "초대 중..." : "초대"}</button>
-          </div>
+          {canManageMembers && <div className="mt-3">
+            <div className="flex gap-2">
+              <input value={memberQuery} onChange={(e) => { setMemberQuery(e.target.value); setUserResults([]); setHasSearchedUsers(false); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); searchUsers(); } }} placeholder="이름 또는 이메일로 사용자 검색" className="flex-1 px-3 py-2 border rounded" />
+              <button type="button" onClick={searchUsers} disabled={searchingUsers} aria-label="사용자 검색" title="사용자 검색" className="flex h-10 w-10 items-center justify-center rounded bg-indigo-600 text-white disabled:opacity-50"><Search size={17} /></button>
+            </div>
+            {userResults.length > 0 && <div className="mt-2 divide-y overflow-hidden rounded border border-gray-200">{userResults.map((user) => <div key={user.id} className="flex items-center gap-2 px-3 py-2"><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-gray-700">{user.name ?? user.email}</p><p className="truncate text-xs text-gray-400">{user.email}</p></div><button type="button" onClick={() => addMember(user)} disabled={inviteLoading || members.some((member) => member.user.email === user.email)} aria-label={`${user.name ?? user.email} 추가`} title="멤버 추가" className="flex h-8 w-8 items-center justify-center rounded text-indigo-600 hover:bg-indigo-50 disabled:text-gray-300"><UserPlus size={17} /></button></div>)}</div>}
+            {!searchingUsers && hasSearchedUsers && userResults.length === 0 && !error && <p className="mt-2 text-xs text-gray-400">일치하는 등록 사용자가 없습니다.</p>}
+          </div>}
         </div>
       </div>
     </div>
