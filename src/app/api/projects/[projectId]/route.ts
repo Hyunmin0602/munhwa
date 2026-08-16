@@ -58,6 +58,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     const data = await req.json();
     const name = typeof data.name === "string" ? data.name.trim() : undefined;
+    const category = typeof data.category === "string" ? data.category.trim() || null : undefined;
+    const tags = Array.isArray(data.tags)
+      ? [...new Set(data.tags.filter((tag: unknown): tag is string => typeof tag === "string").map((tag: string) => tag.trim()).filter(Boolean))].join(",") || null
+      : undefined;
     if (data.name !== undefined && !name) {
       return NextResponse.json({ error: "프로젝트 이름이 필요합니다." }, { status: 400 });
     }
@@ -68,6 +72,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         data: {
           ...(name !== undefined ? { name } : {}),
           ...(data.description !== undefined ? { description: data.description } : {}),
+          ...(category !== undefined ? { category } : {}),
+          ...(tags !== undefined ? { tags } : {}),
           ...(data.summary !== undefined ? { summary: data.summary } : {}),
           ...(typeof data.status === "string" && data.status.trim() ? { status: data.status.trim() } : {}),
           ...(data.color !== undefined ? { color: data.color } : {}),

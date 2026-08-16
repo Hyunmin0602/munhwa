@@ -41,8 +41,11 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = session.user.id;
-    const { name, description, summary, status, color } = await req.json();
+    const { name, description, category, tags, summary, status, color } = await req.json();
     if (!name) return NextResponse.json({ error: "프로젝트 이름이 필요합니다." }, { status: 400 });
+    const normalizedTags = Array.isArray(tags)
+      ? [...new Set(tags.filter((tag: unknown): tag is string => typeof tag === "string").map((tag: string) => tag.trim()).filter(Boolean))].join(",") || null
+      : null;
 
     const project = await withDbRetry(
       () =>
@@ -50,6 +53,8 @@ export async function POST(req: NextRequest) {
           data: {
             name,
             description,
+            category: typeof category === "string" ? category.trim() || null : null,
+            tags: normalizedTags,
             summary: typeof summary === "string" ? summary.trim() || null : null,
             status: typeof status === "string" && status.trim() ? status.trim() : "planning",
             color: color ?? "#6366f1",

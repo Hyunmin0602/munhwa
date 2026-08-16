@@ -1,18 +1,19 @@
 "use client";
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Tag, X } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 
 const COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#8b5cf6"];
 
 interface Props {
   onClose: () => void;
-  onCreated: (project: { id: string; name: string; description: string | null; color: string }) => void;
+  onCreated: (project: { id: string; name: string; description: string | null; category?: string | null; tags?: string | null; color: string }) => void;
 }
 
 export default function NewProjectModal({ onClose, onCreated }: Props) {
   const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [category, setCategory] = useState("");
+  const [tagInput, setTagInput] = useState("");
   const [color, setColor] = useState(COLORS[0]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -26,7 +27,7 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
       const res = await apiFetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, description, color }),
+        body: JSON.stringify({ name, category, tags: tagInput.split(","), color }),
       });
 
       if (!res.ok) {
@@ -66,14 +67,25 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">설명</label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
-              placeholder="사업 설명 (선택)"
+            <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              placeholder="예: 행사, 교육, 운영"
             />
+          </div>
+          <div>
+            <label className="mb-1 flex items-center gap-1.5 text-sm font-medium text-gray-700"><Tag size={14} />태그</label>
+            <input
+              type="text"
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              placeholder="쉼표로 구분해 입력하세요"
+            />
+            <p className="mt-1 text-xs text-gray-400">예: 봄축제, 대외협력, 2026</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">색상</label>

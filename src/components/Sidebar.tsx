@@ -1,4 +1,5 @@
 "use client";
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -14,6 +15,7 @@ import {
   ChevronUp,
   ChevronDown,
   LayoutGrid,
+  ListOrdered,
 } from "lucide-react";
 
 interface Project {
@@ -35,6 +37,7 @@ interface SidebarProps {
 function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const [isReordering, setIsReordering] = useState(false);
 
   return (
     <aside className="w-64 bg-white flex flex-col h-full">
@@ -77,13 +80,24 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
           </Link>
           <div className="flex items-center justify-between px-3 py-1 mb-1">
             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">사업</span>
-            <button
-              onClick={onNewProject}
-              className="text-gray-400 hover:text-indigo-600 transition-colors"
-              title="새 사업 추가"
-            >
-              <Plus size={14} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setIsReordering((current) => !current)}
+                className={`flex h-7 items-center gap-1 rounded-md px-1.5 text-xs transition-colors ${isReordering ? "bg-indigo-50 text-indigo-700" : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"}`}
+                title="사업 순서 변경"
+              >
+                <ListOrdered size={14} />
+                <span>{isReordering ? "완료" : "순서"}</span>
+              </button>
+              <button
+                onClick={onNewProject}
+                className="text-gray-400 hover:text-indigo-600 transition-colors"
+                title="새 사업 추가"
+              >
+                <Plus size={14} />
+              </button>
+            </div>
           </div>
           {projects.map((p, index) => {
             const base = `/dashboard/projects/${p.id}`;
@@ -119,14 +133,14 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
                   >
                     <Pencil size={12} />
                   </button>
-                  <div className="hidden group-hover:flex items-center mr-1">
-                    <button type="button" onClick={() => onMoveProject(p.id, "up")} disabled={index === 0} className="p-1 text-gray-300 hover:text-gray-600 disabled:opacity-30" title="위로 이동">
+                  {isReordering && <div className="flex items-center mr-1">
+                    <button type="button" onClick={() => onMoveProject(p.id, "up")} disabled={index === 0} className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-white hover:text-indigo-600 disabled:opacity-30" title="위로 이동" aria-label={`${p.name} 위로 이동`}>
                       <ChevronUp size={12} />
                     </button>
-                    <button type="button" onClick={() => onMoveProject(p.id, "down")} disabled={index === projects.length - 1} className="p-1 text-gray-300 hover:text-gray-600 disabled:opacity-30" title="아래로 이동">
+                    <button type="button" onClick={() => onMoveProject(p.id, "down")} disabled={index === projects.length - 1} className="flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-white hover:text-indigo-600 disabled:opacity-30" title="아래로 이동" aria-label={`${p.name} 아래로 이동`}>
                       <ChevronDown size={12} />
                     </button>
-                  </div>
+                  </div>}
                 </div>
                 {isActive && (
                   <div className="ml-6 mt-0.5 space-y-0.5">

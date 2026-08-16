@@ -81,6 +81,8 @@ model Project {
   id          String   @id @default(cuid())
   name        String
   description String?
+  category    String?
+  tags        String?
   summary     String?
   status      String    @default("planning")
   color       String   @default("#6366f1")
