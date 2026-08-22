@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
+import { canViewAllProjects } from "@/lib/server-utils";
 
 const ITEM_TYPES = ["task", "event", "archive", "meeting"] as const;
 type ItemType = (typeof ITEM_TYPES)[number];
@@ -67,6 +68,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const userId = session.user.id;
+  const canViewAll = await canViewAllProjects(userId);
   const requestedType = searchParams.get("type") ?? searchParams.get("types");
   const types = parseTypes(requestedType);
   const isOverview = !requestedType;
@@ -81,7 +83,7 @@ export async function GET(request: NextRequest) {
   const projects = await withDbRetry(() =>
     prisma.project.findMany({
       where: {
-        members: { some: { userId } },
+        ...(canViewAll ? {} : { members: { some: { userId } } }),
         ...(requestedProjectIds.length ? { id: { in: requestedProjectIds } } : {}),
         ...(status.length ? { status: { in: status } } : {}),
       },
@@ -115,7 +117,7 @@ export async function GET(request: NextRequest) {
         where: {
           projectId: { in: projectIds },
           kind: { not: "MEETING" },
-          OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }],
+          ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
           ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
         },
       }),
@@ -123,7 +125,7 @@ export async function GET(request: NextRequest) {
         where: {
           projectId: { in: projectIds },
           kind: "MEETING",
-          OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }],
+          ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
           ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
         },
       }),
@@ -191,7 +193,7 @@ export async function GET(request: NextRequest) {
             where: {
               projectId: { in: projectIds },
               kind: { not: "MEETING" },
-              OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }],
+              ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
               ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
             },
             select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },
@@ -206,7 +208,7 @@ export async function GET(request: NextRequest) {
             where: {
               projectId: { in: projectIds },
               kind: "MEETING",
-              OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }],
+              ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
               ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
             },
             select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },

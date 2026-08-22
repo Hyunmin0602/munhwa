@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { withDbRetry } from "@/lib/db-retry";
-import { assertProjectMember } from "@/lib/server-utils";
+import { assertProjectMember, canViewAllProjects } from "@/lib/server-utils";
 
 type Params = { params: Promise<{ projectId: string }> };
 
@@ -13,15 +13,13 @@ export async function GET(_: NextRequest, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
   if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const canViewAll = await canViewAllProjects(userId);
 
   const posts = await withDbRetry(() =>
     prisma.archivePost.findMany({
       where: {
         projectId,
-        OR: [
-          { authorId: userId },
-          { visibility: { not: "PRIVATE" } },
-        ],
+        ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
       },
       include: { author: { select: { id: true, name: true } } },
       orderBy: { updatedAt: "desc" },

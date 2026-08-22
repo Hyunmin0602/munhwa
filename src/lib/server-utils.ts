@@ -10,7 +10,17 @@ export async function requireSessionUserOrNull() {
   return await getSessionUser();
 }
 
+export async function canViewAllProjects(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+  return user?.role === "admin";
+}
+
 export async function assertProjectMember(userId: string, projectId: string) {
+  if (await canViewAllProjects(userId)) return true;
+
   const member = await prisma.projectMember.findUnique({
     where: { userId_projectId: { userId, projectId } },
     select: { id: true },

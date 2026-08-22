@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
+import { canViewAllProjects } from "@/lib/server-utils";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects] ${action} failed`, error);
@@ -16,10 +17,11 @@ export async function GET() {
     }
 
     const userId = session.user.id;
+    const canViewAll = await canViewAllProjects(userId);
     const projects = await withDbRetry(
       () =>
         prisma.project.findMany({
-          where: { members: { some: { userId } } },
+          where: canViewAll ? {} : { members: { some: { userId } } },
           include: { members: { include: { user: { select: { id: true, name: true, image: true } } } } },
           orderBy: { createdAt: "desc" },
         }),

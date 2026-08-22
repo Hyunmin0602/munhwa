@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { withDbRetry } from "@/lib/db-retry";
 import { normalizeArchiveVisibility } from "@/lib/archive-visibility";
-import { assertProjectMember } from "@/lib/server-utils";
+import { assertProjectMember, canViewAllProjects } from "@/lib/server-utils";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId/archive/:postId] ${action} failed`, error);
@@ -22,6 +22,7 @@ export async function GET(_: NextRequest, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
   if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const canViewAll = await canViewAllProjects(userId);
 
   const post = await withDbRetry(
     () =>
@@ -32,7 +33,7 @@ export async function GET(_: NextRequest, { params }: Params) {
     { operation: `archive:get:${postId}` }
   );
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (post.visibility === "PRIVATE" && post.authorId !== userId) {
+  if (!canViewAll && post.visibility === "PRIVATE" && post.authorId !== userId) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   return NextResponse.json(post);
