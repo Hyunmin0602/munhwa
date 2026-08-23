@@ -375,7 +375,7 @@ export async function GET(request: NextRequest) {
           href: `/dashboard/projects/${post.projectId}/archive/${post.id}`,
           project: projectById.get(post.projectId)!,
         })),
-      ].sort((left, right) => right.timestamp.localeCompare(left.timestamp) || left.id.localeCompare(right.id)).slice(0, 5) : [],
+      ].sort((left, right) => right.timestamp.localeCompare(left.timestamp) || left.id.localeCompare(right.id)).slice(0, 3) : [],
     },
   });
 }

@@ -51,13 +51,14 @@ const typeDetails = {
   archive: { Icon: FileText, label: "문서" },
   meeting: { Icon: BookOpen, label: "회의록" },
 };
+const OVERVIEW_RANGE = "7d";
 
 export default function IntegratedPage() {
   const searchParams = useSearchParams();
   const initialType = searchParams.get("type") ?? searchParams.get("types")?.split(",")[0];
   const initialRange = searchParams.get("range");
   const [type, setType] = useState<"all" | ItemType>(() => tabs.some((tab) => tab.type === initialType) ? initialType as "all" | ItemType : "all");
-  const [range, setRange] = useState(() => ["today", "7d", "30d", "all"].includes(initialRange ?? "") ? initialRange! : "7d");
+  const [range, setRange] = useState(() => !initialType || initialType === "all" ? OVERVIEW_RANGE : ["today", "7d", "30d", "all"].includes(initialRange ?? "") ? initialRange! : OVERVIEW_RANGE);
   const [items, setItems] = useState<IntegratedItem[]>([]);
   const [summary, setSummary] = useState<IntegratedSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -84,7 +85,7 @@ export default function IntegratedPage() {
 
   const syncUrl = (nextType: "all" | ItemType, nextRange: string, nextProjectIds: string[]) => {
     const query = new URLSearchParams();
-    query.set("range", nextRange);
+    query.set("range", nextType === "all" ? OVERVIEW_RANGE : nextRange);
     if (nextType !== "all") query.set("type", nextType);
     if (nextProjectIds.length) query.set("projectIds", nextProjectIds.join(","));
     router.replace(`${pathname}?${query}`, { scroll: false });
@@ -94,7 +95,9 @@ export default function IntegratedPage() {
     setLoading(true);
     setError(null);
     setType(nextType);
-    syncUrl(nextType, range, selectedProjectIds);
+    const nextRange = nextType === "all" ? OVERVIEW_RANGE : range;
+    setRange(nextRange);
+    syncUrl(nextType, nextRange, selectedProjectIds);
   };
 
   const showAllOfType = (nextType: ItemType) => {
@@ -203,10 +206,10 @@ export default function IntegratedPage() {
     return (
       <IntegratedOverview
         summary={summary}
-        range={range}
         selectedProjectCount={selectedProjectIds.length}
         onOpenFilters={openFilters}
-        onSelectRange={selectRange}
+        onRefresh={retry}
+        refreshing={loading}
         onFocusType={selectType}
         onShowAll={showAllOfType}
         projects={projects}

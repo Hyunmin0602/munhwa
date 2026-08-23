@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dayjs from "dayjs";
-import { BookOpen, CalendarDays, CheckSquare, ChevronRight, FileText, SlidersHorizontal, X } from "lucide-react";
+import { BookOpen, CalendarDays, CheckSquare, ChevronRight, FileText, RotateCw, SlidersHorizontal, X } from "lucide-react";
 
 type ItemType = "task" | "event" | "archive" | "meeting";
 
@@ -39,10 +39,10 @@ interface IntegratedSummary {
 
 interface Props {
   summary: IntegratedSummary;
-  range: string;
   selectedProjectCount: number;
   onOpenFilters: () => void;
-  onSelectRange: (range: string) => void;
+  onRefresh: () => void;
+  refreshing: boolean;
   onFocusType: (type: ItemType) => void;
   onShowAll: (type: ItemType) => void;
   projects: Array<{ id: string; name: string; color: string; status: string }>;
@@ -60,13 +60,6 @@ const typeDetails = {
   archive: { Icon: FileText, label: "문서" },
   meeting: { Icon: BookOpen, label: "회의록" },
 };
-
-const ranges = [
-  { value: "today", label: "오늘" },
-  { value: "7d", label: "7일" },
-  { value: "30d", label: "30일" },
-  { value: "all", label: "전체" },
-];
 
 const tabs: Array<{ type: "all" | ItemType; label: string }> = [
   { type: "all", label: "전체" },
@@ -105,10 +98,10 @@ function ProjectDot({ item }: { item: IntegratedItem }) {
 
 export default function IntegratedOverview({
   summary,
-  range,
   selectedProjectCount,
   onOpenFilters,
-  onSelectRange,
+  onRefresh,
+  refreshing,
   onFocusType,
   onShowAll,
   projects,
@@ -129,16 +122,19 @@ export default function IntegratedOverview({
             <p className="mb-1 text-xs text-gray-400">전체 사업의 업무 현황</p>
             <h1 className="text-xl font-bold text-gray-900 md:text-2xl">통합 화면</h1>
           </div>
-          <button
-            type="button"
-            onClick={onOpenFilters}
-            aria-label="사업 필터 열기"
-            title="사업 필터"
-            className="relative flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
-          >
-            <SlidersHorizontal size={18} />
-            {selectedProjectCount > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-indigo-600" />}
-          </button>
+          <div className="flex flex-shrink-0 items-center gap-1">
+            <button type="button" onClick={onRefresh} disabled={refreshing} aria-label="통합 화면 새로고침" title="새로고침" className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800 disabled:cursor-not-allowed disabled:opacity-50"><RotateCw size={18} className={refreshing ? "animate-spin" : ""} /></button>
+            <button
+              type="button"
+              onClick={onOpenFilters}
+              aria-label="사업 필터 열기"
+              title="사업 필터"
+              className="relative flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+            >
+              <SlidersHorizontal size={18} />
+              {selectedProjectCount > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-indigo-600" />}
+            </button>
+          </div>
         </div>
         <div className="mx-auto mt-4 flex max-w-6xl gap-2 overflow-x-auto pb-1">
           {tabs.map((tab) => (
@@ -149,18 +145,6 @@ export default function IntegratedOverview({
               className={`h-9 min-w-max rounded-lg px-3 text-xs font-medium transition-colors ${tab.type === "all" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
             >
               {tab.label}
-            </button>
-          ))}
-        </div>
-        <div className="mx-auto mt-3 flex max-w-6xl gap-2 overflow-x-auto pb-1" aria-label="일정 기간">
-          {ranges.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => onSelectRange(option.value)}
-              className={`h-9 min-w-14 rounded-lg px-3 text-xs font-medium transition-colors ${range === option.value ? "bg-indigo-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
-            >
-              {option.label}
             </button>
           ))}
         </div>
@@ -231,7 +215,7 @@ export default function IntegratedOverview({
 
           <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
             <section>
-              <SectionTitle title="다가오는 일정" count={summary.counts.event} countLabel={`선택 기간 ${summary.counts.event}개`} onShowAll={() => onShowAll("event")} />
+              <SectionTitle title="다가오는 일정" count={summary.counts.event} countLabel={`다가오는 7일 ${summary.counts.event}개`} onShowAll={() => onShowAll("event")} />
               <div className="divide-y divide-gray-100 border-y border-gray-100">
                 {events.slice(0, 5).map((event) => (
                   <Link key={event.id} href={event.href} className="flex min-h-16 items-center gap-3 py-3 transition-colors hover:bg-gray-50">
