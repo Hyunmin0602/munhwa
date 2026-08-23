@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, FolderKanban, CalendarDays, BookOpen, ChevronUp, MoreHorizontal } from "lucide-react";
+import { LayoutDashboard, FolderKanban, CalendarDays, BookOpen, ChevronDown } from "lucide-react";
 
 interface Project { id: string; name: string; color: string; }
 
@@ -10,7 +10,6 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const [showPicker, setShowPicker] = useState(false);
-  const [showMore, setShowMore] = useState(false);
 
   const match = pathname.match(/\/dashboard\/projects\/([^/]+)/);
   const projectId = match?.[1];
@@ -22,29 +21,17 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
     ? "archive"
     : "kanban";
 
-  const tabs = [
-    {
-      href: "/dashboard/integrated" as string | null,
-      label: "통합",
-      Icon: LayoutDashboard,
-      active: pathname === "/dashboard/integrated",
-      fallbackPath: null,
-    },
-    {
-      href: "/dashboard/projects" as string | null,
-      label: "사업",
-      Icon: FolderKanban,
-      active: pathname === "/dashboard/projects" || !!projectId,
-      fallbackPath: null,
-    },
-    {
-      href: null,
-      label: "더보기",
-      Icon: MoreHorizontal,
-      active: pathname === "/dashboard/meetings",
-      fallbackPath: null,
-    },
-  ];
+  const tabs = projectId
+    ? [
+        { href: `/dashboard/projects/${projectId}/kanban`, label: "칸반", Icon: FolderKanban, active: currentTab === "kanban" },
+        { href: `/dashboard/projects/${projectId}/schedule`, label: "일정", Icon: CalendarDays, active: currentTab === "schedule" },
+        { href: `/dashboard/projects/${projectId}/archive`, label: "아카이브", Icon: BookOpen, active: currentTab === "archive" },
+      ]
+    : [
+        { href: "/dashboard/integrated", label: "통합", Icon: LayoutDashboard, active: pathname === "/dashboard/integrated" },
+        { href: "/dashboard/projects", label: "사업", Icon: FolderKanban, active: pathname === "/dashboard/projects" },
+        { href: "/dashboard/meetings", label: "회의록", Icon: BookOpen, active: pathname === "/dashboard/meetings" },
+      ];
 
   return (
     <>
@@ -85,21 +72,6 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
         </>
       )}
 
-      {showMore && (
-        <>
-          <div className="lg:hidden fixed inset-0 z-50 bg-black/40" onClick={() => setShowMore(false)} />
-          <div className="lg:hidden fixed bottom-[3.5rem] left-0 right-0 z-50 overflow-hidden rounded-t-xl border-t border-gray-200 bg-white shadow-xl">
-            <div className="border-b border-gray-100 px-4 py-4"><span className="text-sm font-semibold text-gray-700">더보기</span></div>
-            <div className="p-2">
-              <Link href="/dashboard/meetings" onClick={() => setShowMore(false)} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-gray-700 hover:bg-gray-50"><BookOpen size={17} />회의록</Link>
-              {projectId && <Link href={`/dashboard/projects/${projectId}/schedule`} onClick={() => setShowMore(false)} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-gray-700 hover:bg-gray-50"><CalendarDays size={17} />일정</Link>}
-              {projectId && <Link href={`/dashboard/projects/${projectId}/archive`} onClick={() => setShowMore(false)} className="flex items-center gap-3 rounded-lg px-3 py-3 text-sm text-gray-700 hover:bg-gray-50"><BookOpen size={17} />아카이브</Link>}
-              <button onClick={() => { setShowMore(false); setShowPicker(true); }} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm text-gray-700 hover:bg-gray-50"><FolderKanban size={17} />사업 전환</button>
-            </div>
-          </div>
-        </>
-      )}
-
       <nav
         className="lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-sm border-t border-gray-200"
         style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
@@ -108,46 +80,30 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
         {currentProject && (
           <button
             onClick={() => setShowPicker((v) => !v)}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 border-b border-gray-100 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+            className="w-full flex items-center gap-2 px-4 py-2 border-b border-gray-100 hover:bg-gray-50 active:bg-gray-100 transition-colors"
+            aria-expanded={showPicker}
           >
+            <span className="text-[10px] font-semibold text-indigo-600">사업 전환</span>
             <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: currentProject.color }} />
-            <span className="text-xs font-medium text-gray-600">{currentProject.name}</span>
-            <ChevronUp size={11} className={`text-gray-400 transition-transform ${showPicker ? "" : "rotate-180"}`} />
+            <span className="flex-1 truncate text-left text-xs font-medium text-gray-700">{currentProject.name}</span>
+            <ChevronDown size={14} className={`text-gray-400 transition-transform ${showPicker ? "rotate-180" : ""}`} />
           </button>
         )}
 
         <div className="flex h-14">
-          {tabs.map(({ href, label, Icon, active, fallbackPath }) => {
-            const fallback =
-              !href && fallbackPath && projects.length > 0
-                ? `/dashboard/projects/${projects[0].id}/${fallbackPath}`
-                : null;
-
-            if (label === "더보기") {
-              return <button key={label} onClick={() => setShowMore((value) => !value)} className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative ${active || showMore ? "text-indigo-600" : "text-gray-400 active:text-gray-600"}`}><Icon size={21} strokeWidth={active || showMore ? 2.5 : 2} /><span className="text-[10px] font-medium">{label}</span>{(active || showMore) && <span className="absolute bottom-0 w-8 h-0.5 bg-indigo-500 rounded-t-full" />}</button>;
-            }
-            return href || fallback ? (
-              <Link
-                key={label}
-                href={(href ?? fallback)!}
-                className={`flex-1 flex flex-col items-center justify-center gap-0.5 transition-colors relative ${
-                  active ? "text-indigo-600" : "text-gray-400 active:text-gray-600"
-                } ${!href && fallback ? "opacity-50" : ""}`}
-              >
-                <Icon size={21} strokeWidth={active ? 2.5 : 2} />
-                <span className={`text-[10px] font-medium ${active ? "text-indigo-600" : ""}`}>{label}</span>
-                {active && <span className="absolute bottom-0 w-8 h-0.5 bg-indigo-500 rounded-t-full" />}
-              </Link>
-            ) : (
-              <div
-                key={label}
-                className="flex-1 flex flex-col items-center justify-center gap-0.5 text-gray-200 cursor-not-allowed select-none"
-              >
-                <Icon size={21} strokeWidth={2} />
-                <span className="text-[10px] font-medium">{label}</span>
-              </div>
-            );
-          })}
+          {tabs.map(({ href, label, Icon, active }) => (
+            <Link
+              key={label}
+              href={href}
+              className={`relative flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors ${
+                active ? "text-indigo-600" : "text-gray-400 active:text-gray-600"
+              }`}
+            >
+              <Icon size={21} strokeWidth={active ? 2.5 : 2} />
+              <span className={`text-[10px] font-medium ${active ? "text-indigo-600" : ""}`}>{label}</span>
+              {active && <span className="absolute bottom-0 h-0.5 w-8 rounded-t-full bg-indigo-500" />}
+            </Link>
+          ))}
         </div>
       </nav>
     </>

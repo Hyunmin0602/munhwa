@@ -262,8 +262,9 @@ function ColumnHeader({ column, projectId, visibleTaskCount, dragHandleProps, on
   );
 }
 
-function SortableColumnContainer({ column, children }: {
+function SortableColumnContainer({ column, mobileVisible, children }: {
   column: Column;
+  mobileVisible: boolean;
   children: (props: { dragHandleProps: React.ButtonHTMLAttributes<HTMLButtonElement>; isDragging: boolean }) => React.ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -274,7 +275,7 @@ function SortableColumnContainer({ column, children }: {
   const dragHandleProps = { ...attributes, ...listeners } as React.ButtonHTMLAttributes<HTMLButtonElement>;
 
   return (
-    <div ref={setNodeRef} style={style} className={`flex-shrink-0 w-[calc(100vw-2.5rem)] md:w-[300px] flex flex-col snap-center select-none ${isDragging ? "opacity-60" : ""}`}>
+    <div ref={setNodeRef} style={style} className={`flex-shrink-0 w-full md:w-[300px] flex flex-col snap-center select-none ${mobileVisible ? "" : "hidden md:flex"} ${isDragging ? "opacity-60" : ""}`}>
       {children({ dragHandleProps, isDragging })}
     </div>
   );
@@ -291,6 +292,7 @@ export default function KanbanBoard({ projectId }: Props) {
   const [selectedTask, setSelectedTask] = useState<{ task: Task; colId: string } | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColName, setNewColName] = useState("");
+  const [activeColumnIndex, setActiveColumnIndex] = useState(0);
   const newColRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
@@ -525,19 +527,31 @@ export default function KanbanBoard({ projectId }: Props) {
   return (
     <>
       <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
-        <div className="flex gap-3 md:gap-4 h-full overflow-x-auto pb-2 snap-x snap-mandatory scroll-smooth select-none">
+        {sortedCols.length > 0 && (
+          <div className="mb-3 flex items-center justify-between md:hidden">
+            <span className="text-xs font-medium text-gray-500">컬럼 {activeColumnIndex + 1} / {sortedCols.length}</span>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setActiveColumnIndex((index) => index - 1)} disabled={activeColumnIndex === 0} className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 disabled:opacity-30" aria-label="이전 컬럼"><ChevronLeft size={16} /></button>
+              <button type="button" onClick={() => setActiveColumnIndex((index) => index + 1)} disabled={activeColumnIndex === sortedCols.length - 1} className="flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 text-gray-600 disabled:opacity-30" aria-label="다음 컬럼"><ChevronRight size={16} /></button>
+            </div>
+          </div>
+        )}
+        <div className="flex h-full flex-col gap-3 overflow-y-auto pb-2 select-none md:flex-row md:gap-4 md:overflow-x-auto md:snap-x md:snap-mandatory md:scroll-smooth">
           <SortableContext items={sortedCols.map((column) => columnDragId(column.id))} strategy={horizontalListSortingStrategy}>
             {sortedCols.map((column, colIdx) => {
               const prevCol = sortedCols[colIdx - 1];
               const nextCol = sortedCols[colIdx + 1];
               const visibleTasks = column.tasks;
               return (
-                <SortableColumnContainer key={column.id} column={column}>
+                <SortableColumnContainer key={column.id} column={column} mobileVisible={colIdx === activeColumnIndex}>
                   {({ dragHandleProps }) => (
                 <div className={`flex-1 flex flex-col bg-gray-50/80 rounded-2xl border border-gray-200 border-t-4 ${COLUMN_COLORS[colIdx % COLUMN_COLORS.length]} overflow-hidden`}>
                   <ColumnHeader column={column} projectId={projectId} visibleTaskCount={visibleTasks.length} dragHandleProps={dragHandleProps}
                     onRename={(name) => setColumns((prev) => prev.map((c) => c.id === column.id ? { ...c, name } : c))}
-                    onDelete={() => setColumns((prev) => prev.filter((c) => c.id !== column.id))}
+                    onDelete={() => {
+                      setColumns((prev) => prev.filter((c) => c.id !== column.id));
+                      setActiveColumnIndex((index) => Math.max(0, Math.min(index, sortedCols.length - 2)));
+                    }}
                   />
                   <div className="flex-1 overflow-y-auto px-3 py-3 space-y-2 min-h-[120px]"
                     onClick={(e) => { if (e.target === e.currentTarget && addingTo !== column.id) setAddingTo(column.id); }}>
@@ -581,7 +595,7 @@ export default function KanbanBoard({ projectId }: Props) {
           </SortableContext>
 
           {/* Add column */}
-          <div className="flex-shrink-0 w-72 md:w-[300px] snap-center">
+          <div className="flex-shrink-0 w-full md:w-[300px] md:snap-center">
             {addingColumn ? (
               <div className="bg-gray-50/80 rounded-2xl border border-gray-200 border-t-4 border-t-gray-300 p-3">
                 <input ref={newColRef} value={newColName} onChange={(e) => setNewColName(e.target.value)}

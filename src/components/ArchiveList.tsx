@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Globe, Lock, Trash2, FileText, Clock } from "lucide-react";
+import { Plus, Globe, Lock, Trash2, FileText, Clock, MoreHorizontal } from "lucide-react";
 import dayjs from "dayjs";
 import "dayjs/locale/ko";
 import { Skeleton } from "./ui/Skeleton";
@@ -25,6 +25,7 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [actionPostId, setActionPostId] = useState<string | null>(null);
   const router = useRouter();
 
   useEffect(() => {
@@ -58,15 +59,14 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
     }
   };
 
-  const deletePost = async (e: React.MouseEvent, id: string) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const deletePost = async (id: string) => {
     if (!confirm("이 문서를 삭제하시겠습니까?")) return;
     try {
       await apiFetch(`/api/projects/${projectId}/archive/${id}`, { method: "DELETE" });
     } catch {
     }
     setPosts((prev) => prev.filter((p) => p.id !== id));
+    setActionPostId(null);
   };
 
   const getPreview = (content: string) => {
@@ -152,14 +152,24 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
                     <div className="h-1 w-full bg-gradient-to-r from-sky-400 to-indigo-400" />
                   )}
 
-                  <div className="p-5 flex-1 flex flex-col">
+                  <div className="p-4 md:p-5 flex-1 flex flex-col">
                     <div className="flex items-start justify-between gap-2 mb-3">
                       <h3 className="font-bold text-gray-900 text-sm leading-snug line-clamp-2 group-hover:text-indigo-700 transition-colors flex-1">
                         {post.title}
                       </h3>
                       <button
-                        onClick={(e) => deletePost(e, post.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-rose-500 flex-shrink-0"
+                        type="button"
+                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); setActionPostId(post.id); }}
+                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:hidden"
+                        aria-label={`${post.title} 작업 열기`}
+                      >
+                        <MoreHorizontal size={17} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); deletePost(post.id); }}
+                        className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-300 hover:bg-rose-50 hover:text-rose-500 md:flex md:opacity-0 md:group-hover:opacity-100"
+                        aria-label={`${post.title} 삭제`}
                       >
                         <Trash2 size={14} />
                       </button>
@@ -217,6 +227,19 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
             </button>
           </div>
         </div>
+      )}
+
+      {actionPostId && (
+        <>
+          <div className="fixed inset-0 z-50 bg-black/40 md:hidden" onClick={() => setActionPostId(null)} />
+          <div className="fixed bottom-[5.25rem] left-0 right-0 z-50 rounded-t-xl border-t border-gray-200 bg-white p-4 shadow-xl md:hidden">
+            <p className="mb-3 text-sm font-semibold text-gray-800">문서 작업</p>
+            <button type="button" onClick={() => deletePost(actionPostId)} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">
+              <Trash2 size={17} />문서 삭제
+            </button>
+            <button type="button" onClick={() => setActionPostId(null)} className="mt-2 w-full rounded-lg bg-gray-100 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-200">취소</button>
+          </div>
+        </>
       )}
     </div>
   );

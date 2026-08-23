@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import dayjs from "dayjs";
 import "dayjs/locale/ko";
-import { ChevronLeft, ChevronRight, Plus, X, Clock, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Clock, CalendarDays, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 
 dayjs.locale("ko");
@@ -103,9 +103,58 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
     .filter((e) => dayjs(e.startDate).isAfter(dayjs().subtract(1, "day")))
     .sort((a, b) => dayjs(a.startDate).diff(dayjs(b.startDate)))
     .slice(0, 8);
+  const mobileDay = selectedDay ?? dayjs();
+  const mobileEvents = getEventsForDay(mobileDay);
+  const selectMobileDay = (day: dayjs.Dayjs) => {
+    setSelectedDay(day);
+    setCurrent(day);
+  };
 
   return (
-    <div className="flex gap-5 h-full">
+    <div className="h-full">
+      <div className="flex h-full flex-col md:hidden">
+        <div className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
+          <button type="button" onClick={() => selectMobileDay(mobileDay.subtract(1, "day"))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="이전 날짜"><ChevronLeft size={18} /></button>
+          <button type="button" onClick={() => selectMobileDay(dayjs())} className="text-center">
+            <p className="text-sm font-bold text-gray-900">{mobileDay.format("M월 D일")}</p>
+            <p className="text-xs text-gray-400">{mobileDay.format("dddd")}</p>
+          </button>
+          <button type="button" onClick={() => selectMobileDay(mobileDay.add(1, "day"))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="다음 날짜"><ChevronRight size={18} /></button>
+        </div>
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2">
+            <CalendarDays size={16} className="text-indigo-600" />
+            <span className="text-sm font-semibold text-gray-800">오늘의 일정</span>
+            <span className="text-xs text-gray-400">{mobileEvents.length}개</span>
+          </div>
+          <button type="button" onClick={() => openModal(mobileDay)} className="flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700">
+            <Plus size={15} />일정 추가
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto px-4 pb-4">
+          {mobileEvents.length === 0 ? (
+            <button type="button" onClick={() => openModal(mobileDay)} className="flex min-h-40 w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600">
+              <Plus size={20} />이 날짜에 일정 추가
+            </button>
+          ) : (
+            <div className="space-y-2">
+              {mobileEvents.map((event) => (
+                <div key={event.id} className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
+                  <div className="mt-1 h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: event.color }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-gray-800">{event.title}</p>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><Clock size={12} />{event.allDay ? "종일" : `${dayjs(event.startDate).format("HH:mm")} - ${dayjs(event.endDate).format("HH:mm")}`}</p>
+                    {event.description && <p className="mt-2 text-xs leading-relaxed text-gray-400">{event.description}</p>}
+                  </div>
+                  <button type="button" onClick={() => deleteEvent(event.id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500" aria-label={`${event.title} 삭제`}><Trash2 size={15} /></button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="hidden h-full gap-5 md:flex">
       {/* Calendar */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
@@ -297,6 +346,8 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
             </div>
           )}
         </div>
+      </div>
+
       </div>
 
       {/* Add event modal */}
