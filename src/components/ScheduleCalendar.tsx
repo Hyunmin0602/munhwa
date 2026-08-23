@@ -124,7 +124,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             <CalendarDays size={16} className="text-indigo-600" />
-            <span className="text-sm font-semibold text-gray-800">오늘의 일정</span>
+            <span className="text-sm font-semibold text-gray-800">선택한 날짜의 일정</span>
             <span className="text-xs text-gray-400">{mobileEvents.length}개</span>
           </div>
           <button type="button" onClick={() => openModal(mobileDay)} className="flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700">
