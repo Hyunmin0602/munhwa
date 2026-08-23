@@ -37,6 +37,9 @@ interface IntegratedSummary {
     project: { id: string; name: string; color: string; status: string };
     columns: Array<{ id: string; name: string; order: number; tasks: Array<{ id: string; title: string; dueDate: string | null }> }>;
   }>;
+  events: IntegratedItem[];
+  documents: IntegratedItem[];
+  recentUpdates: IntegratedItem[];
 }
 
 const tabs: Array<{ type: "all" | ItemType; label: string }> = [
@@ -92,6 +95,14 @@ export default function IntegratedPage() {
     setError(null);
     setType(nextType);
     syncUrl(nextType, range, selectedProjectIds);
+  };
+
+  const showAllOfType = (nextType: ItemType) => {
+    setLoading(true);
+    setError(null);
+    setType(nextType);
+    setRange("all");
+    syncUrl(nextType, "all", selectedProjectIds);
   };
 
   const selectRange = (nextRange: string) => {
@@ -191,13 +202,13 @@ export default function IntegratedPage() {
   if (!error && summary && type === "all") {
     return (
       <IntegratedOverview
-        items={items}
         summary={summary}
         range={range}
         selectedProjectCount={selectedProjectIds.length}
         onOpenFilters={openFilters}
         onSelectRange={selectRange}
         onFocusType={selectType}
+        onShowAll={showAllOfType}
         projects={projects}
         showFilters={showFilters}
         draftProjectIds={draftProjectIds}

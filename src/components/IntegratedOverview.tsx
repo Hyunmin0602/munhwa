@@ -32,16 +32,19 @@ interface IntegratedSummary {
       tasks: Array<{ id: string; title: string; dueDate: string | null }>;
     }>;
   }>;
+  events: IntegratedItem[];
+  documents: IntegratedItem[];
+  recentUpdates: IntegratedItem[];
 }
 
 interface Props {
-  items: IntegratedItem[];
   summary: IntegratedSummary;
   range: string;
   selectedProjectCount: number;
   onOpenFilters: () => void;
   onSelectRange: (range: string) => void;
   onFocusType: (type: ItemType) => void;
+  onShowAll: (type: ItemType) => void;
   projects: Array<{ id: string; name: string; color: string; status: string }>;
   showFilters: boolean;
   draftProjectIds: string[];
@@ -65,12 +68,20 @@ const ranges = [
   { value: "all", label: "전체" },
 ];
 
-function SectionTitle({ title, count, onShowAll, actionLabel = "전체 보기" }: { title: string; count: number; onShowAll: () => void; actionLabel?: string }) {
+const tabs: Array<{ type: "all" | ItemType; label: string }> = [
+  { type: "all", label: "전체" },
+  { type: "task", label: "칸반" },
+  { type: "event", label: "일정" },
+  { type: "archive", label: "문서" },
+  { type: "meeting", label: "회의록" },
+];
+
+function SectionTitle({ title, count, onShowAll, countLabel = `전체 ${count}개`, actionLabel = "전체 보기" }: { title: string; count: number; onShowAll: () => void; countLabel?: string; actionLabel?: string }) {
   return (
     <div className="mb-3 flex items-center justify-between gap-3">
       <div className="min-w-0">
         <h2 className="text-base font-bold text-gray-900">{title}</h2>
-        <p className="mt-0.5 text-xs text-gray-400">이 기간 {count}개</p>
+        <p className="mt-0.5 text-xs text-gray-400">{countLabel}</p>
       </div>
       <button
         type="button"
@@ -93,13 +104,13 @@ function ProjectDot({ item }: { item: IntegratedItem }) {
 }
 
 export default function IntegratedOverview({
-  items,
   summary,
   range,
   selectedProjectCount,
   onOpenFilters,
   onSelectRange,
   onFocusType,
+  onShowAll,
   projects,
   showFilters,
   draftProjectIds,
@@ -108,8 +119,7 @@ export default function IntegratedOverview({
   onApplyProjectFilters,
   onCloseFilters,
 }: Props) {
-  const events = items.filter((item) => item.type === "event");
-  const documents = items.filter((item) => item.type === "archive" || item.type === "meeting");
+  const { events, documents, recentUpdates } = summary;
 
   return (
     <div className="flex h-full flex-col">
@@ -131,6 +141,18 @@ export default function IntegratedOverview({
           </button>
         </div>
         <div className="mx-auto mt-4 flex max-w-6xl gap-2 overflow-x-auto pb-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.type}
+              type="button"
+              onClick={() => tab.type !== "all" && onFocusType(tab.type)}
+              className={`h-9 min-w-max rounded-lg px-3 text-xs font-medium transition-colors ${tab.type === "all" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div className="mx-auto mt-3 flex max-w-6xl gap-2 overflow-x-auto pb-1" aria-label="일정 기간">
           {ranges.map((option) => (
             <button
               key={option.value}
@@ -147,7 +169,30 @@ export default function IntegratedOverview({
       <main className="flex-1 overflow-y-auto px-4 py-5 pb-24 md:px-6 md:py-6 lg:px-8 lg:pb-8">
         <div className="mx-auto max-w-6xl space-y-8">
           <section>
-            <SectionTitle title="최근 업데이트 칸반" count={summary.counts.task} onShowAll={() => onFocusType("task")} />
+            <div className="mb-3">
+              <h2 className="text-base font-bold text-gray-900">최근 업데이트</h2>
+              <p className="mt-0.5 text-xs text-gray-400">최근 변경된 항목 {recentUpdates.length}개</p>
+            </div>
+            {recentUpdates.length === 0 ? (
+              <p className="py-6 text-sm text-gray-400">최근 업데이트가 없습니다.</p>
+            ) : (
+              <div className="divide-y divide-gray-100 border-y border-gray-100">
+                {recentUpdates.map((item) => {
+                  const { Icon, label } = typeDetails[item.type];
+                  return (
+                    <Link key={`${item.type}-${item.id}`} href={item.href} className="flex min-h-16 items-center gap-3 py-3 transition-colors hover:bg-gray-50">
+                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ color: item.project.color, backgroundColor: `${item.project.color}18` }}><Icon size={16} /></div>
+                      <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-800">{item.title}</p><div className="mt-1 flex min-w-0 items-center gap-2"><ProjectDot item={item} /><span className="flex-shrink-0 text-xs text-gray-400">{dayjs(item.timestamp).format("M월 D일")}</span></div></div>
+                      <span className="flex-shrink-0 text-[11px] font-medium text-gray-400">{label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <SectionTitle title="칸반 현황" count={summary.counts.task} onShowAll={() => onShowAll("task")} />
             {summary.kanban.length === 0 ? (
               <p className="py-6 text-sm text-gray-400">표시할 작업이 없습니다.</p>
             ) : (
@@ -186,7 +231,7 @@ export default function IntegratedOverview({
 
           <div className="grid gap-8 lg:grid-cols-2 lg:gap-10">
             <section>
-              <SectionTitle title="다가오는 일정" count={summary.counts.event} onShowAll={() => onFocusType("event")} />
+              <SectionTitle title="다가오는 일정" count={summary.counts.event} countLabel={`선택 기간 ${summary.counts.event}개`} onShowAll={() => onShowAll("event")} />
               <div className="divide-y divide-gray-100 border-y border-gray-100">
                 {events.slice(0, 5).map((event) => (
                   <Link key={event.id} href={event.href} className="flex min-h-16 items-center gap-3 py-3 transition-colors hover:bg-gray-50">
@@ -212,11 +257,11 @@ export default function IntegratedOverview({
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <h2 className="text-base font-bold text-gray-900">최근 문서와 회의록</h2>
-                  <p className="mt-0.5 text-xs text-gray-400">이 기간 {summary.counts.archive + summary.counts.meeting}개</p>
+                  <p className="mt-0.5 text-xs text-gray-400">전체 {summary.counts.archive + summary.counts.meeting}개</p>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-1">
-                  <button type="button" onClick={() => onFocusType("archive")} className="inline-flex h-10 items-center px-2 text-xs font-medium text-indigo-600 hover:text-indigo-700">문서</button>
-                  <button type="button" onClick={() => onFocusType("meeting")} className="inline-flex h-10 items-center px-2 text-xs font-medium text-indigo-600 hover:text-indigo-700">회의록</button>
+                  <button type="button" onClick={() => onShowAll("archive")} className="inline-flex h-10 items-center px-2 text-xs font-medium text-indigo-600 hover:text-indigo-700">문서</button>
+                  <button type="button" onClick={() => onShowAll("meeting")} className="inline-flex h-10 items-center px-2 text-xs font-medium text-indigo-600 hover:text-indigo-700">회의록</button>
                 </div>
               </div>
               <div className="divide-y divide-gray-100 border-y border-gray-100">

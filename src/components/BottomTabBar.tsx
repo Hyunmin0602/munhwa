@@ -23,6 +23,7 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
 
   const tabs = projectId
     ? [
+        { href: "/dashboard/integrated", label: "통합", Icon: LayoutDashboard, active: pathname === "/dashboard/integrated" },
         { href: `/dashboard/projects/${projectId}/kanban`, label: "칸반", Icon: FolderKanban, active: currentTab === "kanban" },
         { href: `/dashboard/projects/${projectId}/schedule`, label: "일정", Icon: CalendarDays, active: currentTab === "schedule" },
         { href: `/dashboard/projects/${projectId}/archive`, label: "아카이브", Icon: BookOpen, active: currentTab === "archive" },
