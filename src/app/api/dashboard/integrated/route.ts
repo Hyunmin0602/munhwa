@@ -49,6 +49,25 @@ function parseTypes(value: string | null): ItemType[] {
 
 type Cursor = Partial<Record<ItemType, string>>;
 
+type RecentUpdate = { id: string; type: ItemType; timestamp: string };
+
+function selectRecentUpdates<T extends RecentUpdate>(items: T[]) {
+  const selected: T[] = [];
+  const deferred: T[] = [];
+  const typeCounts: Partial<Record<ItemType, number>> = {};
+
+  for (const item of items.sort((left, right) => right.timestamp.localeCompare(left.timestamp) || left.id.localeCompare(right.id))) {
+    if ((typeCounts[item.type] ?? 0) < 2) {
+      selected.push(item);
+      typeCounts[item.type] = (typeCounts[item.type] ?? 0) + 1;
+    } else {
+      deferred.push(item);
+    }
+  }
+
+  return [...selected, ...deferred].slice(0, 3);
+}
+
 function parseCursor(value: string | null): Cursor {
   if (!value) return {};
   try {
@@ -342,7 +361,7 @@ export async function GET(request: NextRequest) {
         href: `/dashboard/projects/${post.projectId}/archive/${post.id}`,
         project: projectById.get(post.projectId)!,
       })) ?? [],
-      recentUpdates: overview ? [
+      recentUpdates: overview ? selectRecentUpdates([
         ...overview[2].map((task) => ({
           id: task.id,
           type: "task" as const,
@@ -375,7 +394,7 @@ export async function GET(request: NextRequest) {
           href: `/dashboard/projects/${post.projectId}/archive/${post.id}`,
           project: projectById.get(post.projectId)!,
         })),
-      ].sort((left, right) => right.timestamp.localeCompare(left.timestamp) || left.id.localeCompare(right.id)).slice(0, 3) : [],
+      ]) : [],
     },
   });
 }

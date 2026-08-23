@@ -96,6 +96,11 @@ function ProjectDot({ item }: { item: IntegratedItem }) {
   );
 }
 
+function formatRecentUpdatedAt(timestamp: string) {
+  const date = dayjs(timestamp);
+  return date.isSame(dayjs(), "day") ? date.format("HH:mm") : date.format("M월 D일");
+}
+
 export default function IntegratedOverview({
   summary,
   selectedProjectCount,
@@ -136,13 +141,13 @@ export default function IntegratedOverview({
             </button>
           </div>
         </div>
-        <div className="mx-auto mt-4 flex max-w-6xl gap-2 overflow-x-auto pb-1">
+        <div className="-mx-4 mt-4 flex max-w-none snap-x scroll-px-4 gap-2 overflow-x-auto px-4 pb-1 md:mx-auto md:max-w-6xl md:px-0">
           {tabs.map((tab) => (
             <button
               key={tab.type}
               type="button"
               onClick={() => tab.type !== "all" && onFocusType(tab.type)}
-              className={`h-9 min-w-max rounded-lg px-3 text-xs font-medium transition-colors ${tab.type === "all" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+              className={`h-9 min-w-max flex-shrink-0 snap-start rounded-lg px-3 text-xs font-medium transition-colors ${tab.type === "all" ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
             >
               {tab.label}
             </button>
@@ -166,7 +171,7 @@ export default function IntegratedOverview({
                   return (
                     <Link key={`${item.type}-${item.id}`} href={item.href} className="flex min-h-16 items-center gap-3 py-3 transition-colors hover:bg-gray-50">
                       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ color: item.project.color, backgroundColor: `${item.project.color}18` }}><Icon size={16} /></div>
-                      <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-800">{item.title}</p><div className="mt-1 flex min-w-0 items-center gap-2"><ProjectDot item={item} /><span className="flex-shrink-0 text-xs text-gray-400">{dayjs(item.timestamp).format("M월 D일")}</span></div></div>
+                      <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-800">{item.title}</p><div className="mt-1 flex min-w-0 items-center gap-2"><ProjectDot item={item} /><span className="flex-shrink-0 text-xs text-gray-400">{formatRecentUpdatedAt(item.timestamp)}</span></div></div>
                       <span className="flex-shrink-0 text-[11px] font-medium text-gray-400">{label}</span>
                     </Link>
                   );
