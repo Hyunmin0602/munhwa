@@ -186,7 +186,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
           </div>
 
           {/* Due date + Assignee */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-gray-400 uppercase tracking-wide">
                 <Calendar size={11} />
@@ -196,7 +196,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
                 type="date"
                 value={dueDate}
                 onChange={(e) => { setDueDate(e.target.value); mark(); }}
-                className="w-full text-sm text-gray-700 bg-gray-50 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-200 transition border border-gray-100"
+                className="min-w-0 w-full text-sm text-gray-700 bg-gray-50 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-200 transition border border-gray-100"
               />
             </div>
             <div className="space-y-1.5">
@@ -207,7 +207,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
               <select
                 value={assigneeId}
                 onChange={(e) => { setAssigneeId(e.target.value); mark(); }}
-                className="w-full text-sm text-gray-700 bg-gray-50 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-200 transition border border-gray-100"
+                className="min-w-0 w-full text-sm text-gray-700 bg-gray-50 rounded-xl px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-200 transition border border-gray-100"
               >
                 <option value="">없음</option>
                 {members.map((m) => (

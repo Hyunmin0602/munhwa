@@ -196,6 +196,7 @@ export async function GET(request: NextRequest) {
       prisma.archivePost.findMany({
         where: {
           projectId: { in: projectIds },
+          kind: { not: "MEETING" },
           ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
         },
         select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },

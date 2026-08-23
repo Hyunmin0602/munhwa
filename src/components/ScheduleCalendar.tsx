@@ -353,7 +353,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
       {/* Add event modal */}
       {showModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+          <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-base font-bold text-gray-900">일정 추가</h3>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
@@ -372,14 +372,14 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                   placeholder="일정 제목"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
                   <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">시작</label>
                   <input
                     type="datetime-local"
                     value={form.startDate}
                     onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 focus:bg-white transition-colors"
+                    className="min-w-0 w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 focus:bg-white transition-colors"
                   />
                 </div>
                 <div>
@@ -388,7 +388,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                     type="datetime-local"
                     value={form.endDate}
                     onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 focus:bg-white transition-colors"
+                    className="min-w-0 w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 focus:bg-white transition-colors"
                   />
                 </div>
               </div>

@@ -245,12 +245,11 @@ export default function IntegratedOverview({
             <section>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="text-base font-bold text-gray-900">최근 문서와 회의록</h2>
-                  <p className="mt-0.5 text-xs text-gray-400">전체 {summary.counts.archive + summary.counts.meeting}개</p>
+                  <h2 className="text-base font-bold text-gray-900">최근 문서</h2>
+                  <p className="mt-0.5 text-xs text-gray-400">전체 {summary.counts.archive}개</p>
                 </div>
                 <div className="flex flex-shrink-0 items-center gap-1">
                   <button type="button" onClick={() => onShowAll("archive")} className="inline-flex h-10 items-center px-2 text-xs font-medium text-indigo-600 hover:text-indigo-700">문서</button>
-                  <button type="button" onClick={() => onShowAll("meeting")} className="inline-flex h-10 items-center px-2 text-xs font-medium text-indigo-600 hover:text-indigo-700">회의록</button>
                 </div>
               </div>
               <div className="divide-y divide-gray-100 border-y border-gray-100">
