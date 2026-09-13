@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { closestCorners, DndContext, DragEndEvent, DragOverlay, MouseSensor, TouchSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
+import { closestCorners as closestCornerCollisions, type CollisionDetection, DndContext, DragEndEvent, DragOverlay, MouseSensor, pointerWithin, TouchSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Calendar, CircleAlert, GripVertical, LayoutDashboard, Plus, Search, SlidersHorizontal, User, X } from "lucide-react";
@@ -20,6 +20,13 @@ const stages: Array<{ id: Status; name: string; color: string }> = [
   { id: "IN_PROGRESS", name: "진행 중", color: "bg-indigo-500" },
   { id: "DONE", name: "진행 완료", color: "bg-emerald-500" },
 ];
+
+const pointerFirstCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0 ? pointerCollisions : closestCornerCollisions(args);
+};
+
+const closestCorners = pointerFirstCollisionDetection;
 
 function TaskCard({ card, onOpen }: { card: Card; onOpen: () => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.task.id });
