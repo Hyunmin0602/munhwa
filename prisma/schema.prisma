@@ -24,10 +24,40 @@ model User {
   tasks        Task[]         @relation("TaskAssignee")
   createdTasks Task[]         @relation("TaskCreator")
   archivePosts ArchivePost[]
+  archiveImages ArchiveImage[]
   events       Event[]
   cohort       Cohort?   @relation(fields: [cohortId], references: [id], onDelete: SetNull)
   sentInvites  ProjectInvitation[] @relation("InvitationSender")
   receivedInvites ProjectInvitation[] @relation("InvitationRecipient")
+  administeredSpace SpaceAdministration? @relation("SpaceAdministrator")
+  performedSpaceAdminTransfers SpaceAdminTransferLog[] @relation("SpaceAdminTransferActor")
+  transferredSpaceAdminFrom SpaceAdminTransferLog[] @relation("SpaceAdminTransferPrevious")
+  transferredSpaceAdminTo SpaceAdminTransferLog[] @relation("SpaceAdminTransferNext")
+}
+
+model SpaceAdministration {
+  id               String   @id @default("culture-sports")
+  spaceAdminUserId String   @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  spaceAdmin User @relation("SpaceAdministrator", fields: [spaceAdminUserId], references: [id], onDelete: Restrict)
+}
+
+model SpaceAdminTransferLog {
+  id                  String   @id @default(cuid())
+  actorUserId         String
+  previousAdminUserId String
+  nextAdminUserId     String
+  createdAt           DateTime @default(now())
+
+  actor         User @relation("SpaceAdminTransferActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  previousAdmin User @relation("SpaceAdminTransferPrevious", fields: [previousAdminUserId], references: [id], onDelete: Restrict)
+  nextAdmin     User @relation("SpaceAdminTransferNext", fields: [nextAdminUserId], references: [id], onDelete: Restrict)
+
+  @@index([createdAt])
+  @@index([previousAdminUserId])
+  @@index([nextAdminUserId])
 }
 
 model Cohort {
@@ -132,11 +162,13 @@ model ProjectInvitation {
 }
 
 model KanbanColumn {
-  id        String   @id @default(cuid())
-  name      String
-  order     Int      @default(0)
-  projectId String
-  createdAt DateTime @default(now())
+  id                  String   @id @default(cuid())
+  name                String
+  order               Int      @default(0)
+  projectId           String
+  integratedStatus    String?
+  isIntegratedPrimary Boolean  @default(false)
+  createdAt           DateTime @default(now())
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   tasks   Task[]
@@ -180,9 +212,29 @@ model ArchivePost {
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   author  User    @relation(fields: [authorId], references: [id])
+  images  ArchiveImage[]
 
   @@index([projectId, kind, updatedAt])
   @@index([authorId, visibility])
+}
+
+model ArchiveImage {
+  id         String   @id @default(cuid())
+  postId     String
+  uploaderId String
+  storageKey String   @unique
+  url        String
+  mimeType   String
+  byteSize   Int
+  width      Int?
+  height     Int?
+  createdAt  DateTime @default(now())
+
+  post     ArchivePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  uploader User        @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([uploaderId, createdAt])
 }
 
 model Event {

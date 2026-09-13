@@ -1,18 +1,15 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import remarkBreaks from "remark-breaks";
-import rehypeHighlight from "rehype-highlight";
 import {
   Save, Globe, Lock, ArrowLeft, ExternalLink,
   Bold, Italic, Strikethrough, Code, Link2,
   List, ListOrdered, Quote, Minus, Heading1, Heading2, Heading3,
-  CheckSquare, ImageIcon, LayoutPanelLeft,
+  CheckSquare, CircleHelp, Columns2, ImageIcon, LayoutPanelLeft, Trash2, Upload, X,
 } from "lucide-react";
 import Link from "next/link";
 import { Skeleton } from "./ui/Skeleton";
 import { apiFetch } from "@/lib/client-fetch";
+import MarkdownRenderer from "./MarkdownRenderer";
 
 type ArchiveVisibility = "PRIVATE" | "INTERNAL" | "EXTERNAL";
 type ArchiveKind = "DOCUMENT" | "MEETING";
@@ -37,9 +34,20 @@ interface Props {
   postId: string;
 }
 
+interface ArchiveImage {
+  id: string;
+  storageKey: string;
+  url: string;
+  mimeType: string;
+  byteSize: number;
+  createdAt: string;
+}
+
 type ToolbarAction =
   | { type: "line"; prefix: string; placeholder: string }
   | { type: "around"; before: string; after: string; placeholder: string }
+  | { type: "template"; value: string; cursorText: string }
+  | { type: "layout"; layout: "columns" | "image" }
   | { type: "rule" };
 
 const TOOLBAR: { group: string; items: { icon: React.ReactNode; title: string; action: ToolbarAction }[] }[] = [
@@ -62,7 +70,9 @@ const TOOLBAR: { group: string; items: { icon: React.ReactNode; title: string; a
   ]},
   { group: "misc", items: [
     { icon: <Link2 size={14} />, title: "링크", action: { type: "around", before: "[", after: "](https://)", placeholder: "링크 텍스트" } },
-    { icon: <ImageIcon size={14} />, title: "이미지", action: { type: "line", prefix: "![이미지](", placeholder: "https://이미지-url" } },
+    { icon: <ImageIcon size={14} />, title: "이미지 URL", action: { type: "template", value: "![이미지 설명](https://이미지-url)\n", cursorText: "이미지 설명" } },
+    { icon: <Columns2 size={14} />, title: "2열 블록 추가", action: { type: "layout", layout: "columns" } },
+    { icon: <LayoutPanelLeft size={14} />, title: "이미지 블록 추가", action: { type: "layout", layout: "image" } },
     { icon: <Minus size={14} />, title: "구분선", action: { type: "rule" } },
   ]},
 ];
@@ -108,6 +118,31 @@ function insertLine(
   }, 0);
 }
 
+function insertTemplate(
+  textarea: HTMLTextAreaElement,
+  value: string,
+  cursorText: string,
+  onChange: (value: string) => void
+) {
+  const start = textarea.selectionStart;
+  const nextValue = textarea.value.slice(0, start) + value + textarea.value.slice(textarea.selectionEnd);
+  const cursorStart = start + value.indexOf(cursorText);
+  onChange(nextValue);
+  setTimeout(() => {
+    textarea.focus();
+    textarea.selectionStart = cursorStart;
+    textarea.selectionEnd = cursorStart + cursorText.length;
+  }, 0);
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
+}
+
+function isSafeImageUrl(value: string) {
+  try { return new URL(value).protocol === "https:"; } catch { return false; }
+}
+
 export default function ArchiveEditor({ projectId, postId }: Props) {
   const [post, setPost] = useState<Post | null>(null);
   const [title, setTitle] = useState("");
@@ -120,7 +155,22 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const [kind, setKind] = useState<ArchiveKind>("DOCUMENT");
   const [viewMode, setViewMode] = useState<"split" | "editor" | "preview">("split");
   const [isMobile, setIsMobile] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [showHtmlHelp, setShowHtmlHelp] = useState(false);
+  const [images, setImages] = useState<ArchiveImage[]>([]);
+  const [draggingImages, setDraggingImages] = useState(false);
+  const [layoutBuilder, setLayoutBuilder] = useState<"columns" | "image" | null>(null);
+  const [leftColumn, setLeftColumn] = useState("");
+  const [rightColumn, setRightColumn] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [imageAlt, setImageAlt] = useState("");
+  const [imageCaption, setImageCaption] = useState("");
+  const [imageAlign, setImageAlign] = useState("center");
+  const [imageSize, setImageSize] = useState("medium");
+  const [layoutError, setLayoutError] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const builderImageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     (async () => {
@@ -132,6 +182,11 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         setContent(data.content);
         setKind((data.kind ?? "DOCUMENT") as ArchiveKind);
         setVisibility((data.visibility ?? (data.published ? "EXTERNAL" : "PRIVATE")) as ArchiveVisibility);
+        const imagesResponse = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`);
+        if (imagesResponse.ok) {
+          const imageData = await imagesResponse.json();
+          setImages(Array.isArray(imageData) ? imageData : []);
+        }
       } catch {
       }
     })();
@@ -229,6 +284,13 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       insertLine(textarea, action.prefix, action.placeholder, setContent);
     } else if (action.type === "around") {
       insertAround(textarea, action.before, action.after, action.placeholder, setContent);
+    } else if (action.type === "template") {
+      insertTemplate(textarea, action.value, action.cursorText, setContent);
+    } else if (action.type === "layout") {
+      setLayoutBuilder(action.layout);
+      setLayoutError("");
+      if (action.layout === "columns") { setLeftColumn(""); setRightColumn(""); }
+      else { setImageUrl(""); setImageAlt(""); setImageCaption(""); setImageAlign("center"); setImageSize("medium"); }
     } else {
       const value = textarea.value;
       const start = textarea.selectionStart;
@@ -237,6 +299,71 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         textarea.focus();
         textarea.selectionStart = textarea.selectionEnd = start + 5;
       }, 0);
+    }
+  };
+
+  const insertLayoutBlock = () => {
+    const textarea = textareaRef.current;
+    if (!textarea || !layoutBuilder) return;
+    if (layoutBuilder === "columns") {
+      const left = escapeHtml(leftColumn.trim() || "왼쪽 내용");
+      const right = escapeHtml(rightColumn.trim() || "오른쪽 내용");
+      insertTemplate(textarea, `<section class="md-grid md-grid--two">\n  <div>\n    ${left}\n  </div>\n  <div>\n    ${right}\n  </div>\n</section>\n`, left, setContent);
+    } else {
+      const url = imageUrl.trim();
+      if (!isSafeImageUrl(url)) { setLayoutError("HTTPS 이미지 주소를 입력하거나 업로드한 이미지를 선택하세요."); return; }
+      const alt = escapeHtml(imageAlt.trim() || "이미지");
+      const caption = escapeHtml(imageCaption.trim());
+      const captionMarkup = caption ? `\n  <figcaption>${caption}</figcaption>` : "";
+      insertTemplate(textarea, `<figure class="md-figure md-figure--${imageAlign} md-figure--${imageSize} md-figure--rounded">\n  <img src="${url}" alt="${alt}" />${captionMarkup}\n</figure>\n`, alt, setContent);
+    }
+    setLayoutBuilder(null);
+  };
+
+  const uploadImage = async (file: File, onUploaded?: (image: ArchiveImage) => void) => {
+    const textarea = textareaRef.current;
+    if (!textarea && !onUploaded) return;
+    setUploadingImage(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`, { method: "POST", body: formData });
+      const image = await response.json();
+      if (!response.ok) throw new Error(image.error ?? "이미지 업로드에 실패했습니다.");
+      setImages((current) => [image, ...current]);
+      if (onUploaded) onUploaded(image);
+      else if (textarea) {
+        const alt = file.name.replace(/\.[^.]+$/, "") || "이미지";
+        insertTemplate(textarea, `![${alt}](${image.url})\n`, alt, setContent);
+      }
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "이미지 업로드에 실패했습니다.");
+    } finally {
+      setUploadingImage(false);
+      if (imageInputRef.current) imageInputRef.current.value = "";
+      if (builderImageInputRef.current) builderImageInputRef.current.value = "";
+    }
+  };
+
+  const uploadImages = async (files: File[]) => {
+    for (const file of files) await uploadImage(file);
+  };
+
+  const insertUploadedImage = (image: ArchiveImage) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    insertTemplate(textarea, `![이미지](${image.url})\n`, "이미지", setContent);
+  };
+
+  const deleteImage = async (image: ArchiveImage) => {
+    if (!confirm("첨부 이미지를 삭제하시겠습니까? 본문에 삽입된 이미지는 별도로 제거해야 합니다.")) return;
+    try {
+      const response = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images/${image.id}`, { method: "DELETE" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error ?? "이미지 삭제에 실패했습니다.");
+      setImages((current) => current.filter((item) => item.id !== image.id));
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "이미지 삭제에 실패했습니다.");
     }
   };
 
@@ -421,9 +548,71 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
               ))}
             </div>
           ))}
+          <div className="flex items-center gap-0.5 border-l border-gray-200 pl-2">
+            <input ref={imageInputRef} type="file" multiple accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(event) => { const files = Array.from(event.target.files ?? []); if (files.length) void uploadImages(files); }} />
+            <button type="button" title="이미지 파일 업로드" disabled={uploadingImage} onMouseDown={(event) => event.preventDefault()} onClick={() => imageInputRef.current?.click()} className="flex h-7 items-center gap-1 rounded-lg px-1.5 text-gray-500 transition-colors hover:bg-indigo-50 hover:text-indigo-700 disabled:opacity-50">
+              <Upload size={14} />
+              <span className="hidden text-xs sm:inline">{uploadingImage ? "업로드 중" : "이미지"}</span>
+            </button>
+            <button type="button" title="HTML 레이아웃 도움말" onClick={() => setShowHtmlHelp((current) => !current)} className="flex h-7 w-7 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-indigo-50 hover:text-indigo-700"><CircleHelp size={14} /></button>
+          </div>
           <div className="ml-auto text-xs text-gray-300 hidden sm:block">
             Cmd+S 저장 · Tab 들여쓰기
           </div>
+        </div>
+      )}
+
+      {showHtmlHelp && viewMode !== "preview" && (
+        <div className="border-b border-indigo-100 bg-indigo-50 px-5 py-3 text-xs text-indigo-900">
+          <p className="font-semibold">레이아웃 도움말</p>
+          <p className="mt-1 leading-5">2열 블록과 이미지 블록 버튼을 누르면 입력 화면이 열립니다. HTML을 직접 작성할 필요 없이 내용을 입력하고 삽입하세요. 안전하지 않은 HTML과 스크립트는 렌더링되지 않습니다.</p>
+        </div>
+      )}
+
+      {layoutBuilder && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onMouseDown={() => setLayoutBuilder(null)}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-bold tracking-wide text-indigo-600">CONTENT BLOCK</p>
+                <h2 className="mt-1 text-lg font-bold text-slate-900">{layoutBuilder === "columns" ? "2열 블록 추가" : "이미지 블록 추가"}</h2>
+                <p className="mt-1 text-xs text-slate-500">{layoutBuilder === "columns" ? "각 영역에 표시할 내용을 입력하세요." : "이미지의 표시 방식과 설명을 정하세요."}</p>
+              </div>
+              <button type="button" onClick={() => setLayoutBuilder(null)} aria-label="블록 추가 닫기" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={17} /></button>
+            </div>
+            {layoutBuilder === "columns" ? (
+              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <label className="text-xs font-semibold text-slate-600">왼쪽 영역<textarea value={leftColumn} onChange={(event) => setLeftColumn(event.target.value)} rows={7} placeholder="왼쪽에 넣을 내용" className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" /></label>
+                <label className="text-xs font-semibold text-slate-600">오른쪽 영역<textarea value={rightColumn} onChange={(event) => setRightColumn(event.target.value)} rows={7} placeholder="오른쪽에 넣을 내용" className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" /></label>
+              </div>
+            ) : (
+              <div className="mt-5 space-y-4">
+                <div className="rounded-xl border border-dashed border-indigo-200 bg-indigo-50/50 p-3">
+                  <input ref={builderImageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadImage(file, (image) => { setImageUrl(image.url); setImageAlt(file.name.replace(/\.[^.]+$/, "") || "이미지"); setLayoutError(""); }); }} />
+                  <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-slate-800">사진 업로드</p><p className="mt-0.5 text-xs text-slate-500">JPEG, PNG, WebP, GIF · 최대 4MB</p></div><button type="button" disabled={uploadingImage} onClick={() => builderImageInputRef.current?.click()} className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs font-bold text-indigo-700 shadow-sm ring-1 ring-indigo-100 hover:bg-indigo-50 disabled:opacity-50"><Upload size={14} />{uploadingImage ? "업로드 중…" : "파일 선택"}</button></div>
+                </div>
+                {images.length > 0 && <div><p className="text-xs font-semibold text-slate-600">업로드한 이미지</p><div className="mt-2 flex gap-2 overflow-x-auto">{images.map((image) => <button key={image.id} type="button" onClick={() => { setImageUrl(image.url); setLayoutError(""); }} className={`h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border-2 ${imageUrl === image.url ? "border-indigo-500" : "border-transparent"}`}><img src={image.url} alt="첨부 이미지 선택" className="h-full w-full object-cover" /></button>)}</div></div>}
+                <label className="block text-xs font-semibold text-slate-600">이미지 주소<input value={imageUrl} onChange={(event) => { setImageUrl(event.target.value); setLayoutError(""); }} placeholder="https://..." className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" /></label>
+                <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-600">대체 텍스트<input value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="이미지 설명" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" /></label><label className="text-xs font-semibold text-slate-600">캡션 <span className="font-normal text-slate-400">(선택)</span><input value={imageCaption} onChange={(event) => setImageCaption(event.target.value)} placeholder="사진 설명" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" /></label></div>
+                <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-600">정렬<select value={imageAlign} onChange={(event) => setImageAlign(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200"><option value="left">왼쪽</option><option value="center">가운데</option><option value="right">오른쪽</option></select></label><label className="text-xs font-semibold text-slate-600">크기<select value={imageSize} onChange={(event) => setImageSize(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200"><option value="small">작게</option><option value="medium">보통</option><option value="large">크게</option><option value="full">전체 너비</option></select></label></div>
+              </div>
+            )}
+            {layoutError && <p className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{layoutError}</p>}
+            <div className="mt-5 flex gap-2"><button type="button" onClick={() => setLayoutBuilder(null)} className="flex-1 rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200">취소</button><button type="button" onClick={insertLayoutBlock} className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500">문서에 삽입</button></div>
+          </div>
+        </div>
+      )}
+
+      {images.length > 0 && viewMode !== "preview" && (
+        <div className="flex items-center gap-2 overflow-x-auto border-b border-gray-100 bg-white px-5 py-2">
+          <span className="flex-shrink-0 text-xs font-medium text-gray-400">첨부 이미지 {images.length}개 · 클릭해 삽입</span>
+          {images.map((image) => (
+            <div key={image.id} className="group relative flex h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <button type="button" onClick={() => insertUploadedImage(image)} className="h-full w-full"><img src={image.url} alt="업로드한 첨부 이미지" className="h-full w-full object-cover" /></button>
+              <button type="button" onClick={() => void deleteImage(image)} className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100" aria-label="첨부 이미지 삭제" title="첨부 이미지 삭제"><Trash2 size={14} /></button>
+            </div>
+          ))}
         </div>
       )}
 
@@ -456,8 +645,12 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
               value={content}
               onChange={(e) => setContent(e.target.value)}
               onKeyDown={handleKeyDown}
+              onDragEnter={(event) => { event.preventDefault(); setDraggingImages(true); }}
+              onDragOver={(event) => event.preventDefault()}
+              onDragLeave={() => setDraggingImages(false)}
+              onDrop={(event) => { event.preventDefault(); setDraggingImages(false); const files = Array.from(event.dataTransfer.files).filter((file) => file.type.startsWith("image/")); if (files.length) void uploadImages(files); }}
               spellCheck={false}
-              className="flex-1 p-4 md:p-6 text-sm text-gray-800 leading-relaxed resize-none outline-none font-mono bg-white placeholder-gray-300"
+              className={`flex-1 p-4 md:p-6 text-sm text-gray-800 leading-relaxed resize-none outline-none font-mono bg-white placeholder-gray-300 ${draggingImages ? "bg-indigo-50 ring-2 ring-inset ring-indigo-300" : ""}`}
               placeholder={`# 문서 제목\n\n내용을 마크다운으로 작성하세요...\n\n**굵게**, _기울임_, \`코드\`, [링크](url)\n\n- 목록 항목\n- [ ] 체크리스트\n\n> 인용문`}
             />
           </div>
@@ -479,7 +672,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
                   </h1>
                 )}
                 {content.trim() ? (
-                  <div className="prose prose-sm prose-gray max-w-none
+                  <MarkdownRenderer content={content} className="prose prose-sm prose-gray max-w-none
                     prose-headings:font-bold prose-headings:text-gray-900
                     prose-h1:text-2xl prose-h2:text-xl prose-h3:text-lg
                     prose-p:text-gray-700 prose-p:leading-relaxed
@@ -493,14 +686,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
                     prose-img:rounded-xl
                     prose-table:text-sm
                     prose-th:bg-gray-50
-                  ">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkBreaks]}
-                      rehypePlugins={[rehypeHighlight]}
-                    >
-                      {content}
-                    </ReactMarkdown>
-                  </div>
+                  " />
                 ) : (
                   <div className="flex flex-col items-center justify-center py-20 text-center">
                     <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mb-3">

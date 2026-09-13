@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { canViewAllProjects } from "@/lib/server-utils";
+import { canManageCultureSportsContent } from "@/lib/server-utils";
 
 const ITEM_TYPES = ["task", "event", "archive", "meeting"] as const;
 type ItemType = (typeof ITEM_TYPES)[number];
@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const userId = session.user.id;
-  const canViewAll = await canViewAllProjects(userId);
+  const canViewAll = await canManageCultureSportsContent(userId);
   const requestedType = searchParams.get("type") ?? searchParams.get("types");
   const types = parseTypes(requestedType);
   const isOverview = !requestedType || requestedType === "all";

@@ -3,81 +3,10 @@ import { useState, useEffect, Suspense } from "react";
 import { signIn } from "next-auth/react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Eye, EyeOff, X } from "lucide-react";
-import { apiFetch } from "@/lib/client-fetch";
+import { Eye, EyeOff } from "lucide-react";
 
 const INPUT_CLS =
   "w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-sm transition-colors";
-
-function FindEmailModal({ onClose }: { onClose: () => void }) {
-  const [name, setName] = useState("");
-  const [result, setResult] = useState<string[] | null>(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  const handleFind = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError(""); setResult(null); setLoading(true);
-    try {
-      const res = await apiFetch("/api/find-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      const data = await res.json();
-      if (!res.ok) setError(data.error ?? "오류가 발생했습니다.");
-      else setResult(data.emails);
-    } catch {
-      setError("네트워크 또는 서버 오류가 발생했습니다.");
-    } finally { setLoading(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-base font-bold text-gray-900">이메일 찾기</h2>
-          <button onClick={onClose} className="p-1 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all"><X size={16} /></button>
-        </div>
-        {result ? (
-          <div className="space-y-3">
-            <p className="text-sm text-gray-600">가입된 이메일 주소입니다.</p>
-            {result.map((e) => (
-              <div key={e} className="px-4 py-2.5 bg-indigo-50 rounded-xl text-sm font-medium text-indigo-700 text-center">{e}</div>
-            ))}
-            <button onClick={onClose} className="w-full mt-2 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all">
-              확인
-            </button>
-          </div>
-        ) : (
-          <form onSubmit={handleFind} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">이름</label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
-                autoFocus
-                className={INPUT_CLS}
-                placeholder="가입 시 입력한 이름"
-              />
-            </div>
-            {error && <p className="text-xs text-rose-500 bg-rose-50 px-3 py-2 rounded-xl">{error}</p>}
-            <div className="flex gap-2 pt-1">
-              <button type="button" onClick={onClose} className="flex-1 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:-translate-y-0.5 transition-all">
-                취소
-              </button>
-              <button type="submit" disabled={loading} className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0">
-                {loading ? "검색 중..." : "찾기"}
-              </button>
-            </div>
-          </form>
-        )}
-      </div>
-    </div>
-  );
-}
 
 export default function LoginPage() {
   return (
@@ -96,7 +25,6 @@ function LoginPageInner() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState(registeredToast);
-  const [showFindEmail, setShowFindEmail] = useState(false);
 
   useEffect(() => {
     if (!toast) return;
@@ -181,15 +109,6 @@ function LoginPageInner() {
             </button>
           </form>
 
-          <div className="mt-4 text-center">
-            <button
-              onClick={() => setShowFindEmail(true)}
-              className="text-sm text-gray-400 hover:text-indigo-600 transition-colors"
-            >
-              이메일 찾기
-            </button>
-          </div>
-
           <p className="text-center text-sm text-gray-500 mt-3">
             계정이 없으신가요?{" "}
             <Link href="/register" className="text-indigo-600 hover:underline font-medium">
@@ -198,8 +117,6 @@ function LoginPageInner() {
           </p>
         </div>
       </div>
-
-      {showFindEmail && <FindEmailModal onClose={() => setShowFindEmail(false)} />}
     </div>
   );
 }

@@ -11,15 +11,11 @@ export async function requireSessionUserOrNull() {
 }
 
 export async function canViewAllProjects(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { role: true },
-  });
-  return user?.role === "admin";
+  return assertAdmin(userId);
 }
 
 export async function assertProjectMember(userId: string, projectId: string) {
-  if (await canViewAllProjects(userId)) return true;
+  if (await canManageCultureSportsContent(userId)) return true;
 
   const member = await prisma.projectMember.findUnique({
     where: { userId_projectId: { userId, projectId } },
@@ -46,6 +42,21 @@ export async function assertAdmin(userId: string) {
     select: { role: true },
   });
   return user?.role === "admin";
+}
+
+export async function assertSpaceAdmin(userId: string) {
+  const assignment = await prisma.spaceAdministration.findUnique({
+    where: { id: "culture-sports" },
+    select: {
+      spaceAdminUserId: true,
+      spaceAdmin: { select: { role: true } },
+    },
+  });
+  return assignment?.spaceAdminUserId === userId && assignment.spaceAdmin.role === "space_admin";
+}
+
+export async function canManageCultureSportsContent(userId: string) {
+  return (await assertAdmin(userId)) || (await assertSpaceAdmin(userId));
 }
 
 export async function findUserByEmail(email: string) {

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { withDbRetry } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
 import { assertProjectMember } from "@/lib/server-utils";
+import { eventAllDay, eventDates, InputValidationError, optionalText, projectColor, readJsonObject, requiredText } from "@/lib/validation";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId/events] ${action} failed`, error);
@@ -40,18 +41,22 @@ export async function POST(req: NextRequest, { params }: Params) {
     const userId = session.user.id;
     if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const { title, description, startDate, endDate, allDay, color } = await req.json();
-    if (!title || !startDate || !endDate) return NextResponse.json({ error: "title/startDate/endDate required" }, { status: 400 });
+    const data = await readJsonObject(req);
+    const title = requiredText(data.title, "일정 제목", 100);
+    const description = optionalText(data.description, "일정 설명", 2_000);
+    const { start, end } = eventDates(data.startDate, data.endDate);
+    const allDay = eventAllDay(data.allDay);
+    const color = projectColor(data.color);
 
     const event = await withDbRetry(() =>
       prisma.event.create({
         data: {
           title,
           description,
-          startDate: new Date(startDate),
-          endDate: new Date(endDate),
-          allDay: allDay ?? false,
-          color: color ?? "#6366f1",
+          startDate: start,
+          endDate: end,
+          allDay,
+          color,
           projectId,
           creatorId: userId,
         },
@@ -59,6 +64,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     );
     return NextResponse.json(event, { status: 201 });
   } catch (error) {
+    if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });
     logApiError("POST", error);
     return NextResponse.json({ error: "일정 생성에 실패했습니다." }, { status: 500 });
   }

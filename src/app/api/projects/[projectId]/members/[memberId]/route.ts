@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { assertProjectOwner } from "@/lib/server-utils";
+import { assertProjectOwner, canManageCultureSportsContent } from "@/lib/server-utils";
 import { withDbRetry } from "@/lib/db-retry";
 
 function logApiError(action: string, error: unknown) {
@@ -16,7 +16,8 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
-    if (!(await assertProjectOwner(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canManage = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
+    if (!canManage) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const existing = await withDbRetry(() => prisma.projectMember.findUnique({ where: { id: memberId } }));
     if (!existing || existing.projectId !== projectId) return NextResponse.json({ error: "Not found" }, { status: 404 });

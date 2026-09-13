@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { assertProjectOwner, findUserByEmail } from "@/lib/server-utils";
+import { assertProjectOwner, canManageCultureSportsContent, findUserByEmail } from "@/lib/server-utils";
 import { withDbRetry } from "@/lib/db-retry";
 
 type Params = { params: Promise<{ projectId: string }> };
@@ -10,7 +10,8 @@ export async function POST(req: NextRequest, { params }: Params) {
   const { projectId } = await params;
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await assertProjectOwner(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const canManage = (await assertProjectOwner(session.user.id, projectId)) || (await canManageCultureSportsContent(session.user.id));
+  if (!canManage) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const body = await req.json();
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";

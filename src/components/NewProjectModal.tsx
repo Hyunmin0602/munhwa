@@ -12,6 +12,7 @@ interface Props {
 
 export default function NewProjectModal({ onClose, onCreated }: Props) {
   const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
   const [tagInput, setTagInput] = useState("");
   const [color, setColor] = useState(COLORS[0]);
@@ -27,7 +28,7 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
       const res = await apiFetch("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, category, tags: tagInput.split(","), color }),
+        body: JSON.stringify({ name, description, category, tags: tagInput.split(","), color }),
       });
 
       if (!res.ok) {
@@ -62,8 +63,20 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
+              maxLength={100}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               placeholder="예: 2024 문화 축제"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">사업 소개</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={5000}
+              rows={3}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
+              placeholder="사업의 목적과 주요 내용을 입력하세요"
             />
           </div>
           <div>
@@ -72,6 +85,7 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
               type="text"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
+              maxLength={50}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               placeholder="예: 행사, 교육, 운영"
             />
@@ -82,6 +96,7 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
               type="text"
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
+              maxLength={309}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               placeholder="쉼표로 구분해 입력하세요"
             />

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
+import { canManageCultureSportsContent } from "@/lib/server-utils";
 
 export async function PATCH(req: NextRequest) {
   const session = await auth();
@@ -13,11 +14,12 @@ export async function PATCH(req: NextRequest) {
   }
 
   const projectIds = body.projectIds as string[];
+  const canManage = await canManageCultureSportsContent(session.user.id);
   const projects = await withDbRetry(
     () => prisma.project.findMany({ where: { id: { in: projectIds } }, select: { id: true, members: { where: { userId: session.user.id }, select: { role: true } } } }),
     { operation: "projects:order:access" }
   );
-  if (projects.length !== projectIds.length || projects.some((project) => !project.members.length)) {
+  if (projects.length !== projectIds.length || (!canManage && projects.some((project) => !project.members.length))) {
     return NextResponse.json({ error: "사업 순서를 변경할 권한이 없습니다." }, { status: 403 });
   }
 

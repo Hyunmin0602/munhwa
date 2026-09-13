@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
+import { del } from "@vercel/blob";
 import { withDbRetry } from "@/lib/db-retry";
 import { normalizeArchiveVisibility } from "@/lib/archive-visibility";
-import { assertProjectMember, canViewAllProjects } from "@/lib/server-utils";
+import { assertProjectMember, canManageCultureSportsContent } from "@/lib/server-utils";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId/archive/:postId] ${action} failed`, error);
@@ -22,7 +23,7 @@ export async function GET(_: NextRequest, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
   if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const canViewAll = await canViewAllProjects(userId);
+  const canViewAll = await canManageCultureSportsContent(userId);
 
   const post = await withDbRetry(
     () =>
@@ -47,15 +48,16 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const userId = session.user.id;
 
     if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canManage = await canManageCultureSportsContent(userId);
 
     const existing = await withDbRetry(() => prisma.archivePost.findFirst({ where: { id: postId, projectId } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (existing.visibility === "PRIVATE" && existing.authorId !== userId) {
+    if (!canManage && existing.visibility === "PRIVATE" && existing.authorId !== userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const data = await req.json();
-    if (existing.visibility === "EXTERNAL" && existing.authorId !== userId) {
+    if (!canManage && existing.visibility === "EXTERNAL" && existing.authorId !== userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     if (data.shareAction === "revoke") {
@@ -104,13 +106,19 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     const userId = session.user.id;
 
     if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canManage = await canManageCultureSportsContent(userId);
 
     const existing = await withDbRetry(() => prisma.archivePost.findFirst({ where: { id: postId, projectId } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if ((existing.visibility === "PRIVATE" || existing.visibility === "EXTERNAL") && existing.authorId !== userId) {
+    if (!canManage && (existing.visibility === "PRIVATE" || existing.visibility === "EXTERNAL") && existing.authorId !== userId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
+    const images = await withDbRetry(() => prisma.archiveImage.findMany({ where: { postId }, select: { url: true } }));
+    if (images.length > 0 && !process.env.BLOB_READ_WRITE_TOKEN) {
+      return NextResponse.json({ error: "이미지 저장소 설정이 없어 첨부 이미지를 안전하게 삭제할 수 없습니다." }, { status: 503 });
+    }
+    if (images.length > 0) await del(images.map((image) => image.url));
     await withDbRetry(() => prisma.archivePost.delete({ where: { id: postId } }));
     return NextResponse.json({ ok: true });
   } catch (error) {

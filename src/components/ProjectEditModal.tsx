@@ -35,6 +35,7 @@ interface Props {
 
 export default function ProjectEditModal({ project, onClose, onUpdated, onDeleted }: Props) {
   const [name, setName] = useState(project.name);
+  const [description, setDescription] = useState(project.description ?? "");
   const [category, setCategory] = useState(project.category ?? "");
   const [tagInput, setTagInput] = useState(project.tags ?? "");
   const [color, setColor] = useState(project.color);
@@ -82,6 +83,7 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: nextName,
+          description: description.trim() || null,
           category: category.trim() || null,
           tags: tagInput.split(","),
           color,
@@ -200,8 +202,20 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
               value={name}
               onChange={(e) => setName(e.target.value)}
               required
+              maxLength={100}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               placeholder="사업명을 입력하세요"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">사업 소개</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={5000}
+              rows={3}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
+              placeholder="사업의 목적과 주요 내용을 입력하세요"
             />
           </div>
           <div>
@@ -210,6 +224,7 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
               type="text"
               value={category}
               onChange={(e) => setCategory(e.target.value)}
+              maxLength={50}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               placeholder="예: 행사, 교육, 운영"
             />
@@ -220,6 +235,7 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
               type="text"
               value={tagInput}
               onChange={(e) => setTagInput(e.target.value)}
+              maxLength={309}
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               placeholder="쉼표로 구분해 입력하세요"
             />

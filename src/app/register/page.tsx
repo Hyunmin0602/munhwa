@@ -38,8 +38,8 @@ export default function RegisterPage() {
       setError("비밀번호가 일치하지 않습니다.");
       return;
     }
-    if (password.length < 8) {
-      setError("비밀번호는 8자 이상이어야 합니다.");
+    if (password.length < 12) {
+      setError("비밀번호는 12자 이상이어야 합니다.");
       return;
     }
 
@@ -81,6 +81,7 @@ export default function RegisterPage() {
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 required
+                maxLength={50}
                 autoComplete="name"
                 className={INPUT_CLS}
                 placeholder="홍길동"
@@ -94,6 +95,7 @@ export default function RegisterPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
+                maxLength={254}
                 autoComplete="email"
                 className={INPUT_CLS}
                 placeholder="name@example.com"
@@ -121,10 +123,11 @@ export default function RegisterPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  minLength={8}
+                  minLength={12}
+                  maxLength={128}
                   autoComplete="new-password"
                   className={INPUT_CLS + " pr-10"}
-                  placeholder="8자 이상"
+                  placeholder="12자 이상"
                 />
                 <button
                   type="button"

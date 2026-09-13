@@ -42,6 +42,8 @@ interface Column {
   id: string;
   name: string;
   order: number;
+  integratedStatus: "BEFORE" | "IN_PROGRESS" | "DONE" | null;
+  isIntegratedPrimary: boolean;
   tasks: Task[];
 }
 
@@ -61,12 +63,12 @@ const PRIORITY: Record<string, { label: string; cls: string; dot: string }> = {
 };
 
 const COLUMN_COLORS = [
-  "border-t-slate-400",
-  "border-t-indigo-400",
-  "border-t-emerald-400",
-  "border-t-amber-400",
-  "border-t-rose-400",
-  "border-t-purple-400",
+  "bg-slate-500",
+  "bg-indigo-500",
+  "bg-emerald-500",
+  "bg-amber-500",
+  "bg-rose-500",
+  "bg-violet-500",
 ];
 
 const columnDragId = (columnId: string) => `column:${columnId}`;
@@ -131,7 +133,7 @@ function TaskCard({
         style={{ transform: `translateX(${swipeDx}px)`, transition: swiping ? "none" : "transform 0.2s ease" }}
         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
         onClick={() => { if (!didSwipe.current) onClick(); }}
-        className={`bg-white border border-gray-150 shadow-sm group rounded-xl cursor-grab active:cursor-grabbing touch-none ${!isSortDragging ? "hover:shadow-md hover:border-indigo-200" : ""}`}
+        className={`bg-white border border-slate-200 shadow-sm group rounded-xl cursor-grab active:cursor-grabbing touch-none ${!isSortDragging ? "hover:-translate-y-0.5 hover:shadow-md hover:border-indigo-200" : ""}`}
       >
         <div className="p-3.5">
           <div className="flex items-start gap-2">
@@ -139,8 +141,8 @@ function TaskCard({
               <GripVertical size={14} />
             </button>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-gray-800 leading-snug line-clamp-2 mb-2">{task.title}</p>
-              {task.description && <p className="text-xs text-gray-400 line-clamp-2 mb-2 leading-relaxed">{task.description}</p>}
+              <p className="text-sm font-semibold text-slate-800 leading-snug line-clamp-2 mb-2">{task.title}</p>
+              {task.description && <p className="text-xs text-slate-400 line-clamp-2 mb-2 leading-relaxed">{task.description}</p>}
               <div className="flex items-center gap-1.5 flex-wrap">
                 <span className={`inline-flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md font-medium ${p.cls}`}>
                   <span className={`w-1.5 h-1.5 rounded-full ${p.dot}`} />{p.label}
@@ -195,27 +197,20 @@ function AddTaskInline({ onAdd, onAddDetails, onCancel }: {
   );
 }
 
-function ColumnHeader({ column, projectId, visibleTaskCount, dragHandleProps, onRename, onDelete }: {
-  column: Column; projectId: string; visibleTaskCount: number; dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>; onRename: (name: string) => void; onDelete: () => void;
+function ColumnHeader({ column, projectId, visibleTaskCount, accentClass, dragHandleProps, onRename, onMapping, onDelete }: {
+  column: Column; projectId: string; visibleTaskCount: number; accentClass: string; dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>; onRename: (name: string) => void; onMapping: (column: Column) => void; onDelete: () => void;
 }) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(column.name);
-  const inputRef = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (editing) inputRef.current?.select(); }, [editing]);
+  const [showSettings, setShowSettings] = useState(false);
+  const [settingsName, setSettingsName] = useState(column.name);
+  const [settingsStatus, setSettingsStatus] = useState(column.integratedStatus ?? "");
+  const [settingsError, setSettingsError] = useState("");
+  const [savingSettings, setSavingSettings] = useState(false);
 
-  const commit = async () => {
-    const name = value.trim();
-    if (name && name !== column.name) {
-      try {
-        await apiFetch(`/api/projects/${projectId}/columns/${column.id}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name }),
-        });
-      } catch {
-      }
-      onRename(name);
-    } else { setValue(column.name); }
-    setEditing(false);
+  const openSettings = () => {
+    setSettingsName(column.name);
+    setSettingsStatus(column.integratedStatus ?? "");
+    setSettingsError("");
+    setShowSettings(true);
   };
 
   const handleDelete = async () => {
@@ -227,37 +222,76 @@ function ColumnHeader({ column, projectId, visibleTaskCount, dragHandleProps, on
     onDelete();
   };
 
+  const saveSettings = async () => {
+    const name = settingsName.trim();
+    if (!name) {
+      setSettingsError("칸반 열 이름을 입력하세요.");
+      return;
+    }
+
+    setSavingSettings(true);
+    setSettingsError("");
+    try {
+      const response = await apiFetch(`/api/projects/${projectId}/columns/${column.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, integratedStatus: settingsStatus || null, isIntegratedPrimary: !!settingsStatus }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as { error?: string } | null;
+        setSettingsError(payload?.error ?? "열 설정을 저장하지 못했습니다.");
+        return;
+      }
+      const updated = await response.json() as Column;
+      if (name !== column.name) onRename(name);
+      onMapping(updated);
+      setShowSettings(false);
+    } catch {
+      setSettingsError("서버와 연결할 수 없습니다. 잠시 후 다시 시도하세요.");
+    } finally {
+      setSavingSettings(false);
+    }
+  };
+
   return (
-    <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 group/hdr">
+    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 group/hdr">
       <div className="flex items-center gap-2 flex-1 min-w-0">
-        {editing ? (
-          <input ref={inputRef} value={value} onChange={(e) => setValue(e.target.value)}
-            onKeyDown={(e) => { if (e.key === "Enter") commit(); if (e.key === "Escape") { setValue(column.name); setEditing(false); } }}
-            onBlur={commit}
-            className="text-sm font-semibold text-gray-700 bg-white border border-indigo-300 rounded-lg px-2 py-0.5 outline-none ring-1 ring-indigo-200 w-full" />
-        ) : (
-          <>
-            <button type="button" {...dragHandleProps} onClick={(e) => e.stopPropagation()} title="컬럼 이동" className="w-8 h-8 -my-1.5 -ml-1.5 flex items-center justify-center rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-grab active:cursor-grabbing touch-none select-none flex-shrink-0 transition-colors">
-              <GripVertical size={16} />
-            </button>
-            <h3 className="text-sm font-semibold text-gray-700 truncate cursor-pointer hover:text-indigo-600 transition-colors select-none" onClick={() => setEditing(true)} title="클릭하여 이름 변경">{column.name}</h3>
-            <span className="text-xs text-gray-400 bg-gray-200 px-1.5 py-0.5 rounded-full font-medium flex-shrink-0">{visibleTaskCount}</span>
-          </>
-        )}
+        <>
+          <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${accentClass}`} />
+          <button type="button" {...dragHandleProps} onClick={(e) => e.stopPropagation()} title="컬럼 이동" className="w-8 h-8 -my-1.5 -ml-1.5 flex items-center justify-center rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-grab active:cursor-grabbing touch-none select-none flex-shrink-0 transition-colors">
+            <GripVertical size={16} />
+          </button>
+          <h3 className="text-sm font-bold text-slate-800 truncate">{column.name}</h3>
+          <span className="text-xs text-slate-500 bg-white px-1.5 py-0.5 rounded-full font-medium ring-1 ring-slate-200 flex-shrink-0">{visibleTaskCount}</span>
+        </>
       </div>
       <div className="flex items-center gap-1 flex-shrink-0 ml-2">
-        {editing ? (
-          <>
-            <button onClick={commit} className="w-5 h-5 flex items-center justify-center text-indigo-600 hover:bg-indigo-50 rounded transition-colors"><Check size={12} /></button>
-            <button onClick={() => { setValue(column.name); setEditing(false); }} className="w-5 h-5 flex items-center justify-center text-gray-400 hover:bg-gray-100 rounded transition-colors"><XIcon size={12} /></button>
-          </>
-        ) : (
-          <>
-            <button onClick={() => setEditing(true)} className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors opacity-0 group-hover/hdr:opacity-100"><Pencil size={11} /></button>
-            <button onClick={handleDelete} className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-rose-500 hover:bg-rose-50 transition-colors opacity-0 group-hover/hdr:opacity-100"><Trash2 size={11} /></button>
-          </>
-        )}
+        <>
+          <button onClick={openSettings} className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors opacity-0 group-hover/hdr:opacity-100" title="열 설정"><Pencil size={11} /></button>
+          <button onClick={handleDelete} className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-rose-500 hover:bg-rose-50 transition-colors opacity-0 group-hover/hdr:opacity-100"><Trash2 size={11} /></button>
+        </>
       </div>
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowSettings(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold text-indigo-600">KANBAN COLUMN</p><h3 className="mt-1 text-lg font-bold text-slate-900">{column.name} 설정</h3></div><button type="button" onClick={() => setShowSettings(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><XIcon size={16} /></button></div>
+            <label className="mt-5 block text-xs font-semibold text-slate-500">칸반 열 이름
+              <input value={settingsName} onChange={(event) => setSettingsName(event.target.value)} maxLength={100} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200" />
+            </label>
+            <label className="mt-4 block text-xs font-semibold text-slate-500">통합 칸반 상태
+              <select value={settingsStatus} onChange={(event) => setSettingsStatus(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200">
+                <option value="">통합 화면에 표시하지 않음</option>
+                <option value="BEFORE">진행 전</option>
+                <option value="IN_PROGRESS">진행 중</option>
+                <option value="DONE">진행 완료</option>
+              </select>
+            </label>
+            <p className="mt-2 text-xs leading-5 text-slate-400">상태를 선택하면 이 열은 해당 상태의 대표 열이 됩니다. 통합 화면에서 카드를 이동할 때 이 열로 저장됩니다.</p>
+            {settingsError && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{settingsError}</p>}
+            <div className="mt-5 flex gap-2"><button type="button" onClick={() => setShowSettings(false)} disabled={savingSettings} className="flex-1 rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50">취소</button><button type="button" onClick={saveSettings} disabled={savingSettings} className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{savingSettings ? "저장 중…" : "저장"}</button></div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -545,9 +579,14 @@ export default function KanbanBoard({ projectId }: Props) {
               return (
                 <SortableColumnContainer key={column.id} column={column} mobileVisible={colIdx === activeColumnIndex}>
                   {({ dragHandleProps }) => (
-                <div className={`flex-1 flex flex-col bg-gray-50/80 rounded-2xl border border-gray-200 border-t-4 ${COLUMN_COLORS[colIdx % COLUMN_COLORS.length]} overflow-hidden`}>
-                  <ColumnHeader column={column} projectId={projectId} visibleTaskCount={visibleTasks.length} dragHandleProps={dragHandleProps}
+                <div className="flex-1 flex flex-col bg-slate-100/70 rounded-2xl border border-slate-200 overflow-hidden">
+                  <ColumnHeader column={column} projectId={projectId} visibleTaskCount={visibleTasks.length} accentClass={COLUMN_COLORS[colIdx % COLUMN_COLORS.length]} dragHandleProps={dragHandleProps}
                     onRename={(name) => setColumns((prev) => prev.map((c) => c.id === column.id ? { ...c, name } : c))}
+                    onMapping={(updated) => setColumns((prev) => prev.map((c) => {
+                      if (c.id === updated.id) return { ...c, ...updated, tasks: c.tasks };
+                      if (updated.isIntegratedPrimary && c.integratedStatus === updated.integratedStatus) return { ...c, isIntegratedPrimary: false };
+                      return c;
+                    }))}
                     onDelete={() => {
                       setColumns((prev) => prev.filter((c) => c.id !== column.id));
                       setActiveColumnIndex((index) => Math.max(0, Math.min(index, sortedCols.length - 2)));
@@ -575,14 +614,14 @@ export default function KanbanBoard({ projectId }: Props) {
                       />
                     )}
                     {visibleTasks.length === 0 && addingTo !== column.id && (
-                      <button onClick={() => setAddingTo(column.id)} className="w-full py-8 flex flex-col items-center gap-2 text-gray-300 hover:text-indigo-400 hover:bg-indigo-50/50 rounded-xl border-2 border-dashed border-gray-200 hover:border-indigo-200 transition-all">
+                      <button onClick={() => setAddingTo(column.id)} className="w-full py-8 flex flex-col items-center gap-2 text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl border-2 border-dashed border-slate-200 hover:border-indigo-200 transition-all">
                         <Plus size={20} /><span className="text-xs font-medium">이 기간의 카드 없음 · 클릭해 추가</span>
                       </button>
                     )}
                   </div>
                   {addingTo !== column.id && visibleTasks.length > 0 && (
                     <div className="px-3 pb-3">
-                      <button onClick={() => setAddingTo(column.id)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-colors border border-transparent hover:border-gray-200">
+                      <button onClick={() => setAddingTo(column.id)} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-slate-400 hover:text-indigo-600 hover:bg-white rounded-xl transition-colors border border-transparent hover:border-slate-200">
                         <Plus size={13} />카드 추가
                       </button>
                     </div>
@@ -597,7 +636,7 @@ export default function KanbanBoard({ projectId }: Props) {
           {/* Add column */}
           <div className="flex-shrink-0 w-full md:w-[300px] md:snap-center">
             {addingColumn ? (
-              <div className="bg-gray-50/80 rounded-2xl border border-gray-200 border-t-4 border-t-gray-300 p-3">
+              <div className="bg-slate-100/70 rounded-2xl border border-slate-200 p-3">
                 <input ref={newColRef} value={newColName} onChange={(e) => setNewColName(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter") addColumn(); if (e.key === "Escape") { setAddingColumn(false); setNewColName(""); } }}
                   placeholder="컬럼 이름..." className="w-full text-sm font-semibold text-gray-700 bg-white border border-indigo-300 rounded-xl px-3 py-2 outline-none ring-1 ring-indigo-200 mb-2" />
@@ -607,7 +646,7 @@ export default function KanbanBoard({ projectId }: Props) {
                 </div>
               </div>
             ) : (
-              <button onClick={() => setAddingColumn(true)} className="w-full h-16 flex items-center justify-center gap-2 text-gray-400 hover:text-indigo-600 bg-gray-50/80 hover:bg-indigo-50/60 rounded-2xl border-2 border-dashed border-gray-200 hover:border-indigo-300 transition-all text-sm font-medium">
+              <button onClick={() => setAddingColumn(true)} className="w-full h-16 flex items-center justify-center gap-2 text-slate-400 hover:text-indigo-600 bg-slate-100/70 hover:bg-white rounded-2xl border-2 border-dashed border-slate-200 hover:border-indigo-300 transition-all text-sm font-medium">
                 <Plus size={16} />컬럼 추가
               </button>
             )}

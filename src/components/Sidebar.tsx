@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
@@ -16,7 +16,9 @@ import {
   ChevronDown,
   LayoutGrid,
   ListOrdered,
+  ShieldCheck,
 } from "lucide-react";
+import { apiFetch } from "@/lib/client-fetch";
 
 interface Project {
   id: string;
@@ -38,6 +40,19 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
   const pathname = usePathname();
   const { data: session } = useSession();
   const [isReordering, setIsReordering] = useState(false);
+  const [isSpaceAdmin, setIsSpaceAdmin] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/space-administration")
+      .then((response) => {
+        if (!cancelled) setIsSpaceAdmin(response.ok);
+      })
+      .catch(() => {
+        if (!cancelled) setIsSpaceAdmin(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   return (
     <aside className="w-64 bg-white flex flex-col h-full">
@@ -78,6 +93,18 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
             <BookOpen size={16} />
             회의록
           </Link>
+          {isSpaceAdmin && (
+            <Link
+              href="/dashboard/space-administration"
+              onClick={onClose}
+              className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
+                pathname === "/dashboard/space-administration" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
+              }`}
+            >
+              <ShieldCheck size={16} />
+              관리자 인수인계
+            </Link>
+          )}
           <div className="flex items-center justify-between px-3 py-1 mb-1">
             <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">사업</span>
             <div className="flex items-center gap-1">

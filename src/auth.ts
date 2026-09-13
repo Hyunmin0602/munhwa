@@ -2,6 +2,8 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
+import { checkRateLimit, getClientIp, LOGIN_EMAIL_LIMIT } from "@/lib/rate-limit";
+import { normalizeEmail } from "@/lib/validation";
 
 declare module "next-auth" {
   interface Session {
@@ -21,11 +23,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "이메일", type: "email" },
         password: { label: "비밀번호", type: "password" },
       },
-      authorize: async (credentials) => {
+      authorize: async (credentials, request) => {
         if (!credentials?.email || !credentials?.password) return null;
 
+        let email: string;
+        try {
+          email = normalizeEmail(credentials.email);
+        } catch {
+          return null;
+        }
+        const emailLimit = await checkRateLimit(request, "login-email", email, LOGIN_EMAIL_LIMIT);
+        if (!emailLimit.allowed) return null;
+
         const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
+          where: { email },
         });
 
         if (!user || !user.password) return null;
