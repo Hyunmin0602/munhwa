@@ -11,6 +11,19 @@ function logApiError(action: string, error: unknown) {
 
 type Params = { params: Promise<{ projectId: string; columnId: string }> };
 
+async function ensureIntegratedKanbanColumns() {
+  const tableInfo = await prisma.$queryRawUnsafe<Array<{ name: string }>>("PRAGMA table_info(KanbanColumn)");
+  const columnNames = new Set(tableInfo.map((column) => column.name));
+
+  if (!columnNames.has("integratedStatus")) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "KanbanColumn" ADD COLUMN "integratedStatus" TEXT');
+  }
+  if (!columnNames.has("isIntegratedPrimary")) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "KanbanColumn" ADD COLUMN "isIntegratedPrimary" BOOLEAN NOT NULL DEFAULT false');
+  }
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "KanbanColumn_projectId_integratedStatus_idx" ON "KanbanColumn"("projectId", "integratedStatus")');
+}
+
 export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { projectId, columnId } = await params;
@@ -20,10 +33,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     if (!(await assertProjectAccess(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
+    const data = await readJsonObject(req);
+    const updatesIntegratedMapping = data.integratedStatus !== undefined || data.isIntegratedPrimary !== undefined;
+    if (updatesIntegratedMapping) await ensureIntegratedKanbanColumns();
+
     const existing = await withDbRetry(() => prisma.kanbanColumn.findFirst({ where: { id: columnId, projectId } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    const data = await readJsonObject(req);
     const updateData: { name?: string; order?: number; integratedStatus?: string | null; isIntegratedPrimary?: boolean } = {};
 
     if (data.name !== undefined) {
@@ -38,7 +54,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       updateData.order = order;
     }
 
-    const updatesIntegratedMapping = data.integratedStatus !== undefined || data.isIntegratedPrimary !== undefined;
     if (updatesIntegratedMapping) {
       const canManageMapping = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
       if (!canManageMapping) return NextResponse.json({ error: "통합 상태 설정 권한이 없습니다." }, { status: 403 });
