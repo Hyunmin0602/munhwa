@@ -6,7 +6,10 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 function createPrisma() {
-  const url = process.env.DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
+  const isProduction = process.env.NODE_ENV === "production";
+  const url = isProduction
+    ? process.env.TURSO_DATABASE_URL ?? process.env.DATABASE_URL
+    : process.env.DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN ?? process.env.LIBSQL_AUTH_TOKEN;
   const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
 
