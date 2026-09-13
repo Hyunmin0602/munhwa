@@ -7,6 +7,8 @@ import {
   DragOverlay,
   DragStartEvent,
   MouseSensor,
+  type CollisionDetection,
+  pointerWithin,
   TouchSensor,
   useSensor,
   useSensors,
@@ -73,6 +75,16 @@ const COLUMN_COLORS = [
 
 const columnDragId = (columnId: string) => `column:${columnId}`;
 const getColumnIdFromDragId = (id: string) => id.startsWith("column:") ? id.slice("column:".length) : id;
+const pointerFirstCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  return pointerCollisions.length > 0 ? pointerCollisions : closestCorners(args);
+};
+const INTEGRATED_STATUS_OPTIONS = [
+  { value: "", label: "통합 화면에 표시하지 않음" },
+  { value: "BEFORE", label: "진행 전" },
+  { value: "IN_PROGRESS", label: "진행 중" },
+  { value: "DONE", label: "진행 완료" },
+] as const;
 
 function TaskCard({
   task, onDelete, onMoveLeft, onMoveRight,
@@ -327,6 +339,10 @@ export default function KanbanBoard({ projectId }: Props) {
   const [addingColumn, setAddingColumn] = useState(false);
   const [newColName, setNewColName] = useState("");
   const [activeColumnIndex, setActiveColumnIndex] = useState(0);
+  const [showIntegratedSetup, setShowIntegratedSetup] = useState(false);
+  const [integratedSetup, setIntegratedSetup] = useState<Record<string, string>>({});
+  const [savingIntegratedSetup, setSavingIntegratedSetup] = useState(false);
+  const [integratedSetupError, setIntegratedSetupError] = useState("");
   const newColRef = useRef<HTMLInputElement>(null);
 
   const sensors = useSensors(
@@ -344,8 +360,13 @@ export default function KanbanBoard({ projectId }: Props) {
         if (!res.ok) throw new Error("Kanban board request failed");
         const data = await res.json();
         if (cancelled) return;
-        setColumns(data.columns ?? []);
+        const loadedColumns = data.columns ?? [];
+        setColumns(loadedColumns);
         setMembers((data.members ?? []).map((m: { user: Member }) => m.user));
+        if (loadedColumns.length > 0 && !loadedColumns.some((column: Column) => column.integratedStatus)) {
+          setIntegratedSetup(Object.fromEntries(loadedColumns.map((column: Column) => [column.id, ""])));
+          setShowIntegratedSetup(true);
+        }
       } catch {
         if (!cancelled) setLoadError("칸반 데이터를 불러오지 못했습니다.");
       } finally {
@@ -356,6 +377,38 @@ export default function KanbanBoard({ projectId }: Props) {
   }, [projectId, reloadKey]);
 
   useEffect(() => { if (addingColumn) newColRef.current?.focus(); }, [addingColumn]);
+
+  const saveIntegratedSetup = async () => {
+    const mappedColumns = columns.filter((column) => integratedSetup[column.id]);
+    if (!mappedColumns.length) {
+      setIntegratedSetupError("통합 화면에 표시할 열을 하나 이상 선택하세요.");
+      return;
+    }
+
+    setSavingIntegratedSetup(true);
+    setIntegratedSetupError("");
+    try {
+      for (const column of mappedColumns) {
+        const response = await apiFetch(`/api/projects/${projectId}/columns/${column.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ integratedStatus: integratedSetup[column.id], isIntegratedPrimary: true }),
+        });
+        if (!response.ok) throw new Error("Integrated Kanban setup failed");
+      }
+
+      setColumns((previous) => previous.map((column) => {
+        const integratedStatus = integratedSetup[column.id] || null;
+        const isIntegratedPrimary = integratedStatus !== null && !mappedColumns.some((other) => other.order > column.order && integratedSetup[other.id] === integratedStatus);
+        return { ...column, integratedStatus: integratedStatus as Column["integratedStatus"], isIntegratedPrimary };
+      }));
+      setShowIntegratedSetup(false);
+    } catch {
+      setIntegratedSetupError("통합 칸반 열 설정을 저장하지 못했습니다. 다시 시도하세요.");
+    } finally {
+      setSavingIntegratedSetup(false);
+    }
+  };
 
   const handleDragStart = (e: DragStartEvent) => {
     if (e.active.data.current?.type === "column") {
@@ -560,7 +613,7 @@ export default function KanbanBoard({ projectId }: Props) {
 
   return (
     <>
-      <DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
+      <DndContext sensors={sensors} collisionDetection={pointerFirstCollisionDetection} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd}>
         {sortedCols.length > 0 && (
           <div className="mb-3 flex items-center justify-between md:hidden">
             <span className="text-xs font-medium text-gray-500">컬럼 {activeColumnIndex + 1} / {sortedCols.length}</span>
@@ -661,6 +714,31 @@ export default function KanbanBoard({ projectId }: Props) {
           )}
         </DragOverlay>
       </DndContext>
+
+      {showIntegratedSetup && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+            <p className="text-xs font-semibold text-indigo-600">INTEGRATED KANBAN SETUP</p>
+            <h3 className="mt-1 text-lg font-bold text-slate-900">통합 칸반에 표시할 열을 설정하세요</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-500">이 사업의 열이 아직 통합 화면에 연결되지 않았습니다. 각 열의 공통 상태를 선택하면 통합 칸반에서 카드 진행 상황을 확인하고 이동할 수 있습니다.</p>
+            <div className="mt-5 space-y-3">
+              {sortedCols.map((column) => (
+                <label key={column.id} className="grid grid-cols-[minmax(0,1fr)_11rem] items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm">
+                  <span className="truncate font-semibold text-slate-700">{column.name}</span>
+                  <select value={integratedSetup[column.id] ?? ""} onChange={(event) => setIntegratedSetup((previous) => ({ ...previous, [column.id]: event.target.value }))} disabled={savingIntegratedSetup} className="rounded-lg border border-slate-200 bg-white px-2.5 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200 disabled:opacity-60">
+                    {INTEGRATED_STATUS_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+            {integratedSetupError && <p className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-sm font-medium text-rose-700">{integratedSetupError}</p>}
+            <div className="mt-5 flex justify-end gap-2">
+              <button type="button" onClick={() => setShowIntegratedSetup(false)} disabled={savingIntegratedSetup} className="rounded-xl bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50">나중에 설정</button>
+              <button type="button" onClick={saveIntegratedSetup} disabled={savingIntegratedSetup} className="rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{savingIntegratedSetup ? "저장 중…" : "통합 칸반에 등록"}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {selectedTask && (
         <TaskDetailModal
