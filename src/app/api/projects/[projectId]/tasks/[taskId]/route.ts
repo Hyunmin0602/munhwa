@@ -25,7 +25,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const data = await req.json();
 
     if (data.columnId) {
-      const targetColumn = await withDbRetry(() => prisma.kanbanColumn.findFirst({ where: { id: data.columnId, projectId } }));
+      const targetColumn = await withDbRetry(() =>
+        prisma.kanbanColumn.findFirst({
+          where: { id: data.columnId, projectId },
+          select: { id: true },
+        })
+      );
       if (!targetColumn) return NextResponse.json({ error: "Target column not found" }, { status: 400 });
     }
 
