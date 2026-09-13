@@ -45,14 +45,20 @@ export async function assertAdmin(userId: string) {
 }
 
 export async function assertSpaceAdmin(userId: string) {
-  const assignment = await prisma.spaceAdministration.findUnique({
-    where: { id: "culture-sports" },
-    select: {
-      spaceAdminUserId: true,
-      spaceAdmin: { select: { role: true } },
-    },
-  });
-  return assignment?.spaceAdminUserId === userId && assignment.spaceAdmin.role === "space_admin";
+  try {
+    const assignment = await prisma.spaceAdministration.findUnique({
+      where: { id: "culture-sports" },
+      select: {
+        spaceAdminUserId: true,
+        spaceAdmin: { select: { role: true } },
+      },
+    });
+    return assignment?.spaceAdminUserId === userId && assignment.spaceAdmin.role === "space_admin";
+  } catch (error) {
+    // Space administration is optional for databases created before this feature.
+    console.warn("[space-admin] lookup unavailable", error);
+    return false;
+  }
 }
 
 export async function canManageCultureSportsContent(userId: string) {

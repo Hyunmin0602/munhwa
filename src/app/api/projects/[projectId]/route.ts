@@ -11,6 +11,18 @@ function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId] ${action} failed`, error);
 }
 
+function isMissingIntegratedKanbanField(error: unknown) {
+  return error instanceof Error && /integratedStatus|isIntegratedPrimary/i.test(error.message);
+}
+
+function legacyIntegratedStatus(name: string, order: number) {
+  const normalized = name.trim().toLowerCase();
+  if (/할 일|진행 전|todo|backlog/.test(normalized)) return "BEFORE";
+  if (/진행 중|in progress|doing/.test(normalized)) return "IN_PROGRESS";
+  if (/완료|done|complete/.test(normalized)) return "DONE";
+  return ["BEFORE", "IN_PROGRESS", "DONE"][order] ?? null;
+}
+
 // use common assertProjectMember from server-utils
 
 export async function GET(_: NextRequest, { params }: Params) {
@@ -25,17 +37,51 @@ export async function GET(_: NextRequest, { params }: Params) {
     if (!(await assertProjectAccess(userId, projectId)))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const project = await withDbRetry(
-      () =>
-        prisma.project.findUnique({
+    let project;
+    try {
+      project = await withDbRetry(
+        () =>
+          prisma.project.findUnique({
+            where: { id: projectId },
+            include: {
+              members: { include: { user: { select: { id: true, name: true, image: true } } } },
+              columns: { include: { tasks: { include: { assignee: { select: { id: true, name: true } } }, orderBy: { order: "asc" } } }, orderBy: { order: "asc" } },
+            },
+          }),
+        { operation: `project:get:${projectId}` }
+      );
+    } catch (error) {
+      if (!isMissingIntegratedKanbanField(error)) throw error;
+
+      const legacyProject = await withDbRetry(
+        () =>
+          prisma.project.findUnique({
           where: { id: projectId },
           include: {
             members: { include: { user: { select: { id: true, name: true, image: true } } } },
-            columns: { include: { tasks: { include: { assignee: { select: { id: true, name: true } } }, orderBy: { order: "asc" } } }, orderBy: { order: "asc" } },
+            columns: {
+              select: {
+                id: true,
+                name: true,
+                order: true,
+                projectId: true,
+                createdAt: true,
+                tasks: { include: { assignee: { select: { id: true, name: true } } }, orderBy: { order: "asc" } },
+              },
+              orderBy: { order: "asc" },
+            },
           },
         }),
-      { operation: `project:get:${projectId}` }
-    );
+        { operation: `project:get-legacy-kanban:${projectId}` }
+      );
+      project = legacyProject && {
+        ...legacyProject,
+        columns: legacyProject.columns.map((column) => {
+          const integratedStatus = legacyIntegratedStatus(column.name, column.order);
+          return { ...column, integratedStatus, isIntegratedPrimary: integratedStatus !== null };
+        }),
+      };
+    }
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(project);
   } catch (error) {
