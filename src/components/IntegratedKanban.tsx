@@ -20,7 +20,6 @@ import {
   Calendar,
   CircleAlert,
   GripVertical,
-  LayoutDashboard,
   Plus,
   Search,
   SlidersHorizontal,
@@ -252,8 +251,6 @@ export default function IntegratedKanban() {
     ),
   ];
   const filteredProjects = projects.filter((project) => {
-    const haystack =
-      `${project.name} ${project.description ?? ""} ${project.category ?? ""} ${project.tags ?? ""}`.toLowerCase();
     return (
       selectedProjects.includes(project.id) &&
       (!selectedCategories.length ||
@@ -264,8 +261,7 @@ export default function IntegratedKanban() {
             ?.split(",")
             .map((item) => item.trim())
             .includes(tag),
-        )) &&
-      (!query.trim() || haystack.includes(query.toLowerCase()))
+        ))
     );
   });
   const cards = useMemo(
@@ -289,13 +285,15 @@ export default function IntegratedKanban() {
                             Date.now() +
                               (due === "today" ? 86_400_000 : 604_800_000),
                           )));
+                const queryMatches =
+                  !query.trim() ||
+                  `${task.title} ${column.name} ${project.name} ${task.assignee?.name ?? ""}`
+                    .toLowerCase()
+                    .includes(query.toLowerCase());
                 return (
                   (!priorities.length || priorities.includes(task.priority)) &&
                   dueMatches &&
-                  (!query.trim() ||
-                    `${task.title} ${column.name}`
-                      .toLowerCase()
-                      .includes(query.toLowerCase()))
+                  queryMatches
                 );
               })
               .map((task) => ({ task, project, column })),
@@ -423,19 +421,7 @@ export default function IntegratedKanban() {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-slate-50 p-4 md:p-6">
       <header className="mx-auto w-full max-w-[1800px] pb-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600">
-              <LayoutDashboard size={15} />
-              ALL PROJECTS
-            </div>
-            <h1 className="mt-1 text-2xl font-bold text-slate-900">
-              통합 칸반
-            </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              사업별 워크플로를 세 개의 공통 상태로 확인합니다.
-            </p>
-          </div>
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={() => setShowFilter(true)}
@@ -445,12 +431,12 @@ export default function IntegratedKanban() {
             필터
           </button>
         </div>
-        <div className="relative mt-4 max-w-xl">
+        <div className="relative mt-3 max-w-xl">
           <Search size={16} className="absolute left-3 top-3 text-slate-400" />
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="사업명, 소개, 카테고리, 태그, 열 또는 카드 검색"
+            placeholder="카드 제목, 담당자, 사업명, 열 이름으로 검색"
             className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
           />
         </div>

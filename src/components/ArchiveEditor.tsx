@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Skeleton } from "./ui/Skeleton";
-import { apiFetch } from "@/lib/client-fetch";
+import { apiFetch, getModalExceptionMessage, getModalRequestErrorMessage } from "@/lib/client-fetch";
 import MarkdownRenderer from "./MarkdownRenderer";
 
 type ArchiveVisibility = "PRIVATE" | "INTERNAL" | "EXTERNAL";
@@ -151,6 +151,9 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const [saved, setSaved] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<ArchiveVisibility>("PRIVATE");
   const [kind, setKind] = useState<ArchiveKind>("DOCUMENT");
   const [viewMode, setViewMode] = useState<"split" | "editor" | "preview">("split");
@@ -173,10 +176,14 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const builderImageInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      setLoadError(null);
       try {
-        const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`);
+        const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, undefined, { showGlobalError: false });
+        if (!res.ok) throw new Error(await getModalRequestErrorMessage(res, "문서 조회"));
         const data: Post = await res.json();
+        if (cancelled) return;
         setPost(data);
         setTitle(data.title);
         setContent(data.content);
@@ -185,12 +192,14 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         const imagesResponse = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`);
         if (imagesResponse.ok) {
           const imageData = await imagesResponse.json();
-          setImages(Array.isArray(imageData) ? imageData : []);
+          if (!cancelled) setImages(Array.isArray(imageData) ? imageData : []);
         }
-      } catch {
+      } catch (error) {
+        if (!cancelled) setLoadError(error instanceof Error && error.message ? error.message : getModalExceptionMessage(error, "문서 조회"));
       }
     })();
-  }, [projectId, postId]);
+    return () => { cancelled = true; };
+  }, [projectId, postId, reloadKey]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 767px)");
@@ -214,20 +223,24 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
 
   const save = useCallback(async () => {
     setSaving(true);
+    setActionError(null);
     try {
       const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, content, visibility, kind }),
-      });
+      }, { showGlobalError: false });
       if (res.ok) {
         const next = await res.json();
         setPost(next);
         setVisibility((next.visibility ?? (next.published ? "EXTERNAL" : "PRIVATE")) as ArchiveVisibility);
         setSaved(true);
         setTimeout(() => setSaved(false), 2000);
+      } else {
+        setActionError(await getModalRequestErrorMessage(res, "문서 저장"));
       }
-    } catch {
+    } catch (error) {
+      setActionError(getModalExceptionMessage(error, "문서 저장"));
     } finally {
       setSaving(false);
     }
@@ -235,19 +248,23 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
 
   const togglePublish = async () => {
     setPublishing(true);
+    setActionError(null);
     try {
       const nextVisibility = visibility === "EXTERNAL" ? "PRIVATE" : "EXTERNAL";
       const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, content, visibility: nextVisibility, kind }),
-      });
+      }, { showGlobalError: false });
       if (res.ok) {
         const next = await res.json();
         setPost(next);
         setVisibility((next.visibility ?? (next.published ? "EXTERNAL" : "PRIVATE")) as ArchiveVisibility);
+      } else {
+        setActionError(await getModalRequestErrorMessage(res, "공개 범위 변경"));
       }
-    } catch {
+    } catch (error) {
+      setActionError(getModalExceptionMessage(error, "공개 범위 변경"));
     } finally {
       setPublishing(false);
     }
@@ -255,14 +272,17 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
 
   const updateShareLink = async (shareAction: "revoke" | "regenerate") => {
     setSharing(true);
+    setActionError(null);
     try {
       const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ shareAction }),
-      });
+      }, { showGlobalError: false });
       if (res.ok) setPost(await res.json());
-    } catch {
+      else setActionError(await getModalRequestErrorMessage(res, "공유 링크 변경"));
+    } catch (error) {
+      setActionError(getModalExceptionMessage(error, "공유 링크 변경"));
     } finally {
       setSharing(false);
     }
@@ -379,6 +399,20 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   };
 
   if (!post) {
+    if (loadError) {
+      return (
+        <div className="flex h-full flex-col items-center justify-center gap-3 bg-white text-center">
+          <p className="font-medium text-rose-700">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => setReloadKey((current) => current + 1)}
+            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            다시 시도
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="flex flex-col h-full bg-white">
         {/* Top bar skeleton */}
@@ -529,6 +563,12 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
           </button>
         </div>
       </div>
+
+      {actionError && (
+        <div className="flex-shrink-0 border-b border-rose-100 bg-rose-50 px-4 py-2 text-xs font-medium text-rose-700">
+          {actionError}
+        </div>
+      )}
 
       {/* ── Markdown Toolbar ── */}
       {viewMode !== "preview" && (
