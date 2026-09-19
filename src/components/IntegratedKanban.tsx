@@ -357,7 +357,12 @@ export default function IntegratedKanban() {
           column.integratedStatus === status && column.isIntegratedPrimary,
       ),
     );
+    const column =
+      first?.columns.find(
+        (item) => item.integratedStatus === status && item.isIntegratedPrimary,
+      ) ?? first?.columns[0];
     setProjectId(first?.id ?? "");
+    setColumnId(column?.id ?? "");
     setTitle("");
     setCreateStatus(status);
   };
@@ -374,10 +379,7 @@ export default function IntegratedKanban() {
   const create = async (event: React.FormEvent) => {
     event.preventDefault();
     const project = projects.find((item) => item.id === projectId);
-    const column = project?.columns.find(
-      (item) =>
-        item.integratedStatus === createStatus && item.isIntegratedPrimary,
-    );
+    const column = project?.columns.find((item) => item.id === columnId);
     if (!project || !column || !title.trim()) return;
     setSaving(true);
     try {
