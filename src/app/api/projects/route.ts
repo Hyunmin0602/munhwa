@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     const userId = session.user.id;
     const data = await readJsonObject(req);
     const name = requiredText(data.name, "프로젝트 이름", 100);
-    const description = optionalText(data.description, "상세 설명", 5_000);
+    const description = optionalText(data.description, "상세 설명", 1_000);
     const category = optionalText(data.category, "카테고리", 50);
     const tags = projectTags(data.tags);
     const summary = optionalText(data.summary, "요약", 300);

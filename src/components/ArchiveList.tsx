@@ -6,7 +6,7 @@ import { Plus, Globe, Lock, Trash2, FileText, Clock, MoreHorizontal } from "luci
 import dayjs from "dayjs";
 import "dayjs/locale/ko";
 import { Skeleton } from "./ui/Skeleton";
-import { apiFetch } from "@/lib/client-fetch";
+import { apiFetch, showToast, showUndoToast } from "@/lib/client-fetch";
 
 dayjs.locale("ko");
 
@@ -26,20 +26,25 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [actionPostId, setActionPostId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const router = useRouter();
 
   useEffect(() => {
     (async () => {
       try {
         const res = await apiFetch(`/api/projects/${projectId}/archive`);
+        if (!res.ok) throw new Error("Archive list request failed");
         const data = await res.json();
         setPosts(Array.isArray(data) ? data : []);
+        setError(null);
       } catch {
+        setError("문서를 불러오지 못했습니다.");
       } finally {
         setLoading(false);
       }
     })();
-  }, [projectId]);
+  }, [projectId, reloadKey]);
 
   const createPost = async () => {
     setCreating(true);
@@ -52,21 +57,36 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
       if (res.ok) {
         const post = await res.json();
         router.push(`/dashboard/projects/${projectId}/archive/${post.id}`);
+      } else {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "문서를 만들지 못했습니다.");
       }
     } catch {
+      setError("문서를 만들지 못했습니다. 다시 시도해주세요.");
     } finally {
       setCreating(false);
     }
   };
 
   const deletePost = async (id: string) => {
-    if (!confirm("이 문서를 삭제하시겠습니까?")) return;
-    try {
-      await apiFetch(`/api/projects/${projectId}/archive/${id}`, { method: "DELETE" });
-    } catch {
-    }
-    setPosts((prev) => prev.filter((p) => p.id !== id));
+    const post = posts.find((item) => item.id === id);
+    if (!post || !confirm(`'${post.title}' 문서를 삭제하시겠습니까?`)) return;
+    const index = posts.findIndex((item) => item.id === id);
+    setPosts((prev) => prev.filter((item) => item.id !== id));
     setActionPostId(null);
+    showUndoToast(
+      `'${post.title}' 문서를 삭제했습니다.`,
+      async () => {
+        try {
+          const res = await apiFetch(`/api/projects/${projectId}/archive/${id}`, { method: "DELETE" });
+          if (!res.ok) throw new Error("Archive delete request failed");
+        } catch {
+          setPosts((prev) => prev.some((item) => item.id === id) ? prev : [...prev.slice(0, index), post, ...prev.slice(index)]);
+          showToast("문서를 삭제하지 못했습니다. 다시 시도해주세요.");
+        }
+      },
+      () => setPosts((prev) => prev.some((item) => item.id === id) ? prev : [...prev.slice(0, index), post, ...prev.slice(index)])
+    );
   };
 
   const getPreview = (content: string) => {
@@ -102,7 +122,12 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
         </button>
       </div>
 
-      {loading ? (
+      {error ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+          <p className="text-sm font-medium text-rose-600">{error}</p>
+          <button type="button" onClick={() => setReloadKey((current) => current + 1)} className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50">다시 시도</button>
+        </div>
+      ) : loading ? (
         <>
           <Skeleton className="h-4 w-24 mb-5 rounded" />
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">

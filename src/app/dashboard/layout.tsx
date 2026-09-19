@@ -26,7 +26,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [showModal, setShowModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
-  const [toasts, setToasts] = useState<Array<{ id: number; type: "error" | "info"; message: string }>>([]);
+  const [toasts, setToasts] = useState<Array<{ id: number; type: "error" | "info"; message: string; actionLabel?: string; onAction?: () => void }>>([]);
   const pathname = usePathname();
   const match = pathname?.match(/\/dashboard\/projects\/([^/]+)/);
   const currentProjectId = match?.[1];
@@ -206,6 +206,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             className={`rounded-xl border px-4 py-3 text-sm shadow-lg backdrop-blur ${toast.type === "error" ? "border-rose-200 bg-rose-50 text-rose-700" : "border-indigo-200 bg-white text-gray-700"}`}
           >
             {toast.message}
+            {toast.actionLabel && toast.onAction && (
+              <button type="button" onClick={toast.onAction} className="ml-3 font-semibold underline underline-offset-2">
+                {toast.actionLabel}
+              </button>
+            )}
           </div>
         ))}
       </div>

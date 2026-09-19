@@ -1,18 +1,65 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { closestCorners as closestCornerCollisions, type CollisionDetection, DndContext, DragEndEvent, DragOverlay, MouseSensor, pointerWithin, TouchSensor, useDroppable, useSensor, useSensors } from "@dnd-kit/core";
+import {
+  closestCorners as closestCornerCollisions,
+  type CollisionDetection,
+  DndContext,
+  DragEndEvent,
+  DragOverlay,
+  MouseSensor,
+  pointerWithin,
+  TouchSensor,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Calendar, CircleAlert, GripVertical, LayoutDashboard, Plus, Search, SlidersHorizontal, User, X } from "lucide-react";
+import {
+  Calendar,
+  CircleAlert,
+  GripVertical,
+  LayoutDashboard,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  User,
+  X,
+} from "lucide-react";
 import TaskDetailModal from "./TaskDetailModal";
 import { apiFetch } from "@/lib/client-fetch";
 
 type Status = "BEFORE" | "IN_PROGRESS" | "DONE";
-type Task = { id: string; title: string; description: string | null; priority: string; dueDate: string | null; columnId: string; order: number; assignee: { id: string; name: string | null } | null };
-type Column = { id: string; name: string; order: number; integratedStatus: Status | null; isIntegratedPrimary: boolean; tasks: Task[] };
+type Task = {
+  id: string;
+  title: string;
+  description: string | null;
+  priority: string;
+  dueDate: string | null;
+  columnId: string;
+  order: number;
+  assignee: { id: string; name: string | null } | null;
+};
+type Column = {
+  id: string;
+  name: string;
+  order: number;
+  integratedStatus: Status | null;
+  isIntegratedPrimary: boolean;
+  tasks: Task[];
+};
 type Member = { id: string; name: string | null };
-type Project = { id: string; name: string; description: string | null; category: string | null; tags: string | null; color: string; columns: Column[]; members: Array<{ user: Member }> };
+type Project = {
+  id: string;
+  name: string;
+  description: string | null;
+  category: string | null;
+  tags: string | null;
+  color: string;
+  columns: Column[];
+  members: Array<{ user: Member }>;
+};
 type Card = { task: Task; project: Project; column: Column };
 
 const stages: Array<{ id: Status; name: string; color: string }> = [
@@ -23,47 +70,644 @@ const stages: Array<{ id: Status; name: string; color: string }> = [
 
 const pointerFirstCollisionDetection: CollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
-  return pointerCollisions.length > 0 ? pointerCollisions : closestCornerCollisions(args);
+  return pointerCollisions.length > 0
+    ? pointerCollisions
+    : closestCornerCollisions(args);
 };
 
 const closestCorners = pointerFirstCollisionDetection;
 
 function TaskCard({ card, onOpen }: { card: Card; onOpen: () => void }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.task.id });
-  return <button type="button" ref={setNodeRef} {...attributes} {...listeners} style={{ transform: CSS.Transform.toString(transform), transition }} onClick={onOpen} className={`w-full cursor-grab rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}><div className="flex items-center gap-1.5"><GripVertical size={14} className="text-slate-300" /><span className="truncate text-[11px] font-bold" style={{ color: card.project.color }}>{card.project.name}</span><span className="ml-auto truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">{card.column.name}</span></div><p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-800">{card.task.title}</p><div className="mt-3 flex items-center gap-1.5 text-[10px] text-slate-400">{card.task.priority === "high" && <span className="rounded bg-rose-50 px-1.5 py-0.5 font-semibold text-rose-700">높음</span>}{card.task.dueDate && <span className="inline-flex items-center gap-1"><Calendar size={11} />{new Date(card.task.dueDate).toLocaleDateString("ko-KR", { month: "short", day: "numeric" })}</span>}{card.task.assignee?.name && <span className="ml-auto inline-flex max-w-20 items-center gap-1 truncate"><User size={11} />{card.task.assignee.name}</span>}</div></button>;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: card.task.id });
+  return (
+    <button
+      type="button"
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      onClick={onOpen}
+      className={`w-full cursor-grab rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
+    >
+      <div className="flex items-center gap-1.5">
+        <GripVertical size={14} className="text-slate-300" />
+        <span
+          className="truncate text-[11px] font-bold"
+          style={{ color: card.project.color }}
+        >
+          {card.project.name}
+        </span>
+        <span className="ml-auto truncate rounded bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-500">
+          {card.column.name}
+        </span>
+      </div>
+      <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-800">
+        {card.task.title}
+      </p>
+      <div className="mt-3 flex items-center gap-1.5 text-[10px] text-slate-400">
+        {card.task.priority === "high" && (
+          <span className="rounded bg-rose-50 px-1.5 py-0.5 font-semibold text-rose-700">
+            높음
+          </span>
+        )}
+        {card.task.dueDate && (
+          <span className="inline-flex items-center gap-1">
+            <Calendar size={11} />
+            {new Date(card.task.dueDate).toLocaleDateString("ko-KR", {
+              month: "short",
+              day: "numeric",
+            })}
+          </span>
+        )}
+        {card.task.assignee?.name && (
+          <span className="ml-auto inline-flex max-w-20 items-center gap-1 truncate">
+            <User size={11} />
+            {card.task.assignee.name}
+          </span>
+        )}
+      </div>
+    </button>
+  );
 }
 
-function StageColumn({ stage, cards, onAdd, children }: { stage: (typeof stages)[number]; cards: Card[]; onAdd: () => void; children: React.ReactNode }) {
+function StageColumn({
+  stage,
+  cards,
+  onAdd,
+  children,
+}: {
+  stage: (typeof stages)[number];
+  cards: Card[];
+  onAdd: () => void;
+  children: React.ReactNode;
+}) {
   const { setNodeRef, isOver } = useDroppable({ id: stage.id });
-  return <section ref={setNodeRef} className={`flex min-h-[32rem] min-w-[18rem] flex-1 flex-col rounded-2xl border p-3 ${isOver ? "border-indigo-400 bg-indigo-50" : "border-slate-200 bg-slate-100/70"}`}><div className="flex items-center gap-2 px-1 pb-3"><span className={`h-2.5 w-2.5 rounded-full ${stage.color}`} /><h2 className="font-bold text-slate-800">{stage.name}</h2><span className="rounded-full bg-white px-1.5 py-0.5 text-xs text-slate-500">{cards.length}</span><button type="button" onClick={onAdd} className="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600"><Plus size={16} /></button></div><div className="flex flex-1 flex-col gap-2 overflow-y-auto">{children}{cards.length === 0 && <button type="button" onClick={onAdd} className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 text-xs text-slate-400 hover:bg-white hover:text-indigo-600"><Plus size={17} />카드 추가</button>}</div></section>;
+  return (
+    <section
+      ref={setNodeRef}
+      className={`flex min-h-[32rem] min-w-[18rem] flex-1 flex-col rounded-2xl border p-3 ${isOver ? "border-indigo-400 bg-indigo-50" : "border-slate-200 bg-slate-100/70"}`}
+    >
+      <div className="flex items-center gap-2 px-1 pb-3">
+        <span className={`h-2.5 w-2.5 rounded-full ${stage.color}`} />
+        <h2 className="font-bold text-slate-800">{stage.name}</h2>
+        <span className="rounded-full bg-white px-1.5 py-0.5 text-xs text-slate-500">
+          {cards.length}
+        </span>
+        <button
+          type="button"
+          onClick={onAdd}
+          className="ml-auto rounded-lg p-1.5 text-slate-400 hover:bg-white hover:text-indigo-600"
+        >
+          <Plus size={16} />
+        </button>
+      </div>
+      <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+        {children}
+        {cards.length === 0 && (
+          <button
+            type="button"
+            onClick={onAdd}
+            className="flex min-h-28 flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-slate-200 text-xs text-slate-400 hover:bg-white hover:text-indigo-600"
+          >
+            <Plus size={17} />
+            카드 추가
+          </button>
+        )}
+      </div>
+    </section>
+  );
 }
 
 export default function IntegratedKanban() {
-  const [projects, setProjects] = useState<Project[]>([]); const [loading, setLoading] = useState(true); const [error, setError] = useState("");
-  const [query, setQuery] = useState(""); const [showFilter, setShowFilter] = useState(false); const [selectedProjects, setSelectedProjects] = useState<string[]>([]); const [selectedCategories, setSelectedCategories] = useState<string[]>([]); const [selectedTags, setSelectedTags] = useState<string[]>([]); const [priorities, setPriorities] = useState<string[]>([]); const [due, setDue] = useState("all");
-  const [selected, setSelected] = useState<Card | null>(null); const [active, setActive] = useState<Card | null>(null); const [createStatus, setCreateStatus] = useState<Status | null>(null); const [projectId, setProjectId] = useState(""); const [columnId, setColumnId] = useState(""); const [title, setTitle] = useState(""); const [saving, setSaving] = useState(false);
-  const sensors = useSensors(useSensor(MouseSensor, { activationConstraint: { distance: 6 } }), useSensor(TouchSensor, { activationConstraint: { delay: 180, tolerance: 8 } }));
-  const load = async () => { setLoading(true); try { const response = await apiFetch("/api/projects"); if (!response.ok) throw new Error(); const list = await response.json() as Array<{ id: string }>; const data = await Promise.all(list.map(async ({ id }) => { const detail = await apiFetch(`/api/projects/${id}`); if (!detail.ok) throw new Error(); return detail.json() as Promise<Project>; })); setProjects(data); setSelectedProjects(data.map((project) => project.id)); } catch { setError("통합 칸반을 불러오지 못했습니다."); } finally { setLoading(false); } };
-  useEffect(() => { void load(); }, []);
-  const categories = [...new Set(projects.map((project) => project.category).filter((item): item is string => !!item))]; const tags = [...new Set(projects.flatMap((project) => project.tags?.split(",").map((tag) => tag.trim()).filter(Boolean) ?? []))];
-  const filteredProjects = projects.filter((project) => { const haystack = `${project.name} ${project.description ?? ""} ${project.category ?? ""} ${project.tags ?? ""}`.toLowerCase(); return selectedProjects.includes(project.id) && (!selectedCategories.length || selectedCategories.includes(project.category ?? "")) && (!selectedTags.length || selectedTags.some((tag) => project.tags?.split(",").map((item) => item.trim()).includes(tag))) && (!query.trim() || haystack.includes(query.toLowerCase())); });
-  const cards = useMemo(() => filteredProjects.flatMap((project) => project.columns
-    .filter((column) => column.integratedStatus)
-    .flatMap((column) => column.tasks
-      .filter((task) => {
-        const dueDate = task.dueDate ? new Date(task.dueDate) : null;
-        const dueMatches = due === "all" || (due === "none" ? !dueDate : !!dueDate && (due === "overdue" ? dueDate < new Date() : dueDate <= new Date(Date.now() + (due === "today" ? 86_400_000 : 604_800_000))));
-        return (!priorities.length || priorities.includes(task.priority)) && dueMatches && (!query.trim() || `${task.title} ${column.name}`.toLowerCase().includes(query.toLowerCase()));
-      })
-      .map((task) => ({ task, project, column }))
-    )), [filteredProjects, priorities, due, query]);
-  const cardsFor = (status: Status) => cards.filter((card) => card.column.integratedStatus === status); const toggle = (value: string, values: string[], setValues: (value: string[]) => void) => setValues(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
-  const selectedProject = projects.find((project) => project.id === projectId); const selectableColumns = selectedProject?.columns ?? [];
-  const dragEnd = async ({ active: dragged, over }: DragEndEvent) => { setActive(null); if (!over) return; const card = cards.find((item) => item.task.id === dragged.id); const status = String(over.id) as Status; if (!card || !stages.some((stage) => stage.id === status)) return; const target = card.project.columns.find((column) => column.integratedStatus === status && column.isIntegratedPrimary); if (!target) { setError(`${card.project.name} 사업의 '${stages.find((stage) => stage.id === status)?.name}' 대표 열을 먼저 설정하세요.`); return; } if (target.id === card.column.id) return; try { const response = await apiFetch(`/api/projects/${card.project.id}/tasks/${card.task.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ columnId: target.id, order: target.tasks.length }) }); if (!response.ok) throw new Error(); await load(); } catch { setError("카드 이동을 저장하지 못했습니다."); } };
-  const openCreate = (status: Status) => { const first = filteredProjects.find((project) => project.columns.some((column) => column.integratedStatus === status && column.isIntegratedPrimary)); setProjectId(first?.id ?? ""); setTitle(""); setCreateStatus(status); };
-  const selectProject = (id: string) => { const project = projects.find((item) => item.id === id); const column = project?.columns.find((item) => item.integratedStatus === createStatus && item.isIntegratedPrimary) ?? project?.columns[0]; setProjectId(id); setColumnId(column?.id ?? ""); };
-  const create = async (event: React.FormEvent) => { event.preventDefault(); const project = projects.find((item) => item.id === projectId); const column = project?.columns.find((item) => item.integratedStatus === createStatus && item.isIntegratedPrimary); if (!project || !column || !title.trim()) return; setSaving(true); try { const response = await apiFetch(`/api/projects/${project.id}/tasks`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: title.trim(), columnId: column.id }) }); if (!response.ok) throw new Error(); setCreateStatus(null); await load(); } catch { setError("카드를 등록하지 못했습니다."); } finally { setSaving(false); } };
-  if (loading) return <div className="flex h-full items-center justify-center text-sm text-slate-400">통합 칸반을 준비하고 있습니다.</div>;
-  return <div className="flex h-full flex-col overflow-hidden bg-slate-50 p-4 md:p-6"><header className="mx-auto w-full max-w-[1800px] pb-4"><div className="flex flex-wrap items-end justify-between gap-3"><div><div className="flex items-center gap-2 text-xs font-semibold text-indigo-600"><LayoutDashboard size={15} />ALL PROJECTS</div><h1 className="mt-1 text-2xl font-bold text-slate-900">통합 칸반</h1><p className="mt-1 text-sm text-slate-500">사업별 워크플로를 세 개의 공통 상태로 확인합니다.</p></div><button type="button" onClick={() => setShowFilter(true)} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm"><SlidersHorizontal size={16} />필터</button></div><div className="relative mt-4 max-w-xl"><Search size={16} className="absolute left-3 top-3 text-slate-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="사업명, 소개, 카테고리, 태그, 열 또는 카드 검색" className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200" /></div></header>{error && <div className="mx-auto mb-3 flex w-full max-w-[1800px] items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700"><CircleAlert size={16} />{error}<button onClick={() => setError("")} className="ml-auto"><X size={15} /></button></div>}<DndContext sensors={sensors} collisionDetection={closestCorners} onDragStart={({ active: item }) => setActive(cards.find((card) => card.task.id === item.id) ?? null)} onDragEnd={dragEnd}><div className="mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 gap-3 overflow-x-auto pb-2">{stages.map((stage) => { const stageCards = cardsFor(stage.id); return <StageColumn key={stage.id} stage={stage} cards={stageCards} onAdd={() => openCreate(stage.id)}>{stageCards.map((card) => <TaskCard key={card.task.id} card={card} onOpen={() => setSelected(card)} />)}</StageColumn>; })}</div><DragOverlay>{active && <div className="w-72 rotate-2"><TaskCard card={active} onOpen={() => {}} /></div>}</DragOverlay></DndContext>{showFilter && <div className="fixed inset-0 z-50 bg-slate-900/30" onClick={() => setShowFilter(false)}><aside className="absolute right-0 top-0 h-full w-full max-w-sm overflow-y-auto bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}><div className="flex items-center justify-between"><h2 className="font-bold text-slate-900">필터</h2><button onClick={() => setShowFilter(false)}><X size={18} /></button></div><FilterGroup title="사업" values={projects.map((project) => ({ id: project.id, label: project.name }))} selected={selectedProjects} onToggle={(value) => toggle(value, selectedProjects, setSelectedProjects)} /><FilterGroup title="카테고리" values={categories.map((item) => ({ id: item, label: item }))} selected={selectedCategories} onToggle={(value) => toggle(value, selectedCategories, setSelectedCategories)} /><FilterGroup title="태그" values={tags.map((item) => ({ id: item, label: `#${item}` }))} selected={selectedTags} onToggle={(value) => toggle(value, selectedTags, setSelectedTags)} /><FilterGroup title="우선순위" values={[{ id: "high", label: "높음" }, { id: "medium", label: "보통" }, { id: "low", label: "낮음" }]} selected={priorities} onToggle={(value) => toggle(value, priorities, setPriorities)} /><label className="mt-5 block text-xs font-bold text-slate-500">마감일<select value={due} onChange={(event) => setDue(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 p-2.5 text-sm"><option value="all">전체</option><option value="today">오늘까지</option><option value="week">이번 주</option><option value="overdue">기한 지남</option><option value="none">미지정</option></select></label><button onClick={() => { setSelectedProjects(projects.map((project) => project.id)); setSelectedCategories([]); setSelectedTags([]); setPriorities([]); setDue("all"); setQuery(""); }} className="mt-6 w-full rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600">필터 초기화</button></aside></div>}{createStatus && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4"><form onSubmit={create} className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-xs font-semibold text-indigo-600">NEW TASK</p><h2 className="mt-1 text-xl font-bold text-slate-900">{stages.find((stage) => stage.id === createStatus)?.name} 카드 추가</h2><p className="mt-1 text-xs text-slate-400">사업과 실제 등록 열을 지정하세요.</p></div><button type="button" onClick={() => setCreateStatus(null)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><X size={17} /></button></div><label className="mt-5 block text-xs font-bold text-slate-500">사업<select value={projectId} onChange={(event) => selectProject(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">{projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}</select></label><label className="mt-4 block text-xs font-bold text-slate-500">등록 열<select value={columnId} onChange={(event) => setColumnId(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800">{selectableColumns.map((column) => <option key={column.id} value={column.id}>{column.name}{column.integratedStatus ? ` · ${stages.find((stage) => stage.id === column.integratedStatus)?.name}` : " · 통합 제외"}</option>)}</select></label><label className="mt-4 block text-xs font-bold text-slate-500">카드 제목<input autoFocus required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" placeholder="해야 할 일을 입력하세요" /></label><div className="mt-6 flex gap-2"><button type="button" onClick={() => setCreateStatus(null)} className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-semibold text-slate-600">취소</button><button disabled={saving || !projectId || !columnId} className="flex-1 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white disabled:opacity-50">{saving ? "등록 중…" : "등록"}</button></div></form></div>}{selected && <TaskDetailModal task={selected.task} projectId={selected.project.id} members={selected.project.members.map((member) => member.user)} onClose={() => setSelected(null)} onUpdate={() => void load()} onDelete={() => { setSelected(null); void load(); }} />}</div>;
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [query, setQuery] = useState("");
+  const [showFilter, setShowFilter] = useState(false);
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [priorities, setPriorities] = useState<string[]>([]);
+  const [due, setDue] = useState("all");
+  const [selected, setSelected] = useState<Card | null>(null);
+  const [active, setActive] = useState<Card | null>(null);
+  const [createStatus, setCreateStatus] = useState<Status | null>(null);
+  const [projectId, setProjectId] = useState("");
+  const [columnId, setColumnId] = useState("");
+  const [title, setTitle] = useState("");
+  const [saving, setSaving] = useState(false);
+  const sensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 180, tolerance: 8 },
+    }),
+  );
+  const load = async () => {
+    setLoading(true);
+    try {
+      const response = await apiFetch("/api/projects");
+      if (!response.ok) throw new Error();
+      const list = (await response.json()) as Array<{ id: string }>;
+      const data = await Promise.all(
+        list.map(async ({ id }) => {
+          const detail = await apiFetch(`/api/projects/${id}`);
+          if (!detail.ok) throw new Error();
+          return detail.json() as Promise<Project>;
+        }),
+      );
+      setProjects(data);
+      setSelectedProjects(data.map((project) => project.id));
+    } catch {
+      setError("통합 칸반을 불러오지 못했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    void load();
+  }, []);
+  const categories = [
+    ...new Set(
+      projects
+        .map((project) => project.category)
+        .filter((item): item is string => !!item),
+    ),
+  ];
+  const tags = [
+    ...new Set(
+      projects.flatMap(
+        (project) =>
+          project.tags
+            ?.split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean) ?? [],
+      ),
+    ),
+  ];
+  const filteredProjects = projects.filter((project) => {
+    const haystack =
+      `${project.name} ${project.description ?? ""} ${project.category ?? ""} ${project.tags ?? ""}`.toLowerCase();
+    return (
+      selectedProjects.includes(project.id) &&
+      (!selectedCategories.length ||
+        selectedCategories.includes(project.category ?? "")) &&
+      (!selectedTags.length ||
+        selectedTags.some((tag) =>
+          project.tags
+            ?.split(",")
+            .map((item) => item.trim())
+            .includes(tag),
+        )) &&
+      (!query.trim() || haystack.includes(query.toLowerCase()))
+    );
+  });
+  const cards = useMemo(
+    () =>
+      filteredProjects.flatMap((project) =>
+        project.columns
+          .filter((column) => column.integratedStatus)
+          .flatMap((column) =>
+            column.tasks
+              .filter((task) => {
+                const dueDate = task.dueDate ? new Date(task.dueDate) : null;
+                const dueMatches =
+                  due === "all" ||
+                  (due === "none"
+                    ? !dueDate
+                    : !!dueDate &&
+                      (due === "overdue"
+                        ? dueDate < new Date()
+                        : dueDate <=
+                          new Date(
+                            Date.now() +
+                              (due === "today" ? 86_400_000 : 604_800_000),
+                          )));
+                return (
+                  (!priorities.length || priorities.includes(task.priority)) &&
+                  dueMatches &&
+                  (!query.trim() ||
+                    `${task.title} ${column.name}`
+                      .toLowerCase()
+                      .includes(query.toLowerCase()))
+                );
+              })
+              .map((task) => ({ task, project, column })),
+          ),
+      ),
+    [filteredProjects, priorities, due, query],
+  );
+  const cardsFor = (status: Status) =>
+    cards.filter((card) => card.column.integratedStatus === status);
+  const toggle = (
+    value: string,
+    values: string[],
+    setValues: (value: string[]) => void,
+  ) =>
+    setValues(
+      values.includes(value)
+        ? values.filter((item) => item !== value)
+        : [...values, value],
+    );
+  const selectedProject = projects.find((project) => project.id === projectId);
+  const selectableColumns = selectedProject?.columns ?? [];
+  const dragEnd = async ({ active: dragged, over }: DragEndEvent) => {
+    setActive(null);
+    if (!over) return;
+    const card = cards.find((item) => item.task.id === dragged.id);
+    const status = String(over.id) as Status;
+    if (!card || !stages.some((stage) => stage.id === status)) return;
+    const target = card.project.columns.find(
+      (column) =>
+        column.integratedStatus === status && column.isIntegratedPrimary,
+    );
+    if (!target) {
+      setError(
+        `${card.project.name} 사업의 '${stages.find((stage) => stage.id === status)?.name}' 대표 열을 먼저 설정하세요.`,
+      );
+      return;
+    }
+    if (target.id === card.column.id) return;
+    try {
+      const response = await apiFetch(
+        `/api/projects/${card.project.id}/tasks/${card.task.id}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            columnId: target.id,
+            order: target.tasks.length,
+          }),
+        },
+      );
+      if (!response.ok) throw new Error();
+      await load();
+    } catch {
+      setError("카드 이동을 저장하지 못했습니다.");
+    }
+  };
+  const openCreate = (status: Status) => {
+    const first = filteredProjects.find((project) =>
+      project.columns.some(
+        (column) =>
+          column.integratedStatus === status && column.isIntegratedPrimary,
+      ),
+    );
+    setProjectId(first?.id ?? "");
+    setTitle("");
+    setCreateStatus(status);
+  };
+  const selectProject = (id: string) => {
+    const project = projects.find((item) => item.id === id);
+    const column =
+      project?.columns.find(
+        (item) =>
+          item.integratedStatus === createStatus && item.isIntegratedPrimary,
+      ) ?? project?.columns[0];
+    setProjectId(id);
+    setColumnId(column?.id ?? "");
+  };
+  const create = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const project = projects.find((item) => item.id === projectId);
+    const column = project?.columns.find(
+      (item) =>
+        item.integratedStatus === createStatus && item.isIntegratedPrimary,
+    );
+    if (!project || !column || !title.trim()) return;
+    setSaving(true);
+    try {
+      const response = await apiFetch(`/api/projects/${project.id}/tasks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title.trim(), columnId: column.id }),
+      });
+      if (!response.ok) throw new Error();
+      setCreateStatus(null);
+      await load();
+    } catch {
+      setError("카드를 등록하지 못했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const deleteSelectedTask = async () => {
+    if (!selected) return false;
+    try {
+      const response = await apiFetch(
+        `/api/projects/${selected.project.id}/tasks/${selected.task.id}`,
+        { method: "DELETE" },
+        { showGlobalError: false },
+      );
+      if (!response.ok) throw new Error("Integrated task delete request failed");
+      setSelected(null);
+      await load();
+      return true;
+    } catch {
+      setError("카드를 삭제하지 못했습니다.");
+      return false;
+    }
+  };
+  if (loading)
+    return (
+      <div className="flex h-full items-center justify-center text-sm text-slate-400">
+        통합 칸반을 준비하고 있습니다.
+      </div>
+    );
+  return (
+    <div className="flex h-full flex-col overflow-hidden bg-slate-50 p-4 md:p-6">
+      <header className="mx-auto w-full max-w-[1800px] pb-4">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-xs font-semibold text-indigo-600">
+              <LayoutDashboard size={15} />
+              ALL PROJECTS
+            </div>
+            <h1 className="mt-1 text-2xl font-bold text-slate-900">
+              통합 칸반
+            </h1>
+            <p className="mt-1 text-sm text-slate-500">
+              사업별 워크플로를 세 개의 공통 상태로 확인합니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowFilter(true)}
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm"
+          >
+            <SlidersHorizontal size={16} />
+            필터
+          </button>
+        </div>
+        <div className="relative mt-4 max-w-xl">
+          <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="사업명, 소개, 카테고리, 태그, 열 또는 카드 검색"
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+          />
+        </div>
+      </header>
+      {error && (
+        <div className="mx-auto mb-3 flex w-full max-w-[1800px] items-center gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-700">
+          <CircleAlert size={16} />
+          {error}
+          <button onClick={() => setError("")} className="ml-auto">
+            <X size={15} />
+          </button>
+        </div>
+      )}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={({ active: item }) =>
+          setActive(cards.find((card) => card.task.id === item.id) ?? null)
+        }
+        onDragEnd={dragEnd}
+      >
+        <div className="mx-auto flex min-h-0 w-full max-w-[1800px] flex-1 gap-3 overflow-x-auto pb-2">
+          {stages.map((stage) => {
+            const stageCards = cardsFor(stage.id);
+            return (
+              <StageColumn
+                key={stage.id}
+                stage={stage}
+                cards={stageCards}
+                onAdd={() => openCreate(stage.id)}
+              >
+                {stageCards.map((card) => (
+                  <TaskCard
+                    key={card.task.id}
+                    card={card}
+                    onOpen={() => setSelected(card)}
+                  />
+                ))}
+              </StageColumn>
+            );
+          })}
+        </div>
+        <DragOverlay>
+          {active && (
+            <div className="w-72 rotate-2">
+              <TaskCard card={active} onOpen={() => {}} />
+            </div>
+          )}
+        </DragOverlay>
+      </DndContext>
+      {showFilter && (
+        <div
+          className="fixed inset-0 z-50 bg-slate-900/30"
+          onClick={() => setShowFilter(false)}
+        >
+          <aside
+            className="absolute right-0 top-0 h-full w-full max-w-sm overflow-y-auto bg-white p-5 shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold text-slate-900">필터</h2>
+              <button onClick={() => setShowFilter(false)}>
+                <X size={18} />
+              </button>
+            </div>
+            <FilterGroup
+              title="사업"
+              values={projects.map((project) => ({
+                id: project.id,
+                label: project.name,
+              }))}
+              selected={selectedProjects}
+              onToggle={(value) =>
+                toggle(value, selectedProjects, setSelectedProjects)
+              }
+            />
+            <FilterGroup
+              title="카테고리"
+              values={categories.map((item) => ({ id: item, label: item }))}
+              selected={selectedCategories}
+              onToggle={(value) =>
+                toggle(value, selectedCategories, setSelectedCategories)
+              }
+            />
+            <FilterGroup
+              title="태그"
+              values={tags.map((item) => ({ id: item, label: `#${item}` }))}
+              selected={selectedTags}
+              onToggle={(value) => toggle(value, selectedTags, setSelectedTags)}
+            />
+            <FilterGroup
+              title="우선순위"
+              values={[
+                { id: "high", label: "높음" },
+                { id: "medium", label: "보통" },
+                { id: "low", label: "낮음" },
+              ]}
+              selected={priorities}
+              onToggle={(value) => toggle(value, priorities, setPriorities)}
+            />
+            <label className="mt-5 block text-xs font-bold text-slate-500">
+              마감일
+              <select
+                value={due}
+                onChange={(event) => setDue(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 p-2.5 text-sm"
+              >
+                <option value="all">전체</option>
+                <option value="today">오늘까지</option>
+                <option value="week">이번 주</option>
+                <option value="overdue">기한 지남</option>
+                <option value="none">미지정</option>
+              </select>
+            </label>
+            <button
+              onClick={() => {
+                setSelectedProjects(projects.map((project) => project.id));
+                setSelectedCategories([]);
+                setSelectedTags([]);
+                setPriorities([]);
+                setDue("all");
+                setQuery("");
+              }}
+              className="mt-6 w-full rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600"
+            >
+              필터 초기화
+            </button>
+          </aside>
+        </div>
+      )}
+      {createStatus && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+          <form
+            onSubmit={create}
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-xs font-semibold text-indigo-600">
+                  NEW TASK
+                </p>
+                <h2 className="mt-1 text-xl font-bold text-slate-900">
+                  {stages.find((stage) => stage.id === createStatus)?.name} 카드
+                  추가
+                </h2>
+                <p className="mt-1 text-xs text-slate-400">
+                  사업과 실제 등록 열을 지정하세요.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setCreateStatus(null)}
+                className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <label className="mt-5 block text-xs font-bold text-slate-500">
+              사업
+              <select
+                value={projectId}
+                onChange={(event) => selectProject(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800"
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-4 block text-xs font-bold text-slate-500">
+              등록 열
+              <select
+                value={columnId}
+                onChange={(event) => setColumnId(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800"
+              >
+                {selectableColumns.map((column) => (
+                  <option key={column.id} value={column.id}>
+                    {column.name}
+                    {column.integratedStatus
+                      ? ` · ${stages.find((stage) => stage.id === column.integratedStatus)?.name}`
+                      : " · 통합 제외"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="mt-4 block text-xs font-bold text-slate-500">
+              카드 제목
+              <input
+                autoFocus
+                required
+                maxLength={200}
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200"
+                placeholder="해야 할 일을 입력하세요"
+              />
+            </label>
+            <div className="mt-6 flex gap-2">
+              <button
+                type="button"
+                onClick={() => setCreateStatus(null)}
+                className="flex-1 rounded-xl bg-slate-100 py-3 text-sm font-semibold text-slate-600"
+              >
+                취소
+              </button>
+              <button
+                disabled={saving || !projectId || !columnId}
+                className="flex-1 rounded-xl bg-indigo-600 py-3 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {saving ? "등록 중…" : "등록"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {selected && (
+        <TaskDetailModal
+          task={selected.task}
+          projectId={selected.project.id}
+          members={selected.project.members.map((member) => member.user)}
+          onClose={() => setSelected(null)}
+          onUpdate={() => void load()}
+          onDelete={deleteSelectedTask}
+        />
+      )}
+    </div>
+  );
 }
-function FilterGroup({ title, values, selected, onToggle }: { title: string; values: Array<{ id: string; label: string }>; selected: string[]; onToggle: (value: string) => void }) { return <section className="mt-5"><h3 className="text-xs font-bold text-slate-500">{title}</h3><div className="mt-2 flex flex-wrap gap-2">{values.map((value) => <button key={value.id} type="button" onClick={() => onToggle(value.id)} className={`rounded-full px-3 py-1.5 text-xs font-semibold ${selected.includes(value.id) ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"}`}>{value.label}</button>)}</div></section>; }
+function FilterGroup({
+  title,
+  values,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  values: Array<{ id: string; label: string }>;
+  selected: string[];
+  onToggle: (value: string) => void;
+}) {
+  return (
+    <section className="mt-5">
+      <h3 className="text-xs font-bold text-slate-500">{title}</h3>
+      <div className="mt-2 flex flex-wrap gap-2">
+        {values.map((value) => (
+          <button
+            key={value.id}
+            type="button"
+            onClick={() => onToggle(value.id)}
+            className={`rounded-full px-3 py-1.5 text-xs font-semibold ${selected.includes(value.id) ? "bg-indigo-600 text-white" : "bg-slate-100 text-slate-600"}`}
+          >
+            {value.label}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}

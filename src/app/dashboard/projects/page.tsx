@@ -19,16 +19,27 @@ interface Project {
 export default function ProjectsPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    apiFetch("/api/projects")
-      .then(async (response) => {
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await apiFetch("/api/projects");
+        if (!response.ok) throw new Error("Projects request failed");
         const data = await response.json();
-        setProjects(Array.isArray(data) ? data : []);
-      })
-      .catch(() => setProjects([]))
-      .finally(() => setLoading(false));
-  }, []);
+        if (!cancelled) setProjects(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) setError("사업 목록을 불러오지 못했습니다.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [reloadKey]);
 
   return (
     <div className="flex h-full flex-col">
@@ -50,6 +61,11 @@ export default function ProjectsPage() {
                 </div>
               </div>
             ))}
+          </div>
+        ) : error ? (
+          <div className="flex h-64 flex-col items-center justify-center text-center">
+            <p className="font-medium text-rose-700">{error}</p>
+            <button type="button" onClick={() => setReloadKey((current) => current + 1)} className="mt-3 font-medium text-rose-700 underline hover:text-rose-900">다시 시도</button>
           </div>
         ) : projects.length === 0 ? (
           <div className="flex h-64 flex-col items-center justify-center text-center">

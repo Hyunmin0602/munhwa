@@ -27,7 +27,7 @@ import {
   ChevronLeft, ChevronRight, Pencil, Check, RotateCw, AlertCircle, X as XIcon,
 } from "lucide-react";
 import TaskDetailModal from "./TaskDetailModal";
-import { apiFetch } from "@/lib/client-fetch";
+import { apiFetch, showToast } from "@/lib/client-fetch";
 import { Skeleton } from "./ui/Skeleton";
 
 interface Task {
@@ -512,11 +512,15 @@ export default function KanbanBoard({ projectId }: Props) {
 
   const deleteTask = async (taskId: string, columnId: string) => {
     try {
-      await apiFetch(`/api/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/projects/${projectId}/tasks/${taskId}`, { method: "DELETE" }, { showGlobalError: false });
+      if (!response.ok) throw new Error("Task delete request failed");
     } catch {
+      showToast("카드를 삭제하지 못했습니다. 다시 시도해주세요.");
+      return false;
     }
     setColumns((prev) => prev.map((c) => c.id === columnId ? { ...c, tasks: c.tasks.filter((t) => t.id !== taskId) } : c));
     if (selectedTask?.task.id === taskId) setSelectedTask(null);
+    return true;
   };
 
   const moveTask = async (taskId: string, fromColId: string, direction: -1 | 1) => {
@@ -750,7 +754,7 @@ export default function KanbanBoard({ projectId }: Props) {
             setColumns((prev) => prev.map((c) => c.id === selectedTask.colId ? { ...c, tasks: c.tasks.map((t) => t.id === updated.id ? updated : t) } : c));
             setSelectedTask((prev) => prev ? { ...prev, task: updated } : null);
           }}
-          onDelete={() => { deleteTask(selectedTask.task.id, selectedTask.colId); setSelectedTask(null); }}
+          onDelete={() => deleteTask(selectedTask.task.id, selectedTask.colId)}
         />
       )}
     </>

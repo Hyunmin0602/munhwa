@@ -8,19 +8,11 @@ const globalForPrisma = globalThis as unknown as {
 function createPrisma() {
   const url = process.env.TURSO_DATABASE_URL ?? process.env.DATABASE_URL;
   const authToken = process.env.TURSO_AUTH_TOKEN ?? process.env.LIBSQL_AUTH_TOKEN;
-  const isProductionBuild = process.env.NEXT_PHASE === "phase-production-build";
 
   if (!url) {
-    if (process.env.NODE_ENV === "production" && !isProductionBuild) {
-      throw new Error(
-        "Missing database URL. Set DATABASE_URL or TURSO_DATABASE_URL so the app writes to the shared database."
-      );
-    }
-
-    const localAdapter = new PrismaLibSql({ url: "file:prisma/dev.db" });
-    const client = new PrismaClient({ adapter: localAdapter });
-    client.$connect().catch(() => {});
-    return client;
+    throw new Error(
+      "Missing database URL. Set DATABASE_URL or TURSO_DATABASE_URL so the app writes to the shared database."
+    );
   }
 
   const adapter = new PrismaLibSql({ url, authToken });

@@ -29,18 +29,27 @@ function VisibilityBadge({ visibility }: { visibility: Meeting["visibility"] }) 
 export default function MeetingsPage() {
   const [meetings, setMeetings] = useState<Meeting[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      setLoading(true);
+      setError(null);
       try {
         const response = await apiFetch("/api/meetings");
+        if (!response.ok) throw new Error("Meetings request failed");
         const data = await response.json();
-        setMeetings(Array.isArray(data) ? data : []);
+        if (!cancelled) setMeetings(Array.isArray(data) ? data : []);
+      } catch {
+        if (!cancelled) setError("회의록을 불러오지 못했습니다.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, []);
+    return () => { cancelled = true; };
+  }, [reloadKey]);
 
   return (
     <div className="h-full flex flex-col">
@@ -52,6 +61,11 @@ export default function MeetingsPage() {
         {loading ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, index) => <Skeleton key={index} className="h-20 w-full rounded-xl" />)}
+          </div>
+        ) : error ? (
+          <div className="flex h-64 flex-col items-center justify-center text-center">
+            <p className="font-medium text-rose-700">{error}</p>
+            <button type="button" onClick={() => setReloadKey((current) => current + 1)} className="mt-3 font-medium text-rose-700 underline hover:text-rose-900">다시 시도</button>
           </div>
         ) : meetings.length === 0 ? (
           <div className="flex h-64 flex-col items-center justify-center text-center">

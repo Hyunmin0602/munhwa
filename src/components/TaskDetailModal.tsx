@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { X, Trash2, Calendar, User, Flag, AlignLeft } from "lucide-react";
-import { apiFetch } from "@/lib/client-fetch";
+import { apiFetch, getModalExceptionMessage, getModalRequestErrorMessage } from "@/lib/client-fetch";
+import { ModalErrorAlert } from "@/components/ui/ModalErrorAlert";
 
 interface Task {
   id: string;
@@ -24,7 +25,7 @@ interface Props {
   members: Member[];
   onClose: () => void;
   onUpdate: (task: Task) => void;
-  onDelete: () => void;
+  onDelete: () => Promise<boolean>;
 }
 
 const PRIORITIES = [
@@ -42,6 +43,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
   );
   const [assigneeId, setAssigneeId] = useState(task.assignee?.id ?? "");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   const [dirty, setDirty] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -52,6 +54,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
   const save = useCallback(async () => {
     if (!title.trim()) return false;
     setSaving(true);
+    setError("");
     try {
       const res = await apiFetch(`/api/projects/${projectId}/tasks/${task.id}`, {
         method: "PATCH",
@@ -64,14 +67,16 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
           assigneeId: assigneeId || null,
           columnId: task.columnId,
         }),
-      });
+      }, { showGlobalError: false });
       if (res.ok) {
         const updated = await res.json();
         onUpdate(updated);
         setDirty(false);
         return true;
       }
-    } catch {
+      setError(await getModalRequestErrorMessage(res, "카드 저장"));
+    } catch (requestError) {
+      setError(getModalExceptionMessage(requestError, "카드 저장"));
     } finally { setSaving(false); }
     return false;
   }, [assigneeId, description, dueDate, onUpdate, priority, projectId, task.columnId, task.id, title]);
@@ -88,11 +93,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
 
   const handleDelete = async () => {
     if (!confirm("이 카드를 삭제하시겠습니까?")) return;
-    try {
-      await apiFetch(`/api/projects/${projectId}/tasks/${task.id}`, { method: "DELETE" });
-    } catch {
-    }
-    onDelete();
+    if (await onDelete()) onClose();
   };
 
   // close on backdrop click
@@ -141,6 +142,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
 
         {/* Body */}
         <div className="px-5 py-4 space-y-4 overflow-y-auto">
+          {error && <ModalErrorAlert message={error} />}
           {/* Title */}
           <input
             ref={titleRef}
