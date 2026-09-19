@@ -30,6 +30,7 @@ interface ProjectFilter {
   name: string;
   color: string;
   status: string;
+  tags?: string | null;
 }
 interface IntegratedSummary {
   counts: Record<ItemType, number>;
@@ -65,6 +66,8 @@ export default function IntegratedPage() {
   const [projects, setProjects] = useState<ProjectFilter[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(() => searchParams.get("projectIds")?.split(",").filter(Boolean) ?? []);
   const [draftProjectIds, setDraftProjectIds] = useState<string[]>([]);
+  const [selectedTag, setSelectedTag] = useState("");
+  const [draftTag, setDraftTag] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -115,8 +118,11 @@ export default function IntegratedPage() {
     syncUrl(type, nextRange, selectedProjectIds);
   };
 
+  const availableTags = [...new Set(projects.flatMap((project) => project.tags?.split(",").map((tag) => tag.trim()).filter(Boolean) ?? []))];
+
   const openFilters = () => {
     setDraftProjectIds(selectedProjectIds);
+    setDraftTag(selectedTag);
     setShowFilters(true);
   };
 
@@ -124,10 +130,22 @@ export default function IntegratedPage() {
     setDraftProjectIds((current) => current.includes(projectId) ? current.filter((id) => id !== projectId) : [...current, projectId]);
   };
 
+  const resetDraftFilters = () => {
+    setDraftProjectIds([]);
+    setDraftTag("");
+  };
+
+  const changeDraftTag = (tag: string) => {
+    setDraftTag(tag);
+    const matches = projects.filter((project) => project.tags?.split(",").map((item) => item.trim()).includes(tag)).map((project) => project.id);
+    if (matches.length) setDraftProjectIds(matches);
+  };
+
   const applyProjectFilters = () => {
     setLoading(true);
     setError(null);
     setSelectedProjectIds(draftProjectIds);
+    setSelectedTag(draftTag);
     syncUrl(type, range, draftProjectIds);
     setShowFilters(false);
   };
@@ -194,7 +212,11 @@ export default function IntegratedPage() {
         onOpenFilters={openFilters}
         onCloseFilters={() => setShowFilters(false)}
         onToggleProject={toggleDraftProject}
-        onResetProjectFilters={() => setDraftProjectIds([])}
+        onResetProjectFilters={resetDraftFilters}
+        selectedTag={selectedTag}
+        availableTags={availableTags}
+        draftTag={draftTag}
+        onTagChange={changeDraftTag}
         onApplyProjectFilters={applyProjectFilters}
         onRetry={retry}
         onLoadMore={loadMore}
@@ -216,7 +238,7 @@ export default function IntegratedPage() {
         showFilters={showFilters}
         draftProjectIds={draftProjectIds}
         onToggleProject={toggleDraftProject}
-        onResetProjectFilters={() => setDraftProjectIds([])}
+        onResetProjectFilters={resetDraftFilters}
         onApplyProjectFilters={applyProjectFilters}
         onCloseFilters={() => setShowFilters(false)}
       />

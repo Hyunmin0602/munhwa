@@ -106,7 +106,7 @@ export async function GET(request: NextRequest) {
         ...(requestedProjectIds.length ? { id: { in: requestedProjectIds } } : {}),
         ...(status.length ? { status: { in: status } } : {}),
       },
-      select: { id: true, name: true, color: true, status: true },
+      select: { id: true, name: true, color: true, status: true, tags: true },
       orderBy: { updatedAt: "desc" },
     })
   );
