@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { canManageCultureSportsContent } from "@/lib/server-utils";
+import { canViewAllProjects } from "@/lib/server-utils";
 
 const ITEM_TYPES = ["task", "event", "archive", "meeting"] as const;
 type ItemType = (typeof ITEM_TYPES)[number];
@@ -87,12 +87,11 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const userId = session.user.id;
-  const canViewAll = await canManageCultureSportsContent(userId);
+  const canViewAll = await canViewAllProjects(userId);
   const requestedType = searchParams.get("type") ?? searchParams.get("types");
   const types = parseTypes(requestedType);
   const isOverview = !requestedType || requestedType === "all";
   const requestedProjectIds = searchParams.get("projectIds")?.split(",").filter(Boolean) ?? [];
-  const requestedTag = searchParams.get("tag")?.trim() ?? "";
   const status = searchParams.get("status")?.split(",").filter(Boolean) ?? [];
   const range = searchParams.get("range");
   const dayRange = getDayRange(range);
@@ -100,28 +99,23 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 20, 1), 50);
   const cursor = parseCursor(searchParams.get("cursor"));
 
-  const projectRecords = await withDbRetry(() =>
+  const projects = await withDbRetry(() =>
     prisma.project.findMany({
       where: {
         ...(canViewAll ? {} : { members: { some: { userId } } }),
         ...(requestedProjectIds.length ? { id: { in: requestedProjectIds } } : {}),
         ...(status.length ? { status: { in: status } } : {}),
       },
-      select: { id: true, name: true, color: true, status: true, tags: true },
+      select: { id: true, name: true, color: true, status: true },
       orderBy: { updatedAt: "desc" },
     })
   );
-  const availableTags = [...new Set(projectRecords.flatMap((project) => project.tags?.split(",").map((tag) => tag.trim()).filter(Boolean) ?? []))].sort((left, right) => left.localeCompare(right, "ko"));
-  const projects = requestedTag
-    ? projectRecords.filter((project) => project.tags?.split(",").map((tag) => tag.trim()).includes(requestedTag))
-    : projectRecords;
-  const projectFilters = projects.map(({ tags: _tags, ...project }) => project);
   const projectIds = projects.map((project) => project.id);
   if (!projectIds.length) {
     return NextResponse.json({
       items: [],
       nextCursor: null,
-      filters: { projects: projectFilters, tags: availableTags },
+      filters: { projects },
       summary: {
         counts: { task: 0, event: 0, archive: 0, meeting: 0 },
         kanban: [],
@@ -344,7 +338,7 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     items: page,
     nextCursor,
-    filters: { projects: projectFilters, tags: availableTags },
+    filters: { projects },
     summary: {
       counts: { task: taskCount, event: eventCount, archive: archiveCount, meeting: meetingCount },
       kanban,

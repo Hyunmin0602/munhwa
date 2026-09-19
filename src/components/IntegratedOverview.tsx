@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dayjs from "dayjs";
-import { BookOpen, CalendarDays, CheckSquare, ChevronRight, FileText, RotateCw, X } from "lucide-react";
+import { BookOpen, CalendarDays, CheckSquare, ChevronRight, FileText, RotateCw, SlidersHorizontal, X } from "lucide-react";
 
 type ItemType = "task" | "event" | "archive" | "meeting";
 
@@ -50,10 +50,6 @@ interface Props {
   draftProjectIds: string[];
   onToggleProject: (projectId: string) => void;
   onResetProjectFilters: () => void;
-  selectedTag: string;
-  availableTags: string[];
-  draftTag: string;
-  onTagChange: (tag: string) => void;
   onApplyProjectFilters: () => void;
   onCloseFilters: () => void;
 }
@@ -118,10 +114,6 @@ export default function IntegratedOverview({
   draftProjectIds,
   onToggleProject,
   onResetProjectFilters,
-  selectedTag,
-  availableTags,
-  draftTag,
-  onTagChange,
   onApplyProjectFilters,
   onCloseFilters,
 }: Props) {
@@ -132,6 +124,7 @@ export default function IntegratedOverview({
       <header className="border-b border-gray-100 bg-white px-4 py-4 md:px-6 lg:px-8">
         <div className="mx-auto flex max-w-6xl items-start justify-between gap-3">
           <div>
+            <p className="mb-1 text-xs text-gray-400">전체 사업의 업무 현황</p>
             <h1 className="text-xl font-bold text-gray-900 md:text-2xl">통합 화면</h1>
           </div>
           <div className="flex flex-shrink-0 items-center gap-1">
@@ -143,7 +136,7 @@ export default function IntegratedOverview({
               title="사업 필터"
               className="relative flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
             >
-              필터
+              <SlidersHorizontal size={18} />
               {selectedProjectCount > 0 && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-indigo-600" />}
             </button>
           </div>
@@ -291,17 +284,11 @@ export default function IntegratedOverview({
             <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
               <div>
                 <p className="text-sm font-semibold text-gray-900">사업 필터</p>
-                <p className="mt-0.5 text-xs text-gray-400">선택하지 않으면 모든 사업을 표시합니다.</p>
+                <p className="mt-0.5 text-xs text-gray-400">선택하지 않으면 전체 사업을 표시합니다.</p>
               </div>
               <button type="button" onClick={onCloseFilters} aria-label="필터 닫기" title="필터 닫기" className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700"><X size={18} /></button>
             </div>
             <div className="p-3">
-              <div className="border-b border-gray-100 p-3">
-                <label htmlFor="integrated-tag-search" className="mb-1 block text-xs font-medium text-gray-500">태그로 사업 검색</label>
-                <input id="integrated-tag-search" list="integrated-tags" value={draftTag} onChange={(event) => onTagChange(event.target.value)} placeholder="태그를 선택하거나 입력하세요" className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" />
-                <datalist id="integrated-tags">{availableTags.map((tag) => <option key={tag} value={tag} />)}</datalist>
-                {selectedTag && <p className="mt-1 text-xs text-indigo-600">현재 태그: {selectedTag}</p>}
-              </div>
               {projects.map((project) => {
                 const selected = draftProjectIds.includes(project.id);
                 return (
