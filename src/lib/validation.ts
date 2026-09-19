@@ -56,13 +56,8 @@ export function optionalText(value: unknown, label: string, maxLength: number) {
 
 export function projectTags(value: unknown) {
   if (value === undefined || value === null) return null;
-  if (!Array.isArray(value)) invalid("태그 형식이 올바르지 않습니다.");
-  const candidates = value
-    .filter((tag): tag is string => typeof tag === "string")
-    .map((tag) => tag.normalize("NFC").trim())
-    .filter(Boolean);
-  if (candidates.length > 10) invalid("태그는 최대 10개까지 입력할 수 있습니다.");
-  const tags = [...new Set(candidates.map((tag) => requiredText(tag, "태그", 30)))];
+  if (!Array.isArray(value) || value.length > 10) invalid("태그는 최대 10개까지 입력할 수 있습니다.");
+  const tags = [...new Set(value.map((tag) => requiredText(tag, "태그", 30)))];
   return tags.join(",") || null;
 }
 

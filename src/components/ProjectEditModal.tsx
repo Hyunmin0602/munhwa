@@ -37,8 +37,6 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? "");
   const [category, setCategory] = useState(project.category ?? "");
-  const [categories, setCategories] = useState<string[]>(project.category ? [project.category] : []);
-  const [addingCategory, setAddingCategory] = useState(false);
   const [tagInput, setTagInput] = useState(project.tags ?? "");
   const [color, setColor] = useState(project.color);
   const [loading, setLoading] = useState(false);
@@ -51,19 +49,6 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
   const [searchingUsers, setSearchingUsers] = useState(false);
   const [hasSearchedUsers, setHasSearchedUsers] = useState(false);
   const [inviteLoading, setInviteLoading] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    apiFetch("/api/projects")
-      .then((res) => (res.ok ? res.json() : []))
-      .then((data: Array<{ category?: string | null }>) => {
-        if (!active) return;
-        const distinct = [...new Set([project.category, ...data.map((p) => p.category)].filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b, "ko"));
-        setCategories(distinct);
-      })
-      .catch(() => {});
-    return () => { active = false; };
-  }, [project.category]);
 
   useEffect(() => {
     let mounted = true;
@@ -93,14 +78,14 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
     setError("");
 
     try {
-      const res = await apiFetch(`/api/projects/${project.id}`, {
+      const res = await fetch(`/api/projects/${project.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: nextName,
           description: description.trim() || null,
           category: category.trim() || null,
-          tags: tagInput.split(",").map((tag) => tag.trim()).filter(Boolean),
+          tags: tagInput.split(","),
           color,
         }),
       });
@@ -235,39 +220,14 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
-            {addingCategory ? (
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={category}
-                  onChange={(e) => setCategory(e.target.value)}
-                  maxLength={50}
-                  autoFocus
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-                  placeholder="새 카테고리 이름"
-                />
-                <button
-                  type="button"
-                  onClick={() => { setAddingCategory(false); setCategory(project.category ?? ""); }}
-                  className="flex-shrink-0 px-3 rounded-lg border border-gray-200 text-sm text-gray-600 hover:bg-gray-50"
-                >
-                  취소
-                </button>
-              </div>
-            ) : (
-              <select
-                value={category}
-                onChange={(e) => {
-                  if (e.target.value === "__new__") { setAddingCategory(true); setCategory(""); }
-                  else setCategory(e.target.value);
-                }}
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm bg-white"
-              >
-                <option value="">선택 안 함</option>
-                {categories.map((cat) => <option key={cat} value={cat}>{cat}</option>)}
-                <option value="__new__">+ 새 카테고리 추가</option>
-              </select>
-            )}
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              maxLength={50}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              placeholder="예: 행사, 교육, 운영"
+            />
           </div>
           <div>
             <label className="mb-1 flex items-center gap-1.5 text-sm font-medium text-gray-700"><Tag size={14} />태그</label>

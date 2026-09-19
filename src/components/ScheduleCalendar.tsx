@@ -35,6 +35,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   });
   const [saving, setSaving] = useState(false);
   const [selectedDay, setSelectedDay] = useState<dayjs.Dayjs | null>(null);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; date: dayjs.Dayjs } | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -111,7 +112,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div className="h-full">
+    <div className="h-full" onClick={() => setContextMenu(null)}>
       <div className="flex h-full flex-col md:hidden">
         <div className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
           <button type="button" onClick={() => selectMobileDay(mobileDay.subtract(1, "day"))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="이전 날짜"><ChevronLeft size={18} /></button>
@@ -216,6 +217,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                 <div
                   key={idx}
                   onClick={() => day && setSelectedDay(day)}
+                  onContextMenu={(event) => { if (!day) return; event.preventDefault(); setSelectedDay(day); setContextMenu({ x: event.clientX, y: event.clientY, date: day }); }}
                   className={`border-r border-b border-gray-100 p-1.5 cursor-pointer transition-colors
                     ${!day ? "bg-gray-50/50" : isSelected ? "bg-indigo-50" : "hover:bg-gray-50"}
                     ${idx % 7 === 6 ? "border-r-0" : ""}
@@ -435,6 +437,11 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
               </div>
             </form>
           </div>
+        </div>
+      )}
+      {contextMenu && (
+        <div className="fixed z-50 rounded-xl border border-gray-200 bg-white p-1 shadow-xl" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>
+          <button type="button" onClick={() => { openModal(contextMenu.date); setContextMenu(null); }} className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-gray-700 hover:bg-indigo-50 hover:text-indigo-700"><Plus size={15} />새 일정</button>
         </div>
       )}
     </div>
