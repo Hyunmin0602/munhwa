@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useSession } from "next-auth/react";
 import {
   DndContext,
   DragEndEvent,
@@ -24,7 +25,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   Plus, Trash2, Calendar, User, GripVertical,
-  ChevronLeft, ChevronRight, Pencil, Check, RotateCw, AlertCircle, X as XIcon,
+  ChevronLeft, ChevronRight, Pencil, RotateCw, AlertCircle, X as XIcon,
 } from "lucide-react";
 import TaskDetailModal from "./TaskDetailModal";
 import { apiFetch, showToast } from "@/lib/client-fetch";
@@ -209,14 +210,17 @@ function AddTaskInline({ onAdd, onAddDetails, onCancel }: {
   );
 }
 
-function ColumnHeader({ column, projectId, visibleTaskCount, accentClass, dragHandleProps, onRename, onMapping, onDelete }: {
-  column: Column; projectId: string; visibleTaskCount: number; accentClass: string; dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>; onRename: (name: string) => void; onMapping: (column: Column) => void; onDelete: () => void;
+function ColumnHeader({ column, projectId, visibleTaskCount, accentClass, dragHandleProps, isOwner, onRename, onMapping, onDelete }: {
+  column: Column; projectId: string; visibleTaskCount: number; accentClass: string; dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>; isOwner: boolean; onRename: (name: string) => void; onMapping: (column: Column) => void; onDelete: () => void;
 }) {
   const [showSettings, setShowSettings] = useState(false);
   const [settingsName, setSettingsName] = useState(column.name);
   const [settingsStatus, setSettingsStatus] = useState(column.integratedStatus ?? "");
   const [settingsError, setSettingsError] = useState("");
   const [savingSettings, setSavingSettings] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteName, setDeleteName] = useState("");
+  const [deleteError, setDeleteError] = useState("");
 
   const openSettings = () => {
     setSettingsName(column.name);
@@ -226,12 +230,24 @@ function ColumnHeader({ column, projectId, visibleTaskCount, accentClass, dragHa
   };
 
   const handleDelete = async () => {
-    if (column.tasks.length > 0 && !confirm(`'${column.name}' 컬럼과 카드 ${column.tasks.length}개를 삭제하시겠습니까?`)) return;
-    try {
-      await apiFetch(`/api/projects/${projectId}/columns/${column.id}`, { method: "DELETE" });
-    } catch {
+    setDeleteName("");
+    setDeleteError("");
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = async () => {
+    if (deleteName.trim() !== column.name) {
+      setDeleteError(`삭제하려면 '${column.name}'을(를) 정확히 입력하세요.`);
+      return;
     }
-    onDelete();
+    try {
+      const response = await apiFetch(`/api/projects/${projectId}/columns/${column.id}`, { method: "DELETE" }, { showGlobalError: false });
+      if (!response.ok) throw new Error("Column delete request failed");
+      setShowDeleteConfirm(false);
+      onDelete();
+    } catch {
+      setDeleteError("열을 삭제하지 못했습니다. 다시 시도하세요.");
+    }
   };
 
   const saveSettings = async () => {
@@ -279,14 +295,16 @@ function ColumnHeader({ column, projectId, visibleTaskCount, accentClass, dragHa
       </div>
       <div className="flex items-center gap-1 flex-shrink-0 ml-2">
         <>
-          <button onClick={openSettings} className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-indigo-600 hover:bg-indigo-50 transition-colors opacity-0 group-hover/hdr:opacity-100" title="열 설정"><Pencil size={11} /></button>
-          <button onClick={handleDelete} className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-300 hover:text-rose-500 hover:bg-rose-50 transition-colors opacity-0 group-hover/hdr:opacity-100"><Trash2 size={11} /></button>
+          <button onClick={openSettings} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors md:opacity-0 md:group-hover/hdr:opacity-100" title="열 설정"><Pencil size={13} /></button>
+          {isOwner && (
+            <button onClick={handleDelete} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition-colors" title="컬럼 삭제"><Trash2 size={13} /></button>
+          )}
         </>
       </div>
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowSettings(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold text-indigo-600">KANBAN COLUMN</p><h3 className="mt-1 text-lg font-bold text-slate-900">{column.name} 설정</h3></div><button type="button" onClick={() => setShowSettings(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><XIcon size={16} /></button></div>
+            <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold text-indigo-600">칸반 열</p><h3 className="mt-1 text-lg font-bold text-slate-900">{column.name} 설정</h3></div><button type="button" onClick={() => setShowSettings(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><XIcon size={16} /></button></div>
             <label className="mt-5 block text-xs font-semibold text-slate-500">칸반 열 이름
               <input value={settingsName} onChange={(event) => setSettingsName(event.target.value)} maxLength={100} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200" />
             </label>
@@ -301,6 +319,18 @@ function ColumnHeader({ column, projectId, visibleTaskCount, accentClass, dragHa
             <p className="mt-2 text-xs leading-5 text-slate-400">상태를 선택하면 이 열은 해당 상태의 대표 열이 됩니다. 통합 화면에서 카드를 이동할 때 이 열로 저장됩니다.</p>
             {settingsError && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{settingsError}</p>}
             <div className="mt-5 flex gap-2"><button type="button" onClick={() => setShowSettings(false)} disabled={savingSettings} className="flex-1 rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200 disabled:opacity-50">취소</button><button type="button" onClick={saveSettings} disabled={savingSettings} className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{savingSettings ? "저장 중…" : "저장"}</button></div>
+          </div>
+        </div>
+      )}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowDeleteConfirm(false)}>
+          <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
+            <p className="text-xs font-semibold text-rose-600">열 삭제</p>
+            <h3 className="mt-1 text-lg font-bold text-slate-900">열을 삭제하시겠습니까?</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-500">이 열의 카드 {column.tasks.length}개도 함께 삭제됩니다. 계속하려면 열 이름을 입력하세요.</p>
+            <input value={deleteName} onChange={(event) => setDeleteName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void confirmDelete(); }} placeholder={column.name} autoFocus className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-rose-200" />
+            {deleteError && <p className="mt-3 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{deleteError}</p>}
+            <div className="mt-5 flex gap-2"><button type="button" onClick={() => setShowDeleteConfirm(false)} className="flex-1 rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200">취소</button><button type="button" onClick={() => void confirmDelete()} className="flex-1 rounded-xl bg-rose-600 py-2.5 text-sm font-semibold text-white hover:bg-rose-500">삭제</button></div>
           </div>
         </div>
       )}
@@ -328,8 +358,10 @@ function SortableColumnContainer({ column, mobileVisible, children }: {
 }
 
 export default function KanbanBoard({ projectId }: Props) {
+  const { data: session } = useSession();
   const [columns, setColumns] = useState<Column[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
+  const [canManageColumns, setCanManageColumns] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
@@ -362,7 +394,9 @@ export default function KanbanBoard({ projectId }: Props) {
         if (cancelled) return;
         const loadedColumns = data.columns ?? [];
         setColumns(loadedColumns);
-        setMembers((data.members ?? []).map((m: { user: Member }) => m.user));
+        const projectMembers = (data.members ?? []) as Array<{ role: string; user: Member }>;
+        setMembers(projectMembers.map((m) => m.user));
+        setCanManageColumns(Boolean(data.permissions?.canManageColumns) || projectMembers.some((m) => m.role === "owner" && m.user.id === session?.user?.id));
         if (loadedColumns.length > 0 && !loadedColumns.some((column: Column) => column.integratedStatus)) {
           setIntegratedSetup(Object.fromEntries(loadedColumns.map((column: Column) => [column.id, ""])));
           setShowIntegratedSetup(true);
@@ -374,7 +408,7 @@ export default function KanbanBoard({ projectId }: Props) {
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId, reloadKey]);
+  }, [projectId, reloadKey, session?.user?.id]);
 
   useEffect(() => { if (addingColumn) newColRef.current?.focus(); }, [addingColumn]);
 
@@ -637,7 +671,7 @@ export default function KanbanBoard({ projectId }: Props) {
                 <SortableColumnContainer key={column.id} column={column} mobileVisible={colIdx === activeColumnIndex}>
                   {({ dragHandleProps }) => (
                 <div className="flex-1 flex flex-col bg-slate-100/70 rounded-2xl border border-slate-200 overflow-hidden">
-                  <ColumnHeader column={column} projectId={projectId} visibleTaskCount={visibleTasks.length} accentClass={COLUMN_COLORS[colIdx % COLUMN_COLORS.length]} dragHandleProps={dragHandleProps}
+                  <ColumnHeader column={column} projectId={projectId} visibleTaskCount={visibleTasks.length} accentClass={COLUMN_COLORS[colIdx % COLUMN_COLORS.length]} dragHandleProps={dragHandleProps} isOwner={canManageColumns}
                     onRename={(name) => setColumns((prev) => prev.map((c) => c.id === column.id ? { ...c, name } : c))}
                     onMapping={(updated) => setColumns((prev) => prev.map((c) => {
                       if (c.id === updated.id) return { ...c, ...updated, tasks: c.tasks };
@@ -722,7 +756,7 @@ export default function KanbanBoard({ projectId }: Props) {
       {showIntegratedSetup && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
-            <p className="text-xs font-semibold text-indigo-600">INTEGRATED KANBAN SETUP</p>
+            <p className="text-xs font-semibold text-indigo-600">통합 칸반 설정</p>
             <h3 className="mt-1 text-lg font-bold text-slate-900">통합 칸반에 표시할 열을 설정하세요</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">이 사업의 열이 아직 통합 화면에 연결되지 않았습니다. 각 열의 공통 상태를 선택하면 통합 칸반에서 카드 진행 상황을 확인하고 이동할 수 있습니다.</p>
             <div className="mt-5 space-y-3">

@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { del } from "@vercel/blob";
 import { withDbRetry } from "@/lib/db-retry";
 import { normalizeArchiveVisibility } from "@/lib/archive-visibility";
-import { assertProjectMember, canManageCultureSportsContent } from "@/lib/server-utils";
+import { assertProjectMember, canManageCultureSportsContent, canViewAllArchivePosts } from "@/lib/server-utils";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId/archive/:postId] ${action} failed`, error);
@@ -23,18 +23,22 @@ export async function GET(_: NextRequest, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
   if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const canViewAll = await canManageCultureSportsContent(userId);
+  const canViewAll = await canViewAllArchivePosts(userId, projectId);
 
   const post = await withDbRetry(
     () =>
       prisma.archivePost.findFirst({
         where: { id: postId, projectId },
-        include: { author: { select: { id: true, name: true } } },
+        include: {
+          author: { select: { id: true, name: true } },
+          collaborators: { select: { user: { select: { id: true, name: true, email: true } } } },
+        },
       }),
     { operation: `archive:get:${postId}` }
   );
   if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!canViewAll && post.visibility === "PRIVATE" && post.authorId !== userId) {
+  const isCollaborator = post.collaborators.some(({ user }) => user.id === userId);
+  if (!canViewAll && post.visibility === "PRIVATE" && post.authorId !== userId && !isCollaborator) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   return NextResponse.json(post);
@@ -50,14 +54,18 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const canManage = await canManageCultureSportsContent(userId);
 
-    const existing = await withDbRetry(() => prisma.archivePost.findFirst({ where: { id: postId, projectId } }));
+    const existing = await withDbRetry(() => prisma.archivePost.findFirst({
+      where: { id: postId, projectId },
+      include: { collaborators: { select: { userId: true } } },
+    }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    if (!canManage && existing.visibility === "PRIVATE" && existing.authorId !== userId) {
+    const isCollaborator = existing.collaborators.some(({ userId: collaboratorId }) => collaboratorId === userId);
+    if (!canManage && existing.visibility === "PRIVATE" && existing.authorId !== userId && !isCollaborator) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const data = await req.json();
-    if (!canManage && existing.visibility === "EXTERNAL" && existing.authorId !== userId) {
+    if (!canManage && existing.visibility === "EXTERNAL" && existing.authorId !== userId && !isCollaborator) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     if (data.shareAction === "revoke") {

@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { withDbRetry } from "@/lib/db-retry";
-import { NextResponse } from "next/server";
+import { withDbReadRetry } from "@/lib/db-retry";
+import { forbidden, unauthorized } from "@/lib/api-error";
 
 export function logApiError(scope: string, action: string, error: unknown) {
   console.error(`[${scope}] ${action} failed`, error);
@@ -13,10 +13,7 @@ export async function requireUserId() {
   if (!userId) {
     return {
       userId: null,
-      errorResponse: NextResponse.json(
-        { error: "세션 정보가 유효하지 않습니다." },
-        { status: 401 }
-      ),
+      errorResponse: unauthorized("세션 정보가 유효하지 않습니다."),
     };
   }
 
@@ -24,7 +21,7 @@ export async function requireUserId() {
 }
 
 export async function isProjectMember(userId: string, projectId: string) {
-  const member = await withDbRetry(
+  const member = await withDbReadRetry(
     () =>
       prisma.projectMember.findUnique({
         where: { userId_projectId: { userId, projectId } },
@@ -35,7 +32,7 @@ export async function isProjectMember(userId: string, projectId: string) {
 }
 
 export async function isProjectOwner(userId: string, projectId: string) {
-  const member = await withDbRetry(
+  const member = await withDbReadRetry(
     () =>
       prisma.projectMember.findUnique({
         where: { userId_projectId: { userId, projectId } },
@@ -48,7 +45,7 @@ export async function isProjectOwner(userId: string, projectId: string) {
 export async function requireProjectMember(userId: string, projectId: string) {
   const member = await isProjectMember(userId, projectId);
   if (!member) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return forbidden();
   }
   return null;
 }
@@ -56,7 +53,7 @@ export async function requireProjectMember(userId: string, projectId: string) {
 export async function requireProjectOwner(userId: string, projectId: string) {
   const owner = await isProjectOwner(userId, projectId);
   if (!owner) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    return forbidden();
   }
   return null;
 }

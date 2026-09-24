@@ -54,7 +54,6 @@ type Project = {
   name: string;
   description: string | null;
   category: string | null;
-  tags: string | null;
   color: string;
   columns: Column[];
   members: Array<{ user: Member }>;
@@ -192,7 +191,6 @@ export default function IntegratedKanban() {
   const [showFilter, setShowFilter] = useState(false);
   const [selectedProjects, setSelectedProjects] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [priorities, setPriorities] = useState<string[]>([]);
   const [due, setDue] = useState("all");
   const [selected, setSelected] = useState<Card | null>(null);
@@ -213,7 +211,8 @@ export default function IntegratedKanban() {
     try {
       const response = await apiFetch("/api/projects");
       if (!response.ok) throw new Error();
-      const list = (await response.json()) as Array<{ id: string }>;
+      const payload = await response.json();
+      const list = (Array.isArray(payload?.items) ? payload.items : []) as Array<{ id: string }>;
       const data = await Promise.all(
         list.map(async ({ id }) => {
           const detail = await apiFetch(`/api/projects/${id}`);
@@ -230,7 +229,8 @@ export default function IntegratedKanban() {
     }
   };
   useEffect(() => {
-    void load();
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
   }, []);
   const categories = [
     ...new Set(
@@ -239,29 +239,10 @@ export default function IntegratedKanban() {
         .filter((item): item is string => !!item),
     ),
   ];
-  const tags = [
-    ...new Set(
-      projects.flatMap(
-        (project) =>
-          project.tags
-            ?.split(",")
-            .map((tag) => tag.trim())
-            .filter(Boolean) ?? [],
-      ),
-    ),
-  ];
   const filteredProjects = projects.filter((project) => {
     return (
       selectedProjects.includes(project.id) &&
-      (!selectedCategories.length ||
-        selectedCategories.includes(project.category ?? "")) &&
-      (!selectedTags.length ||
-        selectedTags.some((tag) =>
-          project.tags
-            ?.split(",")
-            .map((item) => item.trim())
-            .includes(tag),
-        ))
+      (!selectedCategories.length || selectedCategories.includes(project.category ?? ""))
     );
   });
   const cards = useMemo(
@@ -524,12 +505,6 @@ export default function IntegratedKanban() {
               }
             />
             <FilterGroup
-              title="태그"
-              values={tags.map((item) => ({ id: item, label: `#${item}` }))}
-              selected={selectedTags}
-              onToggle={(value) => toggle(value, selectedTags, setSelectedTags)}
-            />
-            <FilterGroup
               title="우선순위"
               values={[
                 { id: "high", label: "높음" },
@@ -557,7 +532,6 @@ export default function IntegratedKanban() {
               onClick={() => {
                 setSelectedProjects(projects.map((project) => project.id));
                 setSelectedCategories([]);
-                setSelectedTags([]);
                 setPriorities([]);
                 setDue("all");
                 setQuery("");

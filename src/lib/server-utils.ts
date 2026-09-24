@@ -1,6 +1,8 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 
+export const DEFAULT_SPACE_ID = "culture-sports";
+
 export async function getSessionUser() {
   const session = await auth();
   return session?.user ?? null;
@@ -15,7 +17,13 @@ export async function canViewAllProjects(userId: string) {
 }
 
 export async function assertProjectMember(userId: string, projectId: string) {
-  if (await canManageCultureSportsContent(userId)) return true;
+  if (await assertAdmin(userId)) return true;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { space: { select: { adminUserId: true } } },
+  });
+  if (project?.space?.adminUserId === userId) return true;
 
   const member = await prisma.projectMember.findUnique({
     where: { userId_projectId: { userId, projectId } },
@@ -29,6 +37,12 @@ export async function assertProjectAccess(userId: string, projectId: string) {
 }
 
 export async function assertProjectOwner(userId: string, projectId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { ownerId: true },
+  });
+  if (project?.ownerId) return project.ownerId === userId;
+
   const member = await prisma.projectMember.findUnique({
     where: { userId_projectId: { userId, projectId } },
     select: { role: true },
@@ -41,7 +55,7 @@ export async function assertAdmin(userId: string) {
     where: { id: userId },
     select: { role: true },
   });
-  return user?.role === "admin";
+  return user?.role?.trim().toLowerCase() === "admin";
 }
 
 export async function assertSpaceAdmin(userId: string) {
@@ -53,7 +67,15 @@ export async function assertSpaceAdmin(userId: string) {
         spaceAdmin: { select: { role: true } },
       },
     });
-    return assignment?.spaceAdminUserId === userId && assignment.spaceAdmin.role === "space_admin";
+    if (assignment) {
+      return assignment.spaceAdminUserId === userId;
+    }
+
+    const space = await prisma.space.findUnique({
+      where: { id: DEFAULT_SPACE_ID },
+      select: { adminUserId: true },
+    });
+    return space?.adminUserId === userId;
   } catch (error) {
     // Space administration is optional for databases created before this feature.
     console.warn("[space-admin] lookup unavailable", error);
@@ -63,6 +85,25 @@ export async function assertSpaceAdmin(userId: string) {
 
 export async function canManageCultureSportsContent(userId: string) {
   return (await assertAdmin(userId)) || (await assertSpaceAdmin(userId));
+}
+
+export async function canViewAllArchivePosts(userId: string, projectId: string) {
+  if (await assertAdmin(userId)) return true;
+
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { space: { select: { adminUserId: true } } },
+  });
+  return project?.space?.adminUserId === userId;
+}
+
+export async function canManageSpace(userId: string, spaceId: string) {
+  if (await assertAdmin(userId)) return true;
+  const space = await prisma.space.findUnique({
+    where: { id: spaceId },
+    select: { adminUserId: true },
+  });
+  return space?.adminUserId === userId;
 }
 
 export async function findUserByEmail(email: string) {

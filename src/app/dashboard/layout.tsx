@@ -46,7 +46,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           const res = await apiFetch("/api/projects");
           if (!res.ok) throw new Error("Project list request failed");
           const data = await res.json();
-          setProjects(Array.isArray(data) ? data : []);
+          setProjects(Array.isArray(data?.items) ? data.items : []);
           setProjectsError(null);
         } catch {
           setProjectsError("사업 목록을 불러오지 못했습니다.");

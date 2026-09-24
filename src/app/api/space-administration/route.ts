@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { withDbRetry } from "@/lib/db-retry";
-import { assertSpaceAdmin } from "@/lib/server-utils";
+import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
+import { DEFAULT_SPACE_ID, canManageSpace } from "@/lib/server-utils";
+import { forbidden, internalError, notFound, unauthorized, validationError } from "@/lib/api-error";
 
 const SPACE_ID = "culture-sports";
 
 async function requireCurrentSpaceAdmin() {
   const session = await auth();
-  if (!session?.user?.id) {
-    return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) };
-  }
-  if (!(await assertSpaceAdmin(session.user.id))) {
-    return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
-  }
+  if (!session?.user?.id) return { response: unauthorized() };
+  if (!(await canManageSpace(session.user.id, DEFAULT_SPACE_ID))) return { response: forbidden() };
   return { userId: session.user.id };
 }
 
@@ -21,15 +18,18 @@ export async function GET() {
   const access = await requireCurrentSpaceAdmin();
   if ("response" in access) return access.response;
 
-  const [administration, transfers] = await withDbRetry(() =>
+  const [space, transfers] = await withDbReadRetry(() =>
     Promise.all([
-      prisma.spaceAdministration.findUnique({
+      prisma.space.findUnique({
         where: { id: SPACE_ID },
         select: {
-          spaceAdmin: { select: { id: true, name: true, email: true } },
+          id: true,
+          name: true,
+          admin: { select: { id: true, name: true, email: true } },
         },
       }),
       prisma.spaceAdminTransferLog.findMany({
+        where: { spaceId: SPACE_ID },
         orderBy: { createdAt: "desc" },
         take: 20,
         select: {
@@ -43,11 +43,9 @@ export async function GET() {
     ])
   );
 
-  if (!administration) {
-    return NextResponse.json({ error: "문화체육위원회 관리자 설정을 찾을 수 없습니다." }, { status: 404 });
-  }
+  if (!space) return notFound("문화체육위원회 공간을 찾을 수 없습니다.");
 
-  return NextResponse.json({ currentAdmin: administration.spaceAdmin, transfers });
+  return NextResponse.json({ space: { id: space.id, name: space.name }, currentAdmin: space.admin, transfers });
 }
 
 export async function PATCH(request: NextRequest) {
@@ -57,17 +55,18 @@ export async function PATCH(request: NextRequest) {
   const body = await request.json();
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   if (!email) {
-    return NextResponse.json({ error: "후임 문화체육위원장 이메일을 입력해주세요." }, { status: 400 });
+    return validationError("후임 문화체육위원장 이메일을 입력해주세요.");
   }
 
   try {
-    const result = await withDbRetry(() =>
+    const result = await withDbWrite(() =>
       prisma.$transaction(async (tx) => {
-        const administration = await tx.spaceAdministration.findUnique({
+        const space = await tx.space.findUnique({
           where: { id: SPACE_ID },
-          select: { spaceAdminUserId: true },
+          select: { adminUserId: true },
         });
-        if (!administration || administration.spaceAdminUserId !== access.userId) {
+        const actor = await tx.user.findUnique({ where: { id: access.userId }, select: { role: true } });
+        if (!space || (space.adminUserId !== access.userId && actor?.role !== "admin")) {
           throw new Error("CURRENT_ADMIN_CHANGED");
         }
 
@@ -77,22 +76,18 @@ export async function PATCH(request: NextRequest) {
         });
         if (!nextAdmin) throw new Error("USER_NOT_FOUND");
         if (nextAdmin.id === access.userId) throw new Error("SAME_USER");
-        if (nextAdmin.role === "admin") throw new Error("DEVELOPER_ADMIN");
-
-        await tx.user.update({
-          where: { id: access.userId },
-          data: { role: "member" },
-        });
-        await tx.user.update({
-          where: { id: nextAdmin.id },
-          data: { role: "space_admin" },
-        });
-        await tx.spaceAdministration.update({
+        await tx.space.update({
           where: { id: SPACE_ID },
-          data: { spaceAdminUserId: nextAdmin.id },
+          data: { adminUserId: nextAdmin.id },
+        });
+        await tx.spaceMember.upsert({
+          where: { spaceId_userId: { spaceId: SPACE_ID, userId: nextAdmin.id } },
+          update: { role: "admin" },
+          create: { spaceId: SPACE_ID, userId: nextAdmin.id, role: "admin" },
         });
         await tx.spaceAdminTransferLog.create({
           data: {
+            spaceId: SPACE_ID,
             actorUserId: access.userId,
             previousAdminUserId: access.userId,
             nextAdminUserId: nextAdmin.id,
@@ -110,8 +105,8 @@ export async function PATCH(request: NextRequest) {
       USER_NOT_FOUND: "해당 이메일로 등록된 계정을 찾을 수 없습니다.",
       SAME_USER: "현재 관리자와 다른 후임 계정을 지정해주세요.",
       DEVELOPER_ADMIN: "개발자 admin 계정은 문화체육위원회 관리자로 지정할 수 없습니다.",
-    }[code] ?? "관리자 권한 이전에 실패했습니다.";
+      }[code] ?? "관리자 권한 이전에 실패했습니다.";
     const status = code === "USER_NOT_FOUND" ? 404 : code === "UNKNOWN" ? 500 : 400;
-    return NextResponse.json({ error: message }, { status });
+    return status === 500 ? internalError(message) : status === 404 ? notFound(message) : validationError(message);
   }
 }

@@ -16,11 +16,15 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   if (!(await assertProjectMember(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const [image, canManage] = await withDbRetry(() => Promise.all([
-    prisma.archiveImage.findFirst({ where: { id: imageId, postId, post: { projectId } } }),
+    prisma.archiveImage.findFirst({
+      where: { id: imageId, postId, post: { projectId } },
+      select: { id: true, url: true, uploaderId: true, post: { select: { collaborators: { select: { userId: true } } } } },
+    }),
     canManageCultureSportsContent(session.user.id),
   ]));
   if (!image) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!canManage && image.uploaderId !== session.user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const isCollaborator = image.post.collaborators.some(({ userId }) => userId === session.user.id);
+  if (!canManage && image.uploaderId !== session.user.id && !isCollaborator) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!process.env.BLOB_READ_WRITE_TOKEN) return NextResponse.json({ error: "이미지 저장소가 아직 설정되지 않았습니다." }, { status: 503 });
 
   try {

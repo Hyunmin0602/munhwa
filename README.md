@@ -6,14 +6,26 @@
 
 모든 업무 데이터는 공유 외부 libSQL/Turso 데이터베이스에 저장합니다. 로컬 SQLite 데이터베이스는 지원하지 않습니다.
 
-1. `.env.example`을 참고하여 `.env`에 `DATABASE_URL`과 `TURSO_AUTH_TOKEN`을 설정합니다.
+1. `.env.example`을 참고하여 `.env.local`에 `TURSO_DATABASE_URL`과 `TURSO_AUTH_TOKEN`을 설정합니다.
 2. 외부 데이터베이스에 마이그레이션을 적용합니다.
 
+현재 프로젝트는 Turso/libSQL 단일 저장소만 사용하며 로컬 SQLite로 동작하지 않습니다. 기존 원격 DB의 migration history가 없는 환경은 아래 baseline 절차를 사용합니다.
+
 ```bash
-npx prisma migrate deploy
+npx tsx scripts/baseline-libsql.ts
 ```
 
-기존 `prisma/dev.db`에 데이터가 있다면 외부 DB URL과 토큰을 설정한 뒤, 데이터 이전을 별도로 수행한 후에 로컬 파일을 폐기해야 합니다. 데이터베이스 자격 증명은 저장소에 커밋하지 않습니다.
+로컬 `prisma/dev.db`와 `DATABASE_URL` fallback은 지원하지 않습니다. 데이터베이스 자격 증명은 저장소에 커밋하지 않습니다.
+
+### 기존 외부 DB의 마이그레이션 이력 복구
+
+Prisma 7의 SQLite provider와 libSQL adapter 조합에서는 Prisma CLI가 `libsql://` URL을 직접 `migrate deploy` 대상으로 처리하지 못할 수 있습니다. 기존 외부 DB에 테이블은 있지만 `_prisma_migrations` 이력이 없는 경우에만 아래 일회성 baseline 도구를 사용합니다.
+
+```bash
+npx tsx scripts/baseline-libsql.ts
+```
+
+이 도구는 기존 데이터를 삭제하지 않고 현재 스키마를 baseline으로 등록합니다. `_prisma_migrations` 테이블이 이미 있으면 재실행을 거부합니다. 운영 적용 전 백업과 원격 테이블 상태를 확인해야 합니다.
 
 ### 화면 구성
 

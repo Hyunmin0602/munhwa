@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { canManageCultureSportsContent } from "@/lib/server-utils";
+import { DEFAULT_SPACE_ID, assertAdmin, assertSpaceAdmin } from "@/lib/server-utils";
 
 const ITEM_TYPES = ["task", "event", "archive", "meeting"] as const;
 type ItemType = (typeof ITEM_TYPES)[number];
@@ -43,8 +43,8 @@ function getRecentRange(range: string | null) {
 }
 
 function parseTypes(value: string | null): ItemType[] {
-  const type = value?.split(",")[0];
-  return type && ITEM_TYPES.includes(type as ItemType) ? [type as ItemType] : [...ITEM_TYPES];
+  const types = value?.split(",").filter((type): type is ItemType => ITEM_TYPES.includes(type as ItemType)) ?? [];
+  return types.length ? [...new Set(types)] : [...ITEM_TYPES];
 }
 
 type Cursor = Partial<Record<ItemType, string>>;
@@ -87,7 +87,9 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = request.nextUrl;
   const userId = session.user.id;
-  const canViewAll = await canManageCultureSportsContent(userId);
+  const canViewAll = await assertAdmin(userId);
+  const canViewSpace = !canViewAll && await assertSpaceAdmin(userId);
+  const canViewArchiveAll = canViewAll || canViewSpace;
   const requestedType = searchParams.get("type") ?? searchParams.get("types");
   const types = parseTypes(requestedType);
   const isOverview = !requestedType || requestedType === "all";
@@ -98,12 +100,24 @@ export async function GET(request: NextRequest) {
   const dayRange = getDayRange(range);
   const recentRange = getRecentRange(range);
   const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 20, 1), 50);
-  const cursor = parseCursor(searchParams.get("cursor"));
+  const rawCursor = parseCursor(searchParams.get("cursor"));
+  const activeType = !isOverview && types.length === 1 ? types[0] : null;
+  const needsTasks = isOverview || types.includes("task");
+  const needsEvents = isOverview || types.includes("event");
+  const needsArchives = isOverview || types.includes("archive");
+  const needsMeetings = isOverview || types.includes("meeting");
+  const cursor: Cursor = activeType && rawCursor[activeType]
+    ? { [activeType]: rawCursor[activeType] }
+    : {};
 
   const projectRecords = await withDbRetry(() =>
     prisma.project.findMany({
       where: {
-        ...(canViewAll ? {} : { members: { some: { userId } } }),
+        ...(canViewAll
+          ? {}
+          : canViewSpace
+            ? { spaceId: DEFAULT_SPACE_ID }
+            : { members: { some: { userId } } }),
         ...(requestedProjectIds.length ? { id: { in: requestedProjectIds } } : {}),
         ...(status.length ? { status: { in: status } } : {}),
       },
@@ -115,7 +129,9 @@ export async function GET(request: NextRequest) {
   const projects = requestedTag
     ? projectRecords.filter((project) => project.tags?.split(",").map((tag) => tag.trim()).includes(requestedTag))
     : projectRecords;
-  const projectFilters = projects.map(({ tags: _tags, ...project }) => project);
+  const projectFilters = projects.map((project) =>
+    Object.fromEntries(Object.entries(project).filter(([key]) => key !== "tags")),
+  );
   const projectIds = projects.map((project) => project.id);
   if (!projectIds.length) {
     return NextResponse.json({
@@ -135,27 +151,27 @@ export async function GET(request: NextRequest) {
   const projectById = new Map(projects.map((project) => [project.id, project]));
   const [taskCount, eventCount, archiveCount, meetingCount, kanbanColumns] = await withDbRetry(() =>
     Promise.all([
-      prisma.task.count({
+      needsTasks ? prisma.task.count({
         where: { column: { projectId: { in: projectIds } } },
-      }),
-      prisma.event.count({
+      }) : 0,
+      needsEvents ? prisma.event.count({
         where: { projectId: { in: projectIds }, startDate: dayRange ? { gte: dayRange.start, lte: dayRange.end } : undefined },
-      }),
-      prisma.archivePost.count({
+      }) : 0,
+      needsArchives ? prisma.archivePost.count({
         where: {
           projectId: { in: projectIds },
           kind: { not: "MEETING" },
-          ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+          ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
         },
-      }),
-      prisma.archivePost.count({
+      }) : 0,
+      needsMeetings ? prisma.archivePost.count({
         where: {
           projectId: { in: projectIds },
           kind: "MEETING",
-          ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+          ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
         },
-      }),
-      prisma.kanbanColumn.findMany({
+      }) : 0,
+      needsTasks ? prisma.kanbanColumn.findMany({
         where: { projectId: { in: projectIds } },
         orderBy: { order: "asc" },
         select: {
@@ -169,7 +185,7 @@ export async function GET(request: NextRequest) {
             select: { id: true, title: true, dueDate: true, updatedAt: true },
           },
         },
-      }),
+      }) : [],
     ])
   );
   const kanban = projects
@@ -203,7 +219,7 @@ export async function GET(request: NextRequest) {
         where: {
           projectId: { in: projectIds },
           kind: { not: "MEETING" },
-          ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+          ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
         },
         select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -224,7 +240,7 @@ export async function GET(request: NextRequest) {
       prisma.archivePost.findMany({
         where: {
           projectId: { in: projectIds },
-          ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+          ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
         },
         select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -260,7 +276,7 @@ export async function GET(request: NextRequest) {
             where: {
               projectId: { in: projectIds },
               kind: { not: "MEETING" },
-              ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+              ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
               ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
             },
             select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },
@@ -275,7 +291,7 @@ export async function GET(request: NextRequest) {
             where: {
               projectId: { in: projectIds },
               kind: "MEETING",
-              ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+              ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
               ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
             },
             select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },

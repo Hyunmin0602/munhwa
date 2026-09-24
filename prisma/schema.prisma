@@ -27,12 +27,47 @@ model User {
   archiveImages ArchiveImage[]
   events       Event[]
   cohort       Cohort?   @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  ownedProjects Project[] @relation("ProjectOwner")
+  spaceMemberships SpaceMember[]
   sentInvites  ProjectInvitation[] @relation("InvitationSender")
   receivedInvites ProjectInvitation[] @relation("InvitationRecipient")
   administeredSpace SpaceAdministration? @relation("SpaceAdministrator")
   performedSpaceAdminTransfers SpaceAdminTransferLog[] @relation("SpaceAdminTransferActor")
   transferredSpaceAdminFrom SpaceAdminTransferLog[] @relation("SpaceAdminTransferPrevious")
   transferredSpaceAdminTo SpaceAdminTransferLog[] @relation("SpaceAdminTransferNext")
+  administeredSpaces Space[] @relation("SpaceAdministrator")
+  adminAuditLogs AdminAuditLog[] @relation("AdminAuditActor")
+  archiveCollaborations ArchivePostCollaborator[]
+}
+
+model Space {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  adminUserId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  admin       User          @relation("SpaceAdministrator", fields: [adminUserId], references: [id], onDelete: Restrict)
+  members     SpaceMember[]
+  projects    Project[]
+  adminTransfers SpaceAdminTransferLog[] @relation("SpaceTransferLogs")
+  auditLogs   AdminAuditLog[]
+
+  @@index([adminUserId])
+}
+
+model SpaceMember {
+  id       String   @id @default(cuid())
+  spaceId  String
+  userId   String
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceId, userId])
 }
 
 model SpaceAdministration {
@@ -46,6 +81,7 @@ model SpaceAdministration {
 
 model SpaceAdminTransferLog {
   id                  String   @id @default(cuid())
+  spaceId             String?
   actorUserId         String
   previousAdminUserId String
   nextAdminUserId     String
@@ -54,10 +90,32 @@ model SpaceAdminTransferLog {
   actor         User @relation("SpaceAdminTransferActor", fields: [actorUserId], references: [id], onDelete: Restrict)
   previousAdmin User @relation("SpaceAdminTransferPrevious", fields: [previousAdminUserId], references: [id], onDelete: Restrict)
   nextAdmin     User @relation("SpaceAdminTransferNext", fields: [nextAdminUserId], references: [id], onDelete: Restrict)
+  space         Space? @relation("SpaceTransferLogs", fields: [spaceId], references: [id], onDelete: SetNull)
 
   @@index([createdAt])
+  @@index([spaceId, createdAt])
   @@index([previousAdminUserId])
   @@index([nextAdminUserId])
+}
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String
+  spaceId     String?
+  action      String
+  targetType  String
+  targetId    String?
+  beforeData  String?
+  afterData   String?
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  actor User  @relation("AdminAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  space Space? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+
+  @@index([spaceId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([actorUserId, createdAt])
 }
 
 model Cohort {
@@ -109,6 +167,8 @@ model VerificationToken {
 
 model Project {
   id          String   @id @default(cuid())
+  spaceId     String?
+  ownerId     String?
   name        String
   description String?
   category    String?
@@ -126,6 +186,11 @@ model Project {
   archivePosts ArchivePost[]
   events       Event[]
   invitations  ProjectInvitation[]
+  space        Space? @relation(fields: [spaceId], references: [id], onDelete: Restrict)
+  owner        User?  @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+
+  @@index([spaceId, updatedAt])
+  @@index([ownerId])
 }
 
 model ProjectMember {
@@ -213,6 +278,7 @@ model ArchivePost {
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
   author  User    @relation(fields: [authorId], references: [id])
   images  ArchiveImage[]
+  collaborators ArchivePostCollaborator[]
 
   @@index([projectId, kind, updatedAt])
   @@index([authorId, visibility])
@@ -235,6 +301,19 @@ model ArchiveImage {
 
   @@index([postId])
   @@index([uploaderId, createdAt])
+}
+
+model ArchivePostCollaborator {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post ArchivePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId, createdAt])
 }
 
 model Event {

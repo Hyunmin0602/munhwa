@@ -56,7 +56,7 @@ function isTransientError(error: unknown) {
   return ["timed out", "connection reset", "connection refused", "socket hang up"].some((token) => message.includes(token));
 }
 
-export async function withDbRetry<T>(
+async function executeWithRetry<T>(
   operation: () => Promise<T>,
   context?: RetryContext
 ) {
@@ -101,4 +101,26 @@ export async function withDbRetry<T>(
   }
 
   throw lastError;
+}
+
+/** Read-only database calls may retry transient connection failures. */
+export async function withDbReadRetry<T>(
+  operation: () => Promise<T>,
+  context?: RetryContext
+) {
+  return executeWithRetry(operation, context);
+}
+
+/** Writes are intentionally single-attempt unless the caller provides idempotency. */
+export async function withDbWrite<T>(operation: () => Promise<T>) {
+  return operation();
+}
+
+/** @deprecated Use withDbReadRetry for reads or withDbWrite for mutations. */
+export async function withDbRetry<T>(
+  operation: () => Promise<T>,
+  ...args: [RetryContext?]
+) {
+  void args;
+  return withDbWrite(operation);
 }

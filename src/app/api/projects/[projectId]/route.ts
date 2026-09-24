@@ -36,6 +36,7 @@ export async function GET(_: NextRequest, { params }: Params) {
     const userId = session.user.id;
     if (!(await assertProjectAccess(userId, projectId)))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
 
     let project;
     try {
@@ -83,7 +84,7 @@ export async function GET(_: NextRequest, { params }: Params) {
       };
     }
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json(project);
+    return NextResponse.json({ ...project, permissions: { canManageColumns } });
   } catch (error) {
     logApiError("GET", error);
     return NextResponse.json({ error: "프로젝트 정보를 불러오지 못했습니다." }, { status: 500 });

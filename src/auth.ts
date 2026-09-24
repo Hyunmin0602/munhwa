@@ -2,7 +2,7 @@ import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { checkRateLimit, getClientIp, LOGIN_EMAIL_LIMIT } from "@/lib/rate-limit";
+import { checkRateLimit, LOGIN_EMAIL_LIMIT } from "@/lib/rate-limit";
 import { normalizeEmail } from "@/lib/validation";
 
 declare module "next-auth" {

@@ -13,7 +13,7 @@ export default function SessionTestPage() {
         const data = await res.json();
         setStatus(res.ok ? "ok" : "error");
         setMessage(data.ok ? "세션과 DB 연결이 정상입니다." : "세션이 없거나 DB 연결이 실패했습니다.");
-      } catch (error) {
+      } catch {
         setStatus("error");
         setMessage("요청 실패: 로그인으로 이동하거나 오류 토스트가 표시됩니다.");
       }

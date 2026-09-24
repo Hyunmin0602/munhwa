@@ -31,7 +31,7 @@ export default function ProjectsPage() {
         const response = await apiFetch("/api/projects");
         if (!response.ok) throw new Error("Projects request failed");
         const data = await response.json();
-        if (!cancelled) setProjects(Array.isArray(data) ? data : []);
+        if (!cancelled) setProjects(Array.isArray(data?.items) ? data.items : []);
       } catch {
         if (!cancelled) setError("사업 목록을 불러오지 못했습니다.");
       } finally {

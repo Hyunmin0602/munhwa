@@ -32,6 +32,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const userId = session.user.id;
 
     if (!(await assertProjectAccess(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
+    if (!canManageColumns) return NextResponse.json({ error: "사업 관리자 또는 공간 관리자만 칸반 열을 수정할 수 있습니다." }, { status: 403 });
 
     const data = await readJsonObject(req);
     const updatesIntegratedMapping = data.integratedStatus !== undefined || data.isIntegratedPrimary !== undefined;
@@ -55,8 +57,6 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     if (updatesIntegratedMapping) {
-      const canManageMapping = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
-      if (!canManageMapping) return NextResponse.json({ error: "통합 상태 설정 권한이 없습니다." }, { status: 403 });
       if (data.integratedStatus !== undefined) updateData.integratedStatus = integratedKanbanStatus(data.integratedStatus);
       if (data.isIntegratedPrimary !== undefined) updateData.isIntegratedPrimary = booleanValue(data.isIntegratedPrimary, "대표 열");
       const resultingStatus = updateData.integratedStatus === undefined ? existing.integratedStatus : updateData.integratedStatus;
@@ -90,7 +90,8 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
 
-    if (!(await assertProjectAccess(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
+    if (!canManageColumns) return NextResponse.json({ error: "사업 관리자 또는 공간 관리자만 칸반 열을 삭제할 수 있습니다." }, { status: 403 });
 
     const existing = await withDbRetry(() => prisma.kanbanColumn.findFirst({ where: { id: columnId, projectId } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });

@@ -13,7 +13,7 @@ dayjs.locale("ko");
 interface Post {
   id: string;
   title: string;
-  content: string;
+  content?: string | null;
   slug: string;
   visibility: "PRIVATE" | "INTERNAL" | "EXTERNAL";
   published?: boolean;
@@ -36,7 +36,7 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
         const res = await apiFetch(`/api/projects/${projectId}/archive`);
         if (!res.ok) throw new Error("Archive list request failed");
         const data = await res.json();
-        setPosts(Array.isArray(data) ? data : []);
+        setPosts(Array.isArray(data?.items) ? data.items : []);
         setError(null);
       } catch {
         setError("문서를 불러오지 못했습니다.");
@@ -89,8 +89,8 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
     );
   };
 
-  const getPreview = (content: string) => {
-    if (!content.trim()) return null;
+  const getPreview = (content?: string | null) => {
+    if (!content?.trim()) return null;
     // Strip markdown syntax for plain preview
     return content
       .replace(/#{1,6}\s+/g, "")

@@ -41,6 +41,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
   const { data: session } = useSession();
   const [isReordering, setIsReordering] = useState(false);
   const [isSpaceAdmin, setIsSpaceAdmin] = useState(false);
+  const [isSystemAdmin, setIsSystemAdmin] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -50,6 +51,18 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
       })
       .catch(() => {
         if (!cancelled) setIsSpaceAdmin(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/admin/projects?limit=1")
+      .then((response) => {
+        if (!cancelled) setIsSystemAdmin(response.ok);
+      })
+      .catch(() => {
+        if (!cancelled) setIsSystemAdmin(false);
       });
     return () => { cancelled = true; };
   }, []);
@@ -93,16 +106,16 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
             <BookOpen size={16} />
             회의록
           </Link>
-          {isSpaceAdmin && (
+          {(isSpaceAdmin || isSystemAdmin) && (
             <Link
-              href="/dashboard/space-administration"
+              href="/dashboard/admin"
               onClick={onClose}
               className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-                pathname === "/dashboard/space-administration" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
+                pathname === "/dashboard/admin" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
               }`}
             >
               <ShieldCheck size={16} />
-              관리자 인수인계
+              시스템 관리자
             </Link>
           )}
           <div className="flex items-center justify-between px-3 py-1 mb-1">

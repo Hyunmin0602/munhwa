@@ -1,9 +1,13 @@
+import { config } from "dotenv";
 import { defineConfig } from "prisma/config";
 
-const datasourceUrl = process.env.DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
+config({ path: ".env.local" });
+config({ path: ".env" });
 
-if (!datasourceUrl) {
-  throw new Error("DATABASE_URL or TURSO_DATABASE_URL must point to the shared external database.");
+const datasourceUrl = process.env.TURSO_DATABASE_URL;
+
+if (!datasourceUrl || !process.env.TURSO_AUTH_TOKEN || (!datasourceUrl.startsWith("libsql://") && !datasourceUrl.startsWith("https://"))) {
+  throw new Error("TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must point to the shared external database.");
 }
 
 export default defineConfig({

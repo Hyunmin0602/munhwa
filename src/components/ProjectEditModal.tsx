@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Search, Tag, UserPlus, X } from "lucide-react";
+import { Search, UserPlus, X } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 
 const COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#8b5cf6"];
@@ -10,7 +10,6 @@ interface Project {
   name: string;
   description: string | null;
   category?: string | null;
-  tags?: string | null;
   color: string;
 }
 
@@ -37,7 +36,6 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
   const [name, setName] = useState(project.name);
   const [description, setDescription] = useState(project.description ?? "");
   const [category, setCategory] = useState(project.category ?? "");
-  const [tagInput, setTagInput] = useState(project.tags ?? "");
   const [color, setColor] = useState(project.color);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -85,7 +83,6 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
           name: nextName,
           description: description.trim() || null,
           category: category.trim() || null,
-          tags: tagInput.split(","),
           color,
         }),
       });
@@ -228,18 +225,6 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
               className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
               placeholder="예: 행사, 교육, 운영"
             />
-          </div>
-          <div>
-            <label className="mb-1 flex items-center gap-1.5 text-sm font-medium text-gray-700"><Tag size={14} />태그</label>
-            <input
-              type="text"
-              value={tagInput}
-              onChange={(e) => setTagInput(e.target.value)}
-              maxLength={309}
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
-              placeholder="쉼표로 구분해 입력하세요"
-            />
-            <p className="mt-1 text-xs text-gray-400">예: 봄축제, 대외협력, 2026</p>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">색상</label>

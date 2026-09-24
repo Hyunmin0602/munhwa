@@ -13,12 +13,12 @@ type Params = { params: Promise<{ projectId: string; postId: string }> };
 async function canEditArchiveImage(userId: string, projectId: string, postId: string) {
   if (!(await assertProjectMember(userId, projectId))) return false;
   const [post, canManage] = await withDbRetry(() => Promise.all([
-    prisma.archivePost.findFirst({ where: { id: postId, projectId }, select: { authorId: true, visibility: true } }),
+    prisma.archivePost.findFirst({ where: { id: postId, projectId }, select: { authorId: true, visibility: true, collaborators: { select: { userId: true } } } }),
     canManageCultureSportsContent(userId),
   ]));
   if (!post) return false;
   if (canManage) return true;
-  if (post.visibility === "PRIVATE" || post.visibility === "EXTERNAL") return post.authorId === userId;
+  if (post.visibility === "PRIVATE" || post.visibility === "EXTERNAL") return post.authorId === userId || post.collaborators.some(({ userId: collaboratorId }) => collaboratorId === userId);
   return true;
 }
 

@@ -69,7 +69,7 @@
 
 **목적:** 외부 DB와 배포 환경을 안정적으로 운영할 기반을 확정한다.
 
-- `DATABASE_URL` 또는 `TURSO_DATABASE_URL`과 인증 토큰을 배포 환경에 설정한다.
+- `TURSO_DATABASE_URL`과 `TURSO_AUTH_TOKEN`을 배포 환경에 설정한다.
 - 외부 DB에 `npx prisma migrate deploy`를 적용한다.
 - 기존 `prisma/dev.db` 데이터가 필요하면 별도 이전 절차와 검증 목록을 작성한 뒤 이전한다.
 - 개발·스테이징·운영 환경별 DB를 분리하고, 자격 증명은 저장소에 커밋하지 않는다.

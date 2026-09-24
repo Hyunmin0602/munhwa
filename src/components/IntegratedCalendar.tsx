@@ -27,7 +27,8 @@ export default function IntegratedCalendar() {
     try {
       const projectResponse = await apiFetch("/api/projects");
       if (!projectResponse.ok) throw new Error();
-      const projectData = await projectResponse.json() as Project[];
+      const projectPayload = await projectResponse.json();
+      const projectData = (Array.isArray(projectPayload?.items) ? projectPayload.items : []) as Project[];
       const eventData = await Promise.all(projectData.map(async (project) => {
         const response = await apiFetch(`/api/projects/${project.id}/events`);
         if (!response.ok) throw new Error();
@@ -37,7 +38,10 @@ export default function IntegratedCalendar() {
       setProjects(projectData); setEvents(eventData.flat());
     } catch { setError("통합 일정을 불러오지 못했습니다."); }
   };
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => { void load(); }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   const start = current.startOf("month");
   const cells = useMemo(() => {

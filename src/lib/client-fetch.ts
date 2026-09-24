@@ -6,6 +6,16 @@ type ToastMessage = {
   onAction?: () => void;
 };
 
+class ApiFetchError extends Error {
+  status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiFetchError";
+    this.status = status;
+  }
+}
+
 const toastListeners = new Set<(toasts: ToastMessage[]) => void>();
 let toastSeq = 0;
 let toasts: ToastMessage[] = [];
@@ -92,10 +102,10 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit, options?:
       const res = await fetch(input, init);
 
       if (res.status === 401) {
+        // This utility is shared outside React components, so use a full-page redirect.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = `/login?callbackUrl=${encodeURIComponent(callbackUrl)}`;
-        const err: any = new Error("Unauthorized");
-        err.status = 401;
-        throw err;
+        throw new ApiFetchError("Unauthorized", 401);
       }
 
       if (res.status >= 500) {
@@ -104,9 +114,7 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit, options?:
           await new Promise((resolve) => setTimeout(resolve, 200 * Math.pow(2, attempt)));
           continue;
         }
-        const err: any = new Error("Server error");
-        err.status = res.status;
-        throw err;
+        throw new ApiFetchError("Server error", res.status);
       }
 
       return res;

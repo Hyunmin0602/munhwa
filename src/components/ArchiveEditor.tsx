@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect, useCallback, useRef } from "react";
+import Image from "next/image";
 import {
-  Save, Globe, Lock, ArrowLeft, ExternalLink,
+  Save, Globe, Lock, ArrowLeft, ExternalLink, ChevronDown,
   Bold, Italic, Strikethrough, Code, Link2,
   List, ListOrdered, Quote, Minus, Heading1, Heading2, Heading3,
   CheckSquare, CircleHelp, Columns2, ImageIcon, LayoutPanelLeft, Trash2, Upload, X,
@@ -41,6 +42,11 @@ interface ArchiveImage {
   mimeType: string;
   byteSize: number;
   createdAt: string;
+}
+
+interface CollaboratorData {
+  collaborators: { id: string; name: string | null; email: string }[];
+  members: { id: string; name: string | null; email: string }[];
 }
 
 type ToolbarAction =
@@ -161,6 +167,11 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [showHtmlHelp, setShowHtmlHelp] = useState(false);
   const [images, setImages] = useState<ArchiveImage[]>([]);
+  const [collaboratorData, setCollaboratorData] = useState<CollaboratorData | null>(null);
+  const [canManageCollaborators, setCanManageCollaborators] = useState(false);
+  const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
+  const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
+  const [savingCollaborators, setSavingCollaborators] = useState(false);
   const [draggingImages, setDraggingImages] = useState(false);
   const [layoutBuilder, setLayoutBuilder] = useState<"columns" | "image" | null>(null);
   const [leftColumn, setLeftColumn] = useState("");
@@ -189,10 +200,33 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         setContent(data.content);
         setKind((data.kind ?? "DOCUMENT") as ArchiveKind);
         setVisibility((data.visibility ?? (data.published ? "EXTERNAL" : "PRIVATE")) as ArchiveVisibility);
-        const imagesResponse = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`);
-        if (imagesResponse.ok) {
-          const imageData = await imagesResponse.json();
-          if (!cancelled) setImages(Array.isArray(imageData) ? imageData : []);
+        try {
+          const imagesResponse = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`, undefined, { showGlobalError: false });
+          if (imagesResponse.ok) {
+            const imageData = await imagesResponse.json();
+            if (!cancelled) setImages(Array.isArray(imageData) ? imageData : []);
+          }
+        } catch {
+          if (!cancelled) setImages([]);
+        }
+        try {
+          const collaboratorsResponse = await apiFetch(`/api/admin/projects/${projectId}/archive/${postId}/collaborators`, undefined, { showGlobalError: false });
+          if (collaboratorsResponse.ok) {
+            const collaboratorDataResponse = await collaboratorsResponse.json() as CollaboratorData;
+            if (!cancelled) {
+              setCanManageCollaborators(true);
+              setCollaboratorData(collaboratorDataResponse);
+              setSelectedCollaborators(collaboratorDataResponse.collaborators.map((user) => user.id));
+            }
+          } else if (!cancelled) {
+            setCanManageCollaborators(false);
+            setCollaboratorData(null);
+          }
+        } catch {
+          if (!cancelled) {
+            setCanManageCollaborators(false);
+            setCollaboratorData(null);
+          }
         }
       } catch (error) {
         if (!cancelled) setLoadError(error instanceof Error && error.message ? error.message : getModalExceptionMessage(error, "문서 조회"));
@@ -200,6 +234,28 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
     })();
     return () => { cancelled = true; };
   }, [projectId, postId, reloadKey]);
+
+  const saveCollaborators = async () => {
+    setSavingCollaborators(true);
+    setActionError(null);
+    try {
+      const response = await apiFetch(`/api/admin/projects/${projectId}/archive/${postId}/collaborators`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIds: selectedCollaborators, reason: "아카이브 공동 수정자 설정" }),
+      }, { showGlobalError: false });
+      if (!response.ok) {
+        setActionError(await getModalRequestErrorMessage(response, "공동 수정자 저장"));
+        return;
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (error) {
+      setActionError(getModalExceptionMessage(error, "공동 수정자 저장"));
+    } finally {
+      setSavingCollaborators(false);
+    }
+  };
 
   useEffect(() => {
     const mediaQuery = window.matchMedia("(max-width: 767px)");
@@ -570,6 +626,30 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         </div>
       )}
 
+      {canManageCollaborators && (
+        <section className="flex-shrink-0 border-b border-indigo-100 bg-indigo-50/60 px-4 py-3 md:px-5">
+          <button type="button" onClick={() => setCollaboratorsOpen((current) => !current)} aria-expanded={collaboratorsOpen} className="flex w-full items-center justify-between gap-3 text-left">
+            <span><span className="text-xs font-semibold text-indigo-700">공동 수정자 지정(관리자 전용)</span><span className="mt-1 block text-xs text-indigo-900/70"></span></span>
+            <ChevronDown size={16} className={`flex-shrink-0 text-indigo-500 transition-transform ${collaboratorsOpen ? "rotate-180" : ""}`} />
+          </button>
+          {collaboratorsOpen && collaboratorData && (
+            <div className="mt-3 border-t border-indigo-100 pt-3">
+              <div className="flex justify-end">
+                <button type="button" onClick={() => void saveCollaborators()} disabled={savingCollaborators} className="rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50">{savingCollaborators ? "저장 중..." : "공동 수정자 저장"}</button>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {collaboratorData.members.map((member) => (
+                  <label key={member.id} className="inline-flex items-center gap-2 rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs text-gray-700">
+                    <input type="checkbox" checked={selectedCollaborators.includes(member.id)} onChange={(event) => setSelectedCollaborators((current) => event.target.checked ? [...current, member.id] : current.filter((id) => id !== member.id))} />
+                    <span>{member.name?.trim() || member.email}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
       {/* ── Markdown Toolbar ── */}
       {viewMode !== "preview" && (
         <div className="flex items-center gap-1 px-5 py-2 border-b border-gray-100 bg-gray-50/80 flex-shrink-0 flex-wrap">
@@ -614,14 +694,14 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
           <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-xs font-bold tracking-wide text-indigo-600">CONTENT BLOCK</p>
+                <p className="text-xs font-bold tracking-wide text-indigo-600">콘텐츠 블록</p>
                 <h2 className="mt-1 text-lg font-bold text-slate-900">{layoutBuilder === "columns" ? "2열 블록 추가" : "이미지 블록 추가"}</h2>
                 <p className="mt-1 text-xs text-slate-500">{layoutBuilder === "columns" ? "각 영역에 표시할 내용을 입력하세요." : "이미지의 표시 방식과 설명을 정하세요."}</p>
               </div>
               <button type="button" onClick={() => setLayoutBuilder(null)} aria-label="블록 추가 닫기" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={17} /></button>
             </div>
             {layoutBuilder === "columns" ? (
-              <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 <label className="text-xs font-semibold text-slate-600">왼쪽 영역<textarea value={leftColumn} onChange={(event) => setLeftColumn(event.target.value)} rows={7} placeholder="왼쪽에 넣을 내용" className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" /></label>
                 <label className="text-xs font-semibold text-slate-600">오른쪽 영역<textarea value={rightColumn} onChange={(event) => setRightColumn(event.target.value)} rows={7} placeholder="오른쪽에 넣을 내용" className="mt-2 w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" /></label>
               </div>
@@ -631,7 +711,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
                   <input ref={builderImageInputRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadImage(file, (image) => { setImageUrl(image.url); setImageAlt(file.name.replace(/\.[^.]+$/, "") || "이미지"); setLayoutError(""); }); }} />
                   <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-semibold text-slate-800">사진 업로드</p><p className="mt-0.5 text-xs text-slate-500">JPEG, PNG, WebP, GIF · 최대 4MB</p></div><button type="button" disabled={uploadingImage} onClick={() => builderImageInputRef.current?.click()} className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-lg bg-white px-3 py-2 text-xs font-bold text-indigo-700 shadow-sm ring-1 ring-indigo-100 hover:bg-indigo-50 disabled:opacity-50"><Upload size={14} />{uploadingImage ? "업로드 중…" : "파일 선택"}</button></div>
                 </div>
-                {images.length > 0 && <div><p className="text-xs font-semibold text-slate-600">업로드한 이미지</p><div className="mt-2 flex gap-2 overflow-x-auto">{images.map((image) => <button key={image.id} type="button" onClick={() => { setImageUrl(image.url); setLayoutError(""); }} className={`h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border-2 ${imageUrl === image.url ? "border-indigo-500" : "border-transparent"}`}><img src={image.url} alt="첨부 이미지 선택" className="h-full w-full object-cover" /></button>)}</div></div>}
+                {images.length > 0 && <div><p className="text-xs font-semibold text-slate-600">업로드한 이미지</p><div className="mt-2 flex gap-2 overflow-x-auto">{images.map((image) => <button key={image.id} type="button" onClick={() => { setImageUrl(image.url); setLayoutError(""); }} className={`h-14 w-14 flex-shrink-0 overflow-hidden rounded-lg border-2 ${imageUrl === image.url ? "border-indigo-500" : "border-transparent"}`}><Image src={image.url} alt="첨부 이미지 선택" width={56} height={56} unoptimized className="h-full w-full object-cover" /></button>)}</div></div>}
                 <label className="block text-xs font-semibold text-slate-600">이미지 주소<input value={imageUrl} onChange={(event) => { setImageUrl(event.target.value); setLayoutError(""); }} placeholder="https://..." className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" /></label>
                 <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-600">대체 텍스트<input value={imageAlt} onChange={(event) => setImageAlt(event.target.value)} placeholder="이미지 설명" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" /></label><label className="text-xs font-semibold text-slate-600">캡션 <span className="font-normal text-slate-400">(선택)</span><input value={imageCaption} onChange={(event) => setImageCaption(event.target.value)} placeholder="사진 설명" className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-indigo-200" /></label></div>
                 <div className="grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-600">정렬<select value={imageAlign} onChange={(event) => setImageAlign(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200"><option value="left">왼쪽</option><option value="center">가운데</option><option value="right">오른쪽</option></select></label><label className="text-xs font-semibold text-slate-600">크기<select value={imageSize} onChange={(event) => setImageSize(event.target.value)} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200"><option value="small">작게</option><option value="medium">보통</option><option value="large">크게</option><option value="full">전체 너비</option></select></label></div>
