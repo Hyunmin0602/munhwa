@@ -11,6 +11,13 @@ import { archiveImageExtension, hasValidArchiveImageSignature, isArchiveImageMim
 export const runtime = "nodejs";
 
 type Params = { params: Promise<{ projectId: string; postId: string }> };
+function isUploadFile(value: FormDataEntryValue | null): value is File {
+  return !!value
+    && typeof value === "object"
+    && typeof (value as Partial<File>).type === "string"
+    && typeof (value as Partial<File>).size === "number"
+    && typeof (value as Partial<File>).arrayBuffer === "function";
+}
 
 function localImagePath(storageKey: string) {
   return path.join(process.cwd(), "public", "uploads", storageKey);
@@ -49,7 +56,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   if (!(await canEditArchiveImage(session.user.id, projectId, postId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const formData = await request.formData();
   const file = formData.get("file");
-  if (!(file instanceof File)) return NextResponse.json({ error: "이미지 파일이 필요합니다." }, { status: 400 });
+  if (!isUploadFile(file)) return NextResponse.json({ error: "이미지 파일이 필요합니다." }, { status: 400 });
   if (!isArchiveImageMimeType(file.type)) return NextResponse.json({ error: "JPEG, PNG, WebP, GIF 파일만 업로드할 수 있습니다." }, { status: 400 });
   if (file.size === 0 || file.size > MAX_ARCHIVE_IMAGE_BYTES) return NextResponse.json({ error: "이미지는 4MB 이하만 업로드할 수 있습니다." }, { status: 400 });
 
@@ -70,7 +77,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     let imageUrl: string;
     let persistedStorageKey: string;
     if (hasBlobStorage) {
-      const uploadedBlob = await put(storageKey, file, { access: "public", contentType: file.type, addRandomSuffix: false });
+      const uploadedBlob = await put(storageKey, file, { access: "public", token: process.env.BLOB_READ_WRITE_TOKEN, contentType: file.type, addRandomSuffix: false });
       blob = uploadedBlob;
       imageUrl = uploadedBlob.url;
       persistedStorageKey = uploadedBlob.pathname;
