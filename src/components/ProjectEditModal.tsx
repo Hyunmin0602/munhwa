@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Search, UserPlus, X } from "lucide-react";
+import { Search, UserPlus } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
+import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
 const COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#8b5cf6"];
 
@@ -183,13 +184,10 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 px-4">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <ModalFrame title="사업 수정" onClose={onClose} className="max-w-md p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-900">사업 수정</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600" title="닫기">
-            <X size={18} />
-          </button>
+          <ModalCloseButton label="사업 수정 닫기" onClick={onClose} />
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -297,7 +295,6 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
             {!searchingUsers && hasSearchedUsers && userResults.length === 0 && !error && <p className="mt-2 text-xs text-gray-400">일치하는 등록 사용자가 없습니다.</p>}
           </div>}
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }

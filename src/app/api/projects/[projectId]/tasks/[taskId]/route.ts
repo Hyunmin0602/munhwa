@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withDbRetry } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
-import { assertProjectAccess } from "@/lib/server-utils";
+import { assertProjectAccess, recordActivity } from "@/lib/server-utils";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId/tasks/:taskId] ${action} failed`, error);
@@ -56,6 +56,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         include: { assignee: { select: { id: true, name: true } } },
       })
     );
+    await recordActivity({ actorId: userId, projectId, type: "칸반", action: "수정", entityType: "TASK", entityId: task.id, title: task.title, beforeData: { title: existing.title, description: existing.description, priority: existing.priority, dueDate: existing.dueDate, columnId: existing.columnId, assigneeId: existing.assigneeId }, afterData: { title: task.title, description: task.description, priority: task.priority, dueDate: task.dueDate, columnId: task.columnId, assigneeId: task.assigneeId } });
     return NextResponse.json(task);
   } catch (error) {
     logApiError("PATCH", error);
@@ -76,6 +77,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     await withDbRetry(() => prisma.task.delete({ where: { id: taskId } }));
+    await recordActivity({ actorId: userId, projectId, type: "칸반", action: "삭제", entityType: "TASK", entityId: taskId, title: existing.title, beforeData: { title: existing.title, description: existing.description, priority: existing.priority, dueDate: existing.dueDate, columnId: existing.columnId, assigneeId: existing.assigneeId } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     logApiError("DELETE", error);

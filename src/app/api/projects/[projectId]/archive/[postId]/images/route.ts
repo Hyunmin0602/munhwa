@@ -3,7 +3,7 @@ import { put, del } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { assertProjectMember, canManageCultureSportsContent } from "@/lib/server-utils";
+import { assertProjectMember, canManageProject } from "@/lib/server-utils";
 import { archiveImageExtension, hasValidArchiveImageSignature, isArchiveImageMimeType, MAX_ARCHIVE_IMAGE_BYTES } from "@/lib/archive-images";
 
 export const runtime = "nodejs";
@@ -14,7 +14,7 @@ async function canEditArchiveImage(userId: string, projectId: string, postId: st
   if (!(await assertProjectMember(userId, projectId))) return false;
   const [post, canManage] = await withDbRetry(() => Promise.all([
     prisma.archivePost.findFirst({ where: { id: postId, projectId }, select: { authorId: true, visibility: true, collaborators: { select: { userId: true } } } }),
-    canManageCultureSportsContent(userId),
+    canManageProject(userId, projectId),
   ]));
   if (!post) return false;
   if (canManage) return true;

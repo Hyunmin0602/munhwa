@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { assertProjectMember, assertProjectOwner, canManageCultureSportsContent, findUserByEmail } from "@/lib/server-utils";
+import { assertProjectMember, assertProjectOwner, canManageProject, findUserByEmail } from "@/lib/server-utils";
 import { withDbRetry } from "@/lib/db-retry";
 
 function logApiError(action: string, error: unknown) {
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest, { params }: Params) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
     if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    const canManage = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
+    const canManage = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
 
     const query = request.nextUrl.searchParams.get("query")?.trim();
     if (query) {
@@ -48,7 +48,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
-    const canManage = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
+    const canManage = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
     if (!canManage) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const { email, userId: requestedUserId, role } = await req.json();

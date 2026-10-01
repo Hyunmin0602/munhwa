@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { assertProjectMember, canViewAllArchivePosts } from "@/lib/server-utils";
+import { assertProjectMember, canViewAllArchivePosts, recordActivity } from "@/lib/server-utils";
 
 type Params = { params: Promise<{ projectId: string }> };
 
@@ -66,5 +66,6 @@ export async function POST(req: NextRequest, { params }: Params) {
       include: { author: { select: { id: true, name: true } } },
     })
   );
+  await recordActivity({ actorId: userId, projectId, type: "문서", action: "생성", entityType: "ARCHIVE_POST", entityId: post.id, title: post.title, afterData: { title: post.title, visibility: post.visibility, kind: post.kind } });
   return NextResponse.json(post, { status: 201 });
 }

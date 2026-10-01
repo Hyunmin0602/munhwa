@@ -51,6 +51,7 @@ export function password(value: unknown) {
 
 export function optionalText(value: unknown, label: string, maxLength: number) {
   if (value === undefined || value === null) return null;
+  if (typeof value === "string" && !value.trim()) return null;
   return requiredText(value, label, maxLength);
 }
 

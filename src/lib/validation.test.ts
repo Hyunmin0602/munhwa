@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { InputValidationError, normalizeEmail, password, projectColor, projectStatus, projectTags, readJsonObject, requiredText } from "./validation";
+import { InputValidationError, normalizeEmail, optionalText, password, projectColor, projectStatus, projectTags, readJsonObject, requiredText } from "./validation";
 
 test("normalizeEmail canonicalizes valid email input", () => {
   assert.equal(normalizeEmail(" User.Name@Example.COM "), "user.name@example.com");
@@ -29,4 +29,9 @@ test("project values require bounded text and approved status and color values",
   assert.throws(() => projectTags(Array(11).fill("태그")), InputValidationError);
   assert.throws(() => projectStatus("unknown"), InputValidationError);
   assert.throws(() => projectColor("red"), InputValidationError);
+});
+
+test("optional text accepts an empty description", () => {
+  assert.equal(optionalText("", "일정 설명", 2_000), null);
+  assert.equal(optionalText("   ", "일정 설명", 2_000), null);
 });

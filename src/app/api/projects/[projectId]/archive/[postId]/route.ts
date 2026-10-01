@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { del } from "@vercel/blob";
 import { withDbRetry } from "@/lib/db-retry";
 import { normalizeArchiveVisibility } from "@/lib/archive-visibility";
-import { assertProjectMember, canManageCultureSportsContent, canViewAllArchivePosts } from "@/lib/server-utils";
+import { assertProjectMember, canManageProject, canViewAllArchivePosts, recordActivity } from "@/lib/server-utils";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId/archive/:postId] ${action} failed`, error);
@@ -52,7 +52,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const userId = session.user.id;
 
     if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    const canManage = await canManageCultureSportsContent(userId);
+    const canManage = await canManageProject(userId, projectId);
 
     const existing = await withDbRetry(() => prisma.archivePost.findFirst({
       where: { id: postId, projectId },
@@ -65,6 +65,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     }
 
     const data = await req.json();
+    if (typeof data.expectedUpdatedAt === "string" && existing.updatedAt.toISOString() !== data.expectedUpdatedAt) {
+      return NextResponse.json({ error: "다른 사용자가 문서를 먼저 수정했습니다. 최신 내용을 불러온 뒤 다시 저장해주세요." }, { status: 409 });
+    }
     if (!canManage && existing.visibility === "EXTERNAL" && existing.authorId !== userId && !isCollaborator) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
@@ -72,6 +75,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       const post = await withDbRetry(() =>
         prisma.archivePost.update({ where: { id: postId }, data: { shareEnabled: false } })
       );
+      await recordActivity({ actorId: userId, projectId, type: "문서", action: "공유 해제", entityType: "ARCHIVE_POST", entityId: postId, title: existing.title });
       return NextResponse.json(post);
     }
     if (data.shareAction === "regenerate") {
@@ -81,9 +85,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           data: { shareEnabled: true, shareToken: uuidv4().replace(/-/g, "") },
         })
       );
+      await recordActivity({ actorId: userId, projectId, type: "문서", action: "공유 설정", entityType: "ARCHIVE_POST", entityId: postId, title: existing.title });
       return NextResponse.json(post);
     }
-    const nextVisibility = normalizeArchiveVisibility(data.visibility ?? (data.published !== undefined ? (data.published ? "EXTERNAL" : "PRIVATE") : undefined));
+    const nextVisibility = normalizeArchiveVisibility(data.visibility ?? (data.published !== undefined ? (data.published ? "EXTERNAL" : "PRIVATE") : existing.visibility));
     const post = await withDbRetry(() =>
       prisma.archivePost.update({
         where: { id: postId },
@@ -99,6 +104,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         },
       })
     );
+    await recordActivity({ actorId: userId, projectId, type: "문서", action: "수정", entityType: "ARCHIVE_POST", entityId: post.id, title: post.title, beforeData: { title: existing.title, content: existing.content, kind: existing.kind, visibility: existing.visibility }, afterData: { title: post.title, content: post.content, kind: post.kind, visibility: post.visibility } });
     return NextResponse.json(post);
   } catch (error) {
     logApiError("PATCH", error);
@@ -114,7 +120,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     const userId = session.user.id;
 
     if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    const canManage = await canManageCultureSportsContent(userId);
+    const canManage = await canManageProject(userId, projectId);
 
     const existing = await withDbRetry(() => prisma.archivePost.findFirst({ where: { id: postId, projectId } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -128,6 +134,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     }
     if (images.length > 0) await del(images.map((image) => image.url));
     await withDbRetry(() => prisma.archivePost.delete({ where: { id: postId } }));
+    await recordActivity({ actorId: userId, projectId, type: "문서", action: "삭제", entityType: "ARCHIVE_POST", entityId: postId, title: existing.title, beforeData: { title: existing.title, content: existing.content, kind: existing.kind, visibility: existing.visibility } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     logApiError("DELETE", error);

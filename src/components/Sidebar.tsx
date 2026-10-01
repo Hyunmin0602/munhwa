@@ -40,8 +40,10 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
   const pathname = usePathname();
   const { data: session } = useSession();
   const [isReordering, setIsReordering] = useState(false);
+  const [projectQuery, setProjectQuery] = useState("");
   const [isSpaceAdmin, setIsSpaceAdmin] = useState(false);
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+  const visibleProjects = projects.filter((project) => !projectQuery.trim() || project.name.toLowerCase().includes(projectQuery.trim().toLowerCase()));
 
   useEffect(() => {
     let cancelled = false;
@@ -52,6 +54,16 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
       .catch(() => {
         if (!cancelled) setIsSpaceAdmin(false);
       });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    apiFetch("/api/space-management/members?limit=1")
+      .then((response) => {
+        if (!cancelled && response.ok) setIsSpaceAdmin(true);
+      })
+      .catch(() => undefined);
     return () => { cancelled = true; };
   }, []);
 
@@ -77,7 +89,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
         </div>
         {/* 모바일 닫기 버튼 */}
         {onClose && (
-          <button onClick={onClose} className="lg:hidden p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
+          <button aria-label="사이드바 닫기" onClick={onClose} className="lg:hidden p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all">
             <X size={18} />
           </button>
         )}
@@ -108,14 +120,14 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
           </Link>
           {(isSpaceAdmin || isSystemAdmin) && (
             <Link
-              href="/dashboard/admin"
+              href={isSystemAdmin ? "/dashboard/admin" : "/dashboard/space-management"}
               onClick={onClose}
               className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-                pathname === "/dashboard/admin" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
+                (pathname === "/dashboard/admin" || pathname === "/dashboard/space-management") ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
               }`}
             >
-              <ShieldCheck size={16} />
-              시스템 관리자
+              {isSystemAdmin ? <ShieldCheck size={16} /> : null}
+              {isSystemAdmin ? "시스템 관리자" : "관리자 설정"}
             </Link>
           )}
           <div className="flex items-center justify-between px-3 py-1 mb-1">
@@ -124,6 +136,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
               <button
                 type="button"
                 onClick={() => setIsReordering((current) => !current)}
+                aria-label="사업 순서 변경"
                 className={`flex h-7 items-center gap-1 rounded-md px-1.5 text-xs transition-colors ${isReordering ? "bg-indigo-50 text-indigo-700" : "text-gray-400 hover:bg-gray-100 hover:text-gray-700"}`}
                 title="사업 순서 변경"
               >
@@ -132,6 +145,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
               </button>
               <button
                 onClick={onNewProject}
+                aria-label="새 사업 추가"
                 className="text-gray-400 hover:text-indigo-600 transition-colors"
                 title="새 사업 추가"
               >
@@ -139,7 +153,8 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
               </button>
             </div>
           </div>
-          {projects.map((p, index) => {
+          {projects.length > 5 && <input value={projectQuery} onChange={(event) => setProjectQuery(event.target.value)} placeholder="사업 검색" aria-label="사업 검색" className="mb-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-xs outline-none focus:border-indigo-500" />}
+          {visibleProjects.map((p, index) => {
             const base = `/dashboard/projects/${p.id}`;
             const isActive = pathname.startsWith(base);
             return (
@@ -164,6 +179,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
                       onEditProject(p);
                       onClose?.();
                     }}
+                    aria-label={`${p.name} 사업 수정`}
                     className={`mr-1 rounded-md p-1.5 transition-all ${
                       isActive
                         ? "text-indigo-500 hover:bg-indigo-100"
@@ -206,6 +222,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
               </div>
             );
           })}
+          {projects.length > 5 && visibleProjects.length === 0 && <p className="px-3 py-3 text-xs text-gray-400">검색 결과가 없습니다.</p>}
         </div>
       </nav>
 

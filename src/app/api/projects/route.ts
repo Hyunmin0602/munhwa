@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { DEFAULT_SPACE_ID, assertAdmin, assertSpaceAdmin } from "@/lib/server-utils";
+import { DEFAULT_SPACE_ID, assertAdmin, assertSpaceManager, canManageCultureSportsContent } from "@/lib/server-utils";
 import { InputValidationError, optionalText, projectColor, projectStatus, projectTags, readJsonObject, requiredText } from "@/lib/validation";
 import { internalError, unauthorized, validationError } from "@/lib/api-error";
 
@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     const userId = session.user.id;
     const canViewAll = await assertAdmin(userId);
-    const canViewSpace = !canViewAll && await assertSpaceAdmin(userId);
+    const canViewSpace = !canViewAll && await assertSpaceManager(userId);
     const rawLimit = request.nextUrl.searchParams.get("limit");
     const requestedLimit = rawLimit ? Number(rawLimit) : 30;
     const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 30, 1), 50);
@@ -77,6 +77,7 @@ export async function POST(req: NextRequest) {
     }
 
     const userId = session.user.id;
+    if (!(await canManageCultureSportsContent(userId))) return NextResponse.json({ error: "Space 관리자만 사업을 생성할 수 있습니다." }, { status: 403 });
     const data = await readJsonObject(req);
     const name = requiredText(data.name, "프로젝트 이름", 100);
     const description = optionalText(data.description, "상세 설명", 1_000);

@@ -3,7 +3,7 @@ import { del } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { assertProjectMember, canManageCultureSportsContent } from "@/lib/server-utils";
+import { assertProjectMember, canManageProject } from "@/lib/server-utils";
 
 export const runtime = "nodejs";
 
@@ -20,7 +20,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
       where: { id: imageId, postId, post: { projectId } },
       select: { id: true, url: true, uploaderId: true, post: { select: { collaborators: { select: { userId: true } } } } },
     }),
-    canManageCultureSportsContent(session.user.id),
+    canManageProject(session.user.id, projectId),
   ]));
   if (!image) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const isCollaborator = image.post.collaborators.some(({ userId }) => userId === session.user.id);

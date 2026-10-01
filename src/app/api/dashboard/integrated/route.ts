@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { DEFAULT_SPACE_ID, assertAdmin, assertSpaceAdmin } from "@/lib/server-utils";
+import { DEFAULT_SPACE_ID, assertAdmin, assertSpaceManager } from "@/lib/server-utils";
 
 const ITEM_TYPES = ["task", "event", "archive", "meeting"] as const;
 type ItemType = (typeof ITEM_TYPES)[number];
@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const userId = session.user.id;
   const canViewAll = await assertAdmin(userId);
-  const canViewSpace = !canViewAll && await assertSpaceAdmin(userId);
+  const canViewSpace = !canViewAll && await assertSpaceManager(userId);
   const canViewArchiveAll = canViewAll || canViewSpace;
   const requestedType = searchParams.get("type") ?? searchParams.get("types");
   const types = parseTypes(requestedType);

@@ -5,12 +5,13 @@ import {
   Save, Globe, Lock, ArrowLeft, ExternalLink, ChevronDown,
   Bold, Italic, Strikethrough, Code, Link2,
   List, ListOrdered, Quote, Minus, Heading1, Heading2, Heading3,
-  CheckSquare, CircleHelp, Columns2, ImageIcon, LayoutPanelLeft, Trash2, Upload, X,
+  CheckSquare, CircleHelp, Columns2, ImageIcon, LayoutPanelLeft, Trash2, Upload,
 } from "lucide-react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Skeleton } from "./ui/Skeleton";
 import { apiFetch, getModalExceptionMessage, getModalRequestErrorMessage } from "@/lib/client-fetch";
 import MarkdownRenderer from "./MarkdownRenderer";
+import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
 type ArchiveVisibility = "PRIVATE" | "INTERNAL" | "EXTERNAL";
 type ArchiveKind = "DOCUMENT" | "MEETING";
@@ -160,6 +161,8 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [imageError, setImageError] = useState<string | null>(null);
+  const [collaboratorError, setCollaboratorError] = useState<string | null>(null);
   const [visibility, setVisibility] = useState<ArchiveVisibility>("PRIVATE");
   const [kind, setKind] = useState<ArchiveKind>("DOCUMENT");
   const [viewMode, setViewMode] = useState<"split" | "editor" | "preview">("split");
@@ -185,6 +188,24 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const builderImageInputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
+
+  const hasUnsavedChanges = !!post && (title !== post.title || content !== post.content || visibility !== post.visibility || kind !== post.kind);
+
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const navigateBack = () => {
+    if (hasUnsavedChanges && !window.confirm("저장하지 않은 변경사항이 있습니다. 페이지를 나가면 변경사항이 사라집니다. 계속하시겠습니까?")) return;
+    router.push(`/dashboard/projects/${projectId}/archive`);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -201,15 +222,23 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         setKind((data.kind ?? "DOCUMENT") as ArchiveKind);
         setVisibility((data.visibility ?? (data.published ? "EXTERNAL" : "PRIVATE")) as ArchiveVisibility);
         try {
+          setImageError(null);
           const imagesResponse = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`, undefined, { showGlobalError: false });
           if (imagesResponse.ok) {
             const imageData = await imagesResponse.json();
             if (!cancelled) setImages(Array.isArray(imageData) ? imageData : []);
+          } else if (!cancelled) {
+            setImages([]);
+            setImageError("첨부 이미지를 불러오지 못했습니다.");
           }
         } catch {
-          if (!cancelled) setImages([]);
+          if (!cancelled) {
+            setImages([]);
+            setImageError("첨부 이미지를 불러오지 못했습니다.");
+          }
         }
         try {
+          setCollaboratorError(null);
           const collaboratorsResponse = await apiFetch(`/api/admin/projects/${projectId}/archive/${postId}/collaborators`, undefined, { showGlobalError: false });
           if (collaboratorsResponse.ok) {
             const collaboratorDataResponse = await collaboratorsResponse.json() as CollaboratorData;
@@ -221,11 +250,13 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
           } else if (!cancelled) {
             setCanManageCollaborators(false);
             setCollaboratorData(null);
+            if (collaboratorsResponse.status !== 403) setCollaboratorError("공동 수정자 정보를 불러오지 못했습니다.");
           }
         } catch {
           if (!cancelled) {
             setCanManageCollaborators(false);
             setCollaboratorData(null);
+            setCollaboratorError("공동 수정자 정보를 불러오지 못했습니다.");
           }
         }
       } catch (error) {
@@ -278,13 +309,14 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   }, [isMobile, viewMode]);
 
   const save = useCallback(async () => {
+    if (saving) return false;
     setSaving(true);
     setActionError(null);
     try {
       const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content, visibility, kind }),
+        body: JSON.stringify({ title, content, visibility, kind, expectedUpdatedAt: post?.updatedAt }),
       }, { showGlobalError: false });
       if (res.ok) {
         const next = await res.json();
@@ -300,9 +332,10 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
     } finally {
       setSaving(false);
     }
-  }, [projectId, postId, title, content, visibility, kind]);
+  }, [projectId, postId, title, content, visibility, kind, post, saving]);
 
   const togglePublish = async () => {
+    if (publishing) return;
     setPublishing(true);
     setActionError(null);
     try {
@@ -310,7 +343,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title, content, visibility: nextVisibility, kind }),
+        body: JSON.stringify({ title, content, visibility: nextVisibility, kind, expectedUpdatedAt: post?.updatedAt }),
       }, { showGlobalError: false });
       if (res.ok) {
         const next = await res.json();
@@ -327,13 +360,14 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   };
 
   const updateShareLink = async (shareAction: "revoke" | "regenerate") => {
+    if (sharing) return;
     setSharing(true);
     setActionError(null);
     try {
       const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shareAction }),
+        body: JSON.stringify({ shareAction, expectedUpdatedAt: post?.updatedAt }),
       }, { showGlobalError: false });
       if (res.ok) setPost(await res.json());
       else setActionError(await getModalRequestErrorMessage(res, "공유 링크 변경"));
@@ -397,6 +431,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   };
 
   const uploadImage = async (file: File, onUploaded?: (image: ArchiveImage) => void) => {
+    if (uploadingImage) return;
     const textarea = textareaRef.current;
     if (!textarea && !onUploaded) return;
     setUploadingImage(true);
@@ -522,12 +557,9 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       <div className="flex items-center justify-between px-3 md:px-5 py-3 border-b border-gray-100 flex-shrink-0 bg-white z-10">
         {/* Left */}
         <div className="flex items-center gap-3 min-w-0 flex-1">
-          <Link
-            href={`/dashboard/projects/${projectId}/archive`}
-            className="text-gray-400 hover:text-gray-700 flex-shrink-0 transition-colors"
-          >
+          <button type="button" onClick={navigateBack} aria-label="아카이브 목록으로 돌아가기" className="text-gray-400 hover:text-gray-700 flex-shrink-0 transition-colors">
             <ArrowLeft size={16} />
-          </Link>
+          </button>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
@@ -626,6 +658,9 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         </div>
       )}
 
+      {imageError && <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800"><span>{imageError}</span><button type="button" onClick={() => setReloadKey((current) => current + 1)} className="underline">다시 시도</button></div>}
+      {collaboratorError && <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-4 py-2 text-xs font-medium text-amber-800"><span>{collaboratorError}</span><button type="button" onClick={() => setReloadKey((current) => current + 1)} className="underline">다시 시도</button></div>}
+
       {canManageCollaborators && (
         <section className="flex-shrink-0 border-b border-indigo-100 bg-indigo-50/60 px-4 py-3 md:px-5">
           <button type="button" onClick={() => setCollaboratorsOpen((current) => !current)} aria-expanded={collaboratorsOpen} className="flex w-full items-center justify-between gap-3 text-left">
@@ -690,15 +725,14 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       )}
 
       {layoutBuilder && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4" onMouseDown={() => setLayoutBuilder(null)}>
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
+        <ModalFrame title={layoutBuilder === "columns" ? "2열 블록 추가" : "이미지 블록 추가"} onClose={() => setLayoutBuilder(null)} className="max-w-lg p-5">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-bold tracking-wide text-indigo-600">콘텐츠 블록</p>
                 <h2 className="mt-1 text-lg font-bold text-slate-900">{layoutBuilder === "columns" ? "2열 블록 추가" : "이미지 블록 추가"}</h2>
                 <p className="mt-1 text-xs text-slate-500">{layoutBuilder === "columns" ? "각 영역에 표시할 내용을 입력하세요." : "이미지의 표시 방식과 설명을 정하세요."}</p>
               </div>
-              <button type="button" onClick={() => setLayoutBuilder(null)} aria-label="블록 추가 닫기" className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"><X size={17} /></button>
+              <ModalCloseButton label="블록 추가 닫기" onClick={() => setLayoutBuilder(null)} />
             </div>
             {layoutBuilder === "columns" ? (
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -719,8 +753,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
             )}
             {layoutError && <p className="mt-4 rounded-lg bg-rose-50 px-3 py-2 text-xs font-medium text-rose-700">{layoutError}</p>}
             <div className="mt-5 flex gap-2"><button type="button" onClick={() => setLayoutBuilder(null)} className="flex-1 rounded-xl bg-slate-100 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-200">취소</button><button type="button" onClick={insertLayoutBlock} className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-500">문서에 삽입</button></div>
-          </div>
-        </div>
+        </ModalFrame>
       )}
 
       {images.length > 0 && viewMode !== "preview" && (

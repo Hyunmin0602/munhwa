@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withDbRetry } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
-import { assertProjectMember } from "@/lib/server-utils";
+import { assertProjectMember, recordActivity } from "@/lib/server-utils";
 import { eventAllDay, eventDates, InputValidationError, optionalText, projectColor, readJsonObject, requiredText } from "@/lib/validation";
 
 function logApiError(action: string, error: unknown) {
@@ -42,6 +42,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         },
       })
     );
+    await recordActivity({ actorId: userId, projectId, type: "일정", action: "수정", entityType: "EVENT", entityId: event.id, title: event.title, beforeData: { title: existing.title, description: existing.description, startDate: existing.startDate, endDate: existing.endDate, allDay: existing.allDay, color: existing.color }, afterData: { title: event.title, description: event.description, startDate: event.startDate, endDate: event.endDate, allDay: event.allDay, color: event.color } });
     return NextResponse.json(event);
   } catch (error) {
     if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -63,6 +64,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     await withDbRetry(() => prisma.event.delete({ where: { id: eventId } }));
+    await recordActivity({ actorId: userId, projectId, type: "일정", action: "삭제", entityType: "EVENT", entityId: eventId, title: existing.title, beforeData: { title: existing.title, description: existing.description, startDate: existing.startDate, endDate: existing.endDate, allDay: existing.allDay, color: existing.color } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     logApiError("DELETE", error);

@@ -37,6 +37,7 @@ model User {
   transferredSpaceAdminTo SpaceAdminTransferLog[] @relation("SpaceAdminTransferNext")
   administeredSpaces Space[] @relation("SpaceAdministrator")
   adminAuditLogs AdminAuditLog[] @relation("AdminAuditActor")
+  activityLogs ActivityLog[] @relation("ActivityActor")
   archiveCollaborations ArchivePostCollaborator[]
 }
 
@@ -53,6 +54,7 @@ model Space {
   projects    Project[]
   adminTransfers SpaceAdminTransferLog[] @relation("SpaceTransferLogs")
   auditLogs   AdminAuditLog[]
+  activityLogs ActivityLog[]
 
   @@index([adminUserId])
 }
@@ -116,6 +118,31 @@ model AdminAuditLog {
   @@index([spaceId, createdAt])
   @@index([targetType, targetId, createdAt])
   @@index([actorUserId, createdAt])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  spaceId    String
+  actorId    String
+  projectId  String?
+  type       String
+  action     String
+  entityType String
+  entityId   String
+  title      String?
+  metadata   String?
+  beforeData String?
+  afterData  String?
+  createdAt  DateTime @default(now())
+
+  space   Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  actor   User  @relation("ActivityActor", fields: [actorId], references: [id], onDelete: Restrict)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([spaceId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId, createdAt])
 }
 
 model Cohort {
@@ -188,6 +215,7 @@ model Project {
   invitations  ProjectInvitation[]
   space        Space? @relation(fields: [spaceId], references: [id], onDelete: Restrict)
   owner        User?  @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  activityLogs ActivityLog[]
 
   @@index([spaceId, updatedAt])
   @@index([ownerId])

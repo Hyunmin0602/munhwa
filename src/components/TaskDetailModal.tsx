@@ -1,13 +1,14 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Trash2, Calendar, User, Flag, AlignLeft } from "lucide-react";
+import { Trash2, Calendar, User, Flag, AlignLeft } from "lucide-react";
 import { apiFetch, getModalExceptionMessage, getModalRequestErrorMessage } from "@/lib/client-fetch";
 import { ModalErrorAlert } from "@/components/ui/ModalErrorAlert";
+import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
 interface Task {
   id: string;
   title: string;
-  description: string | null;
+  description?: string | null;
   priority: string;
   dueDate: string | null;
   columnId: string;
@@ -48,6 +49,26 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
   const titleRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { titleRef.current?.focus(); }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await apiFetch(`/api/projects/${projectId}/tasks/${task.id}`, undefined, { showGlobalError: false });
+        if (!response.ok) return;
+        const detail = await response.json() as Task;
+        if (cancelled) return;
+        setTitle(detail.title);
+        setDescription(detail.description ?? "");
+        setPriority(detail.priority);
+        setDueDate(detail.dueDate ? new Date(detail.dueDate).toISOString().split("T")[0] : "");
+        setAssigneeId(detail.assignee?.id ?? "");
+      } catch {
+        // The summary data remains editable if the detail request fails.
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [projectId, task.id]);
 
   const mark = () => setDirty(true);
 
@@ -115,28 +136,20 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
   }, [dirty, onClose, save]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 backdrop-blur-sm p-4"
-      onClick={handleBackdrop}
-    >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden">
+    <ModalFrame title="카드 상세" onClose={onClose} onEscape={() => { if (dirty) void save().then((saved) => { if (saved) onClose(); }); else onClose(); }} onBackdropMouseDown={handleBackdrop} className="max-w-lg flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">카드 상세</span>
           <div className="flex items-center gap-2">
             <button
+              aria-label={`${task.title} 삭제`}
               onClick={handleDelete}
               className="p-1.5 rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition-all hover:scale-110"
               title="삭제"
             >
               <Trash2 size={14} />
             </button>
-            <button
-              onClick={saveAndClose}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              <X size={14} />
-            </button>
+            <ModalCloseButton label="카드 상세 닫기" onClick={saveAndClose} />
           </div>
         </div>
 
@@ -233,7 +246,6 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
             {saving ? "저장 중..." : "저장 및 닫기"}
           </button>
         </div>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }

@@ -9,7 +9,6 @@ import {
   DragStartEvent,
   MouseSensor,
   type CollisionDetection,
-  pointerWithin,
   TouchSensor,
   useSensor,
   useSensors,
@@ -34,7 +33,7 @@ import { Skeleton } from "./ui/Skeleton";
 interface Task {
   id: string;
   title: string;
-  description: string | null;
+  description?: string | null;
   priority: string;
   dueDate: string | null;
   columnId: string;
@@ -76,10 +75,7 @@ const COLUMN_COLORS = [
 
 const columnDragId = (columnId: string) => `column:${columnId}`;
 const getColumnIdFromDragId = (id: string) => id.startsWith("column:") ? id.slice("column:".length) : id;
-const pointerFirstCollisionDetection: CollisionDetection = (args) => {
-  const pointerCollisions = pointerWithin(args);
-  return pointerCollisions.length > 0 ? pointerCollisions : closestCorners(args);
-};
+const pointerFirstCollisionDetection: CollisionDetection = (args) => closestCorners(args);
 const INTEGRATED_STATUS_OPTIONS = [
   { value: "", label: "통합 화면에 표시하지 않음" },
   { value: "BEFORE", label: "진행 전" },
@@ -146,6 +142,14 @@ function TaskCard({
         style={{ transform: `translateX(${swipeDx}px)`, transition: swiping ? "none" : "transform 0.2s ease" }}
         onTouchStart={handleTouchStart} onTouchMove={handleTouchMove} onTouchEnd={handleTouchEnd}
         onClick={() => { if (!didSwipe.current) onClick(); }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onClick(); }
+          if (event.key === "ArrowLeft" && canMoveLeft) { event.preventDefault(); onMoveLeft(); }
+          if (event.key === "ArrowRight" && canMoveRight) { event.preventDefault(); onMoveRight(); }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={`카드 상세 열기: ${task.title}`}
         className={`bg-white border border-slate-200 shadow-sm group rounded-xl cursor-grab active:cursor-grabbing touch-none ${!isSortDragging ? "hover:-translate-y-0.5 hover:shadow-md hover:border-indigo-200" : ""}`}
       >
         <div className="p-3.5">
@@ -164,7 +168,7 @@ function TaskCard({
                 {task.assignee?.name && <span className="inline-flex items-center gap-1 text-xs text-gray-400 ml-auto"><User size={10} />{task.assignee.name}</span>}
               </div>
             </div>
-            <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-rose-400 flex-shrink-0 mt-0.5">
+            <button aria-label={`${task.title} 삭제`} onClick={(e) => { e.stopPropagation(); onDelete(); }} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-300 hover:text-rose-400 flex-shrink-0 mt-0.5">
               <Trash2 size={13} />
             </button>
           </div>
@@ -286,7 +290,7 @@ function ColumnHeader({ column, projectId, visibleTaskCount, accentClass, dragHa
       <div className="flex items-center gap-2 flex-1 min-w-0">
         <>
           <span className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${accentClass}`} />
-          <button type="button" {...dragHandleProps} onClick={(e) => e.stopPropagation()} title="컬럼 이동" className="w-8 h-8 -my-1.5 -ml-1.5 flex items-center justify-center rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-grab active:cursor-grabbing touch-none select-none flex-shrink-0 transition-colors">
+          <button type="button" {...dragHandleProps} onClick={(e) => e.stopPropagation()} aria-label={`${column.name} 컬럼 이동`} title="컬럼 이동" className="w-8 h-8 -my-1.5 -ml-1.5 flex items-center justify-center rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 cursor-grab active:cursor-grabbing touch-none select-none flex-shrink-0 transition-colors">
             <GripVertical size={16} />
           </button>
           <h3 className="text-sm font-bold text-slate-800 truncate">{column.name}</h3>
@@ -295,16 +299,16 @@ function ColumnHeader({ column, projectId, visibleTaskCount, accentClass, dragHa
       </div>
       <div className="flex items-center gap-1 flex-shrink-0 ml-2">
         <>
-          <button onClick={openSettings} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors md:opacity-0 md:group-hover/hdr:opacity-100" title="열 설정"><Pencil size={13} /></button>
+          <button onClick={openSettings} aria-label={`${column.name} 설정`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors md:opacity-0 md:group-hover/hdr:opacity-100" title="열 설정"><Pencil size={13} /></button>
           {isOwner && (
-            <button onClick={handleDelete} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition-colors" title="컬럼 삭제"><Trash2 size={13} /></button>
+            <button onClick={handleDelete} aria-label={`${column.name} 컬럼 삭제`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition-colors" title="컬럼 삭제"><Trash2 size={13} /></button>
           )}
         </>
       </div>
       {showSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowSettings(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold text-indigo-600">칸반 열</p><h3 className="mt-1 text-lg font-bold text-slate-900">{column.name} 설정</h3></div><button type="button" onClick={() => setShowSettings(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><XIcon size={16} /></button></div>
+            <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-semibold text-indigo-600">칸반 열</p><h3 className="mt-1 text-lg font-bold text-slate-900">{column.name} 설정</h3></div><button type="button" aria-label="컬럼 설정 닫기" onClick={() => setShowSettings(false)} className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-100"><XIcon size={16} /></button></div>
             <label className="mt-5 block text-xs font-semibold text-slate-500">칸반 열 이름
               <input value={settingsName} onChange={(event) => setSettingsName(event.target.value)} maxLength={100} className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-indigo-200" />
             </label>
@@ -376,6 +380,7 @@ export default function KanbanBoard({ projectId }: Props) {
   const [savingIntegratedSetup, setSavingIntegratedSetup] = useState(false);
   const [integratedSetupError, setIntegratedSetupError] = useState("");
   const newColRef = useRef<HTMLInputElement>(null);
+  const dragSnapshot = useRef<Column[] | null>(null);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -388,7 +393,7 @@ export default function KanbanBoard({ projectId }: Props) {
       setLoading(true);
       setLoadError(null);
       try {
-        const res = await apiFetch(`/api/projects/${projectId}`);
+        const res = await apiFetch(`/api/projects/${projectId}/kanban/summary`);
         if (!res.ok) throw new Error("Kanban board request failed");
         const data = await res.json();
         if (cancelled) return;
@@ -445,6 +450,7 @@ export default function KanbanBoard({ projectId }: Props) {
   };
 
   const handleDragStart = (e: DragStartEvent) => {
+    dragSnapshot.current = columns.map((column) => ({ ...column, tasks: [...column.tasks] }));
     if (e.active.data.current?.type === "column") {
       setActiveTask(null);
       return;
@@ -473,7 +479,11 @@ export default function KanbanBoard({ projectId }: Props) {
   const handleDragEnd = async (e: DragEndEvent) => {
     setActiveTask(null);
     const { active, over } = e;
-    if (!over) return;
+    if (!over) {
+      if (dragSnapshot.current) setColumns(dragSnapshot.current);
+      dragSnapshot.current = null;
+      return;
+    }
 
     if (active.data.current?.type === "column") {
       const activeColumnId = active.data.current.columnId as string;
@@ -489,12 +499,20 @@ export default function KanbanBoard({ projectId }: Props) {
 
       const reordered = arrayMove(sorted, oldIndex, newIndex).map((column, order) => ({ ...column, order }));
       setColumns(reordered);
-      await Promise.all(reordered.map((column) =>
-        apiFetch(`/api/projects/${projectId}/columns/${column.id}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order: column.order }),
-        })
-      ));
+      try {
+        const responses = await Promise.all(reordered.map((column) =>
+          apiFetch(`/api/projects/${projectId}/columns/${column.id}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order: column.order }),
+          })
+        ));
+        if (responses.some((response) => !response.ok)) throw new Error("Column reorder failed");
+      } catch {
+        if (dragSnapshot.current) setColumns(dragSnapshot.current);
+        showToast("컬럼 순서를 저장하지 못했습니다. 원래 위치로 되돌렸습니다.");
+      } finally {
+        dragSnapshot.current = null;
+      }
       return;
     }
 
@@ -509,19 +527,35 @@ export default function KanbanBoard({ projectId }: Props) {
     if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
       const reordered = arrayMove(col.tasks, oldIndex, newIndex);
       setColumns((prev) => prev.map((c) => c.id === col.id ? { ...c, tasks: reordered } : c));
-      await Promise.all(reordered.map((t, i) =>
-        apiFetch(`/api/projects/${projectId}/tasks/${t.id}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ order: i, columnId: col.id }),
-        })
-      ));
+      try {
+        const responses = await Promise.all(reordered.map((t, i) =>
+          apiFetch(`/api/projects/${projectId}/tasks/${t.id}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ order: i, columnId: col.id }),
+          })
+        ));
+        if (responses.some((response) => !response.ok)) throw new Error("Task reorder failed");
+      } catch {
+        if (dragSnapshot.current) setColumns(dragSnapshot.current);
+        showToast("카드 순서를 저장하지 못했습니다. 원래 위치로 되돌렸습니다.");
+      } finally {
+        dragSnapshot.current = null;
+      }
     } else {
       const task = col.tasks.find((t) => t.id === activeTaskId);
       if (task) {
-        await apiFetch(`/api/projects/${projectId}/tasks/${task.id}`, {
-          method: "PATCH", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ columnId: task.columnId }),
-        });
+        try {
+          const response = await apiFetch(`/api/projects/${projectId}/tasks/${task.id}`, {
+            method: "PATCH", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ columnId: task.columnId }),
+          });
+          if (!response.ok) throw new Error("Task move failed");
+        } catch {
+          if (dragSnapshot.current) setColumns(dragSnapshot.current);
+          showToast("카드 이동을 저장하지 못했습니다. 원래 위치로 되돌렸습니다.");
+        } finally {
+          dragSnapshot.current = null;
+        }
       }
     }
   };
@@ -565,17 +599,21 @@ export default function KanbanBoard({ projectId }: Props) {
     const toCol = sorted[toIdx];
     const task = columns.flatMap((c) => c.tasks).find((t) => t.id === taskId);
     if (!task) return;
+    const previousColumns = columns.map((column) => ({ ...column, tasks: [...column.tasks] }));
     setColumns((prev) => prev.map((col) => {
       if (col.id === fromColId) return { ...col, tasks: col.tasks.filter((t) => t.id !== taskId) };
       if (col.id === toCol.id) return { ...col, tasks: [...col.tasks, { ...task, columnId: toCol.id }] };
       return col;
     }));
     try {
-      await apiFetch(`/api/projects/${projectId}/tasks/${taskId}`, {
+      const response = await apiFetch(`/api/projects/${projectId}/tasks/${taskId}`, {
         method: "PATCH", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ columnId: toCol.id }),
       });
+      if (!response.ok) throw new Error("Task move failed");
     } catch {
+      setColumns(previousColumns);
+      showToast("카드 이동을 저장하지 못했습니다. 원래 위치로 되돌렸습니다.");
     }
   };
 

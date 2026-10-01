@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { assertProjectAccess } from "@/lib/server-utils";
+import { assertProjectAccess, recordActivity } from "@/lib/server-utils";
 import { withDbRetry } from "@/lib/db-retry";
 
 function logApiError(action: string, error: unknown) {
@@ -71,6 +71,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         include: { assignee: { select: { id: true, name: true } } },
       })
     );
+    await recordActivity({ actorId: userId, projectId, type: "칸반", action: "생성", entityType: "TASK", entityId: task.id, title: task.title, afterData: { title: task.title, priority: task.priority, dueDate: task.dueDate, columnId: task.columnId, assigneeId: task.assigneeId } });
     return NextResponse.json(task, { status: 201 });
   } catch (error) {
     logApiError("POST", error);

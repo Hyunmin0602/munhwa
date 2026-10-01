@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { X } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
+import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
 const COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#8b5cf6"];
 
@@ -46,13 +46,10 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
+    <ModalFrame title="새 사업 만들기" onClose={onClose} className="max-w-md p-6">
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold text-gray-900">새 사업 만들기</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={18} />
-          </button>
+          <ModalCloseButton label="새 사업 만들기 닫기" onClick={onClose} />
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
@@ -123,7 +120,6 @@ export default function NewProjectModal({ onClose, onCreated }: Props) {
             </button>
           </div>
         </form>
-      </div>
-    </div>
+    </ModalFrame>
   );
 }

@@ -74,6 +74,10 @@ export async function getModalRequestErrorMessage(response: Response, action: st
   }
   if (response.status === 403) return "이 작업을 수행할 권한이 없습니다.";
   if (response.status === 404) return "대상을 찾을 수 없습니다. 목록을 새로고침한 뒤 다시 시도해주세요.";
+  if (response.status === 409) {
+    const data = await response.json().catch(() => null);
+    return typeof data?.error === "string" ? data.error : "다른 사용자가 먼저 변경했습니다. 최신 내용을 불러온 뒤 다시 시도해주세요.";
+  }
   return `${action}을 완료하지 못했습니다. 잠시 후 다시 시도해주세요.`;
 }
 

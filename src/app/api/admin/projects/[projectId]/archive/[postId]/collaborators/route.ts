@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { assertProjectOwner, canManageCultureSportsContent } from "@/lib/server-utils";
+import { assertProjectOwner, canManageProject } from "@/lib/server-utils";
 import { forbidden, internalError, notFound, unauthorized, validationError } from "@/lib/api-error";
 
 type Params = { params: Promise<{ projectId: string; postId: string }> };
@@ -11,7 +11,7 @@ type Params = { params: Promise<{ projectId: string; postId: string }> };
 async function requireProjectManager(projectId: string) {
   const session = await auth();
   if (!session?.user?.id) return { response: unauthorized() };
-  const canManage = (await assertProjectOwner(session.user.id, projectId)) || (await canManageCultureSportsContent(session.user.id));
+  const canManage = (await assertProjectOwner(session.user.id, projectId)) || (await canManageProject(session.user.id, projectId));
   if (!canManage) return { response: forbidden() };
   return { userId: session.user.id };
 }

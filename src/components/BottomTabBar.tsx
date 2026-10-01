@@ -10,6 +10,7 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const [showPicker, setShowPicker] = useState(false);
+  const [projectQuery, setProjectQuery] = useState("");
 
   const match = pathname.match(/\/dashboard\/projects\/([^/]+)/);
   const projectId = match?.[1];
@@ -46,13 +47,15 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
           <div className="lg:hidden fixed bottom-[5.25rem] left-0 right-0 z-50 bg-white rounded-t-2xl shadow-xl border-t border-gray-200 overflow-hidden">
             <div className="px-4 pt-4 pb-2 border-b border-gray-100">
               <span className="text-sm font-semibold text-gray-700">프로젝트 전환</span>
+              <input value={projectQuery} onChange={(event) => setProjectQuery(event.target.value)} placeholder="사업 검색" aria-label="사업 검색" className="mt-2 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
             </div>
             <div className="overflow-y-auto max-h-60 py-1">
-              {projects.map((p) => (
+              {projects.filter((project) => !projectQuery.trim() || project.name.toLowerCase().includes(projectQuery.trim().toLowerCase())).map((p) => (
                 <button
                   key={p.id}
                   onClick={() => {
                     setShowPicker(false);
+                    setProjectQuery("");
                     router.push(`/dashboard/projects/${p.id}/${currentTab}`);
                   }}
                   className={`w-full flex items-center gap-3 px-4 py-3 transition-colors ${
@@ -68,6 +71,7 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
                   )}
                 </button>
               ))}
+              {projects.length > 0 && projects.filter((project) => !projectQuery.trim() || project.name.toLowerCase().includes(projectQuery.trim().toLowerCase())).length === 0 && <p className="px-4 py-5 text-center text-sm text-gray-400">검색 결과가 없습니다.</p>}
             </div>
           </div>
         </>

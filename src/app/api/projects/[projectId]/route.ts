@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { assertProjectAccess, assertProjectOwner, canManageCultureSportsContent } from "@/lib/server-utils";
+import { assertProjectAccess, assertProjectOwner, canManageProject } from "@/lib/server-utils";
 import { InputValidationError, optionalText, projectColor, projectStatus, projectTags, readJsonObject, requiredText } from "@/lib/validation";
 
 type Params = { params: Promise<{ projectId: string }> };
@@ -36,7 +36,7 @@ export async function GET(_: NextRequest, { params }: Params) {
     const userId = session.user.id;
     if (!(await assertProjectAccess(userId, projectId)))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
+    const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
 
     let project;
     try {
@@ -100,7 +100,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       return NextResponse.json({ error: "세션 정보가 유효하지 않습니다." }, { status: 401 });
     }
     const userId = session.user.id;
-    const canEdit = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
+    const canEdit = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
     if (!canEdit)
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
@@ -146,7 +146,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     }
     const userId = session.user.id;
 
-    const canDelete = (await assertProjectOwner(userId, projectId)) || (await canManageCultureSportsContent(userId));
+    const canDelete = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
     if (!canDelete)
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 

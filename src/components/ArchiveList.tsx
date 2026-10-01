@@ -70,7 +70,7 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
 
   const deletePost = async (id: string) => {
     const post = posts.find((item) => item.id === id);
-    if (!post || !confirm(`'${post.title}' 문서를 삭제하시겠습니까?`)) return;
+    if (!post || !confirm(`'${post.title}' 문서를 삭제하시겠습니까? 삭제 후 8초 동안만 실행 취소할 수 있습니다.`)) return;
     const index = posts.findIndex((item) => item.id === id);
     setPosts((prev) => prev.filter((item) => item.id !== id));
     setActionPostId(null);

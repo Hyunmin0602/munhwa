@@ -4,6 +4,7 @@ import dayjs from "dayjs";
 import "dayjs/locale/ko";
 import { ChevronLeft, ChevronRight, Plus, X, Clock, CalendarDays, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
+import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
 dayjs.locale("ko");
 
@@ -34,19 +35,26 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
     title: "", description: "", startDate: "", endDate: "", allDay: false, color: "#6366f1",
   });
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [selectedDay, setSelectedDay] = useState<dayjs.Dayjs | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; date: dayjs.Dayjs } | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     (async () => {
+      setError(null);
       try {
         const res = await apiFetch(`/api/projects/${projectId}/events`);
+        if (!res.ok) throw new Error("일정 조회 실패");
         const data = await res.json();
-        setEvents(Array.isArray(data) ? data : []);
+        if (!cancelled) setEvents(Array.isArray(data) ? data : []);
       } catch {
+        if (!cancelled) setError("일정을 불러오지 못했습니다.");
       }
     })();
-  }, [projectId]);
+    return () => { cancelled = true; };
+  }, [projectId, reloadKey]);
 
   const startDay = current.startOf("month").day();
   const daysInMonth = current.daysInMonth();
@@ -76,27 +84,33 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setError(null);
     try {
       const res = await apiFetch(`/api/projects/${projectId}/events`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
-      if (res.ok) {
-        const ev = await res.json();
-        setEvents((prev) => [...prev, ev]);
-        setShowModal(false);
-      }
+      if (!res.ok) throw new Error("일정 저장 실패");
+      const ev = await res.json();
+      setEvents((prev) => [...prev, ev]);
+      setShowModal(false);
     } catch {
+      setError("일정을 저장하지 못했습니다. 입력 내용을 확인한 뒤 다시 시도해주세요.");
     } finally { setSaving(false); }
   };
 
   const deleteEvent = async (id: string) => {
+    const event = events.find((item) => item.id === id);
+    if (!event || !confirm(`'${event.title}' 일정을 삭제하시겠습니까? 삭제 후 되돌릴 수 없습니다.`)) return;
+    setError(null);
     try {
-      await apiFetch(`/api/projects/${projectId}/events/${id}`, { method: "DELETE" });
+      const response = await apiFetch(`/api/projects/${projectId}/events/${id}`, { method: "DELETE" }, { showGlobalError: false });
+      if (!response.ok) throw new Error("일정 삭제 실패");
+      setEvents((prev) => prev.filter((e) => e.id !== id));
     } catch {
+      setError("일정을 삭제하지 못했습니다. 다시 시도해주세요.");
     }
-    setEvents((prev) => prev.filter((e) => e.id !== id));
   };
 
   const selectedEvents = selectedDay ? getEventsForDay(selectedDay) : [];
@@ -114,6 +128,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   return (
     <div className="h-full" onClick={() => setContextMenu(null)}>
       <div className="flex h-full flex-col md:hidden">
+        {error && <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700"><span>{error}</span><button type="button" onClick={() => setReloadKey((current) => current + 1)} className="font-semibold underline">다시 시도</button></div>}
         <div className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
           <button type="button" onClick={() => selectMobileDay(mobileDay.subtract(1, "day"))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="이전 날짜"><ChevronLeft size={18} /></button>
           <button type="button" onClick={() => selectMobileDay(dayjs())} className="text-center">
@@ -156,6 +171,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
       </div>
 
       <div className="hidden h-full gap-5 md:flex">
+      {error && <div className="absolute left-4 right-4 top-3 z-10 flex items-center justify-between gap-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700"><span>{error}</span><button type="button" onClick={() => setReloadKey((current) => current + 1)} className="font-semibold underline">다시 시도</button></div>}
       {/* Calendar */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
@@ -236,6 +252,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                         {dayEvents.length > 0 && (
                           <button
                             onClick={(e) => { e.stopPropagation(); openModal(day); }}
+                            aria-label={`${day.format("M월 D일")} 일정 추가`}
                             className="opacity-0 hover:opacity-100 group-hover:opacity-100 w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-100 transition-all"
                           >
                             <Plus size={10} />
@@ -278,6 +295,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
               </h3>
               <button
                 onClick={() => openModal(selectedDay)}
+                aria-label={`${selectedDay.format("M월 D일")} 일정 추가`}
                 className="w-6 h-6 flex items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors"
               >
                 <Plus size={12} />
@@ -354,13 +372,10 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
 
       {/* Add event modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="max-h-[calc(100vh-2rem)] w-full max-w-md overflow-y-auto rounded-2xl bg-white p-6 shadow-2xl">
+        <ModalFrame title="일정 추가" onClose={() => setShowModal(false)} className="max-w-md p-6">
             <div className="flex items-center justify-between mb-5">
               <h3 className="text-base font-bold text-gray-900">일정 추가</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X size={18} />
-              </button>
+              <ModalCloseButton label="일정 추가 닫기" onClick={() => setShowModal(false)} />
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -436,8 +451,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                 </button>
               </div>
             </form>
-          </div>
-        </div>
+        </ModalFrame>
       )}
       {contextMenu && (
         <div className="fixed z-50 rounded-xl border border-gray-200 bg-white p-1 shadow-xl" style={{ left: contextMenu.x, top: contextMenu.y }} onClick={(event) => event.stopPropagation()}>

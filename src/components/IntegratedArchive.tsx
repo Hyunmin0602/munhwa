@@ -2,8 +2,9 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
-import { BookOpen, FileText, Globe, Lock, RotateCw, Search } from "lucide-react";
+import { BookOpen, FileText, Globe, Lock, Plus, RotateCw, Search } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -68,6 +69,7 @@ function VisibilityBadge({ visibility }: { visibility: Visibility }) {
 }
 
 export default function IntegratedArchive() {
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [posts, setPosts] = useState<ArchivePost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -75,6 +77,9 @@ export default function IntegratedArchive() {
   const [reloadKey, setReloadKey] = useState(0);
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<"all" | "DOCUMENT" | "MEETING">("all");
+  const [selectedProjectId, setSelectedProjectId] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -94,6 +99,7 @@ export default function IntegratedArchive() {
           cursor = payload.nextCursor ?? "";
           if (!cursor) {
             setProjects(Array.isArray(payload.filters?.projects) ? payload.filters.projects : []);
+            setSelectedProjectId((current) => current || payload.filters?.projects?.[0]?.id || "");
           }
         } while (cursor);
 
@@ -115,6 +121,29 @@ export default function IntegratedArchive() {
     })();
     return () => { cancelled = true; };
   }, [reloadKey]);
+
+  const createPost = async () => {
+    if (!selectedProjectId) {
+      setActionError("문서를 만들 사업을 먼저 선택해주세요.");
+      return;
+    }
+    setCreating(true);
+    setActionError(null);
+    try {
+      const response = await apiFetch(`/api/projects/${selectedProjectId}/archive`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "제목 없음" }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error ?? "문서를 만들지 못했습니다.");
+      router.push(`/dashboard/projects/${selectedProjectId}/archive/${payload.id}`);
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "문서를 만들지 못했습니다.");
+    } finally {
+      setCreating(false);
+    }
+  };
 
   const projectsById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
 
@@ -142,8 +171,14 @@ export default function IntegratedArchive() {
             <p className="mb-1 text-[11px] font-semibold tracking-wide text-indigo-600">전체 기록</p>
             <h1 className="text-xl font-bold tracking-tight text-gray-900">통합 아카이브</h1>
           </div>
-          {loading ? <Skeleton className="h-3 w-14 rounded" /> : <p className="text-xs text-gray-400">전체 {posts.length}개</p>}
+          <div className="flex items-center gap-2">
+            <select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)} disabled={projects.length === 0 || creating} aria-label="문서를 만들 사업 선택" className="max-w-40 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs text-gray-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
+              {projects.length === 0 ? <option value="">사업 없음</option> : projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+            </select>
+            <button type="button" onClick={() => void createPost()} disabled={creating || projects.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />{creating ? "생성 중" : "새 문서"}</button>
+          </div>
         </div>
+        {actionError && <p className="mt-3 text-sm font-medium text-rose-600">{actionError}</p>}
         <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center">
           <div className="relative min-w-0 flex-1">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />

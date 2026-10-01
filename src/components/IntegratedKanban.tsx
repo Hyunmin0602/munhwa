@@ -92,7 +92,7 @@ function TaskCard({ card, onOpen }: { card: Card; onOpen: () => void }) {
       {...listeners}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       onClick={onOpen}
-      className={`w-full cursor-grab rounded-xl border border-slate-200 bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-200 hover:shadow-md active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
+      className={`w-full cursor-grab rounded-lg border border-slate-200 bg-white p-2.5 text-left shadow-sm transition hover:border-indigo-200 hover:shadow-md active:cursor-grabbing ${isDragging ? "opacity-30" : ""}`}
     >
       <div className="flex items-center gap-1.5">
         <GripVertical size={14} className="text-slate-300" />
@@ -106,10 +106,10 @@ function TaskCard({ card, onOpen }: { card: Card; onOpen: () => void }) {
           {card.column.name}
         </span>
       </div>
-      <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-800">
+      <p className="mt-1.5 line-clamp-2 text-[13px] font-semibold leading-5 text-slate-800">
         {card.task.title}
       </p>
-      <div className="mt-3 flex items-center gap-1.5 text-[10px] text-slate-400">
+      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-slate-400">
         {card.task.priority === "high" && (
           <span className="rounded bg-rose-50 px-1.5 py-0.5 font-semibold text-rose-700">
             높음
@@ -150,9 +150,9 @@ function StageColumn({
   return (
     <section
       ref={setNodeRef}
-      className={`flex min-h-[32rem] min-w-[18rem] flex-1 flex-col rounded-2xl border p-3 ${isOver ? "border-indigo-400 bg-indigo-50" : "border-slate-200 bg-slate-100/70"}`}
+      className={`flex min-h-[32rem] min-w-[17rem] flex-1 flex-col rounded-xl border p-2 ${isOver ? "border-indigo-400 bg-indigo-50" : "border-slate-200 bg-slate-100/70"}`}
     >
-      <div className="flex items-center gap-2 px-1 pb-3">
+      <div className="flex items-center gap-2 px-1 pb-2">
         <span className={`h-2.5 w-2.5 rounded-full ${stage.color}`} />
         <h2 className="font-bold text-slate-800">{stage.name}</h2>
         <span className="rounded-full bg-white px-1.5 py-0.5 text-xs text-slate-500">
@@ -166,7 +166,7 @@ function StageColumn({
           <Plus size={16} />
         </button>
       </div>
-      <div className="flex flex-1 flex-col gap-2 overflow-y-auto">
+      <div className="flex flex-1 flex-col gap-1.5 overflow-y-auto">
         {children}
         {cards.length === 0 && (
           <button
@@ -206,26 +206,19 @@ export default function IntegratedKanban() {
       activationConstraint: { delay: 180, tolerance: 8 },
     }),
   );
-  const load = async () => {
-    setLoading(true);
+  const load = async (showLoading = true) => {
+    if (showLoading) setLoading(true);
     try {
-      const response = await apiFetch("/api/projects");
+      const response = await apiFetch("/api/dashboard/integrated/kanban");
       if (!response.ok) throw new Error();
       const payload = await response.json();
-      const list = (Array.isArray(payload?.items) ? payload.items : []) as Array<{ id: string }>;
-      const data = await Promise.all(
-        list.map(async ({ id }) => {
-          const detail = await apiFetch(`/api/projects/${id}`);
-          if (!detail.ok) throw new Error();
-          return detail.json() as Promise<Project>;
-        }),
-      );
+      const data = (Array.isArray(payload?.items) ? payload.items : []) as Project[];
       setProjects(data);
       setSelectedProjects(data.map((project) => project.id));
     } catch {
       setError("통합 칸반을 불러오지 못했습니다.");
     } finally {
-      setLoading(false);
+      if (showLoading) setLoading(false);
     }
   };
   useEffect(() => {
@@ -300,8 +293,11 @@ export default function IntegratedKanban() {
     setActive(null);
     if (!over) return;
     const card = cards.find((item) => item.task.id === dragged.id);
-    const status = String(over.id) as Status;
-    if (!card || !stages.some((stage) => stage.id === status)) return;
+    const overCard = cards.find((item) => item.task.id === over.id);
+    const status = (stages.some((stage) => stage.id === over.id)
+      ? String(over.id)
+      : overCard?.column.integratedStatus) as Status | null;
+    if (!card || !status || !stages.some((stage) => stage.id === status)) return;
     const target = card.project.columns.find(
       (column) =>
         column.integratedStatus === status && column.isIntegratedPrimary,
@@ -326,7 +322,7 @@ export default function IntegratedKanban() {
         },
       );
       if (!response.ok) throw new Error();
-      await load();
+      await load(false);
     } catch {
       setError("카드 이동을 저장하지 못했습니다.");
     }

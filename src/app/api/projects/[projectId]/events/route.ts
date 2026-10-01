@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withDbRetry } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
-import { assertProjectMember } from "@/lib/server-utils";
+import { assertProjectMember, recordActivity } from "@/lib/server-utils";
 import { eventAllDay, eventDates, InputValidationError, optionalText, projectColor, readJsonObject, requiredText } from "@/lib/validation";
 
 function logApiError(action: string, error: unknown) {
@@ -62,6 +62,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         },
       })
     );
+    await recordActivity({ actorId: userId, projectId, type: "일정", action: "생성", entityType: "EVENT", entityId: event.id, title: event.title, afterData: { title: event.title, startDate: event.startDate, endDate: event.endDate, allDay: event.allDay } });
     return NextResponse.json(event, { status: 201 });
   } catch (error) {
     if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });
