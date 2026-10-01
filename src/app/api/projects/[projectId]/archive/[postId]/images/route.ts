@@ -60,7 +60,8 @@ export async function POST(request: NextRequest, { params }: Params) {
 
   const storageKey = `archive/${postId}/${crypto.randomUUID()}.${archiveImageExtension(file.type)}`;
   const hasBlobStorage = !!process.env.BLOB_READ_WRITE_TOKEN;
-  if (!hasBlobStorage && process.env.NODE_ENV !== "development") {
+  const useLocalStorage = !hasBlobStorage && !process.env.VERCEL;
+  if (!hasBlobStorage && !useLocalStorage) {
     return NextResponse.json({ error: "이미지 저장소가 아직 설정되지 않았습니다. BLOB_READ_WRITE_TOKEN을 설정해주세요." }, { status: 503 });
   }
   let blob: Awaited<ReturnType<typeof put>> | undefined;
