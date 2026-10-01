@@ -47,7 +47,10 @@ export async function GET(_: NextRequest, { params }: Params) {
     select: { id: true, storageKey: true, url: true, mimeType: true, byteSize: true, createdAt: true },
     orderBy: { createdAt: "desc" },
   }));
-  return NextResponse.json(images);
+  return NextResponse.json(images.map((image) => ({
+    ...image,
+    url: image.url.startsWith("/uploads/") ? image.url : `/api/projects/${projectId}/archive/${postId}/images/${image.id}`,
+  })));
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
@@ -81,7 +84,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (hasBlobStorage) {
       uploadStage = "Blob 업로드";
       const uploadBody = new Blob([bytes], { type: file.type });
-      const uploadedBlob = await put(storageKey, uploadBody, { access: "public", token: process.env.BLOB_READ_WRITE_TOKEN, contentType: file.type, addRandomSuffix: false });
+      const uploadedBlob = await put(storageKey, uploadBody, { access: "private", token: process.env.BLOB_READ_WRITE_TOKEN, contentType: file.type, addRandomSuffix: false });
       blob = uploadedBlob;
       imageUrl = uploadedBlob.url;
       persistedStorageKey = uploadedBlob.pathname;
@@ -97,7 +100,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     const image = await withDbRetry(() => prisma.archiveImage.create({
       data: { postId, uploaderId: session.user.id, storageKey: persistedStorageKey, url: imageUrl, mimeType: file.type, byteSize: file.size },
     }));
-    return NextResponse.json(image, { status: 201 });
+    return NextResponse.json({ ...image, url: `/api/projects/${projectId}/archive/${postId}/images/${image.id}` }, { status: 201 });
   } catch (error) {
     if (blob) await del(blob.url).catch(() => {});
     if (localFilePath) await unlink(localFilePath).catch(() => {});

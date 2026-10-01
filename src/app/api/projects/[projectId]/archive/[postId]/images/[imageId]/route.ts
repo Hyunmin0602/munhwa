@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { unlink } from "node:fs/promises";
 import path from "node:path";
-import { del } from "@vercel/blob";
+import { del, get } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
@@ -10,6 +10,24 @@ import { assertProjectMember, canManageProject } from "@/lib/server-utils";
 export const runtime = "nodejs";
 
 type Params = { params: Promise<{ projectId: string; postId: string; imageId: string }> };
+
+export async function GET(request: NextRequest, { params }: Params) {
+  const { projectId, postId, imageId } = await params;
+  const session = await auth();
+  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await assertProjectMember(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const image = await withDbRetry(() => prisma.archiveImage.findFirst({ where: { id: imageId, postId, post: { projectId } }, select: { storageKey: true, url: true, mimeType: true } }));
+  if (!image) return NextResponse.json({ error: "Not found" }, { status: 404 });
+  if (image.url.startsWith("/uploads/")) return NextResponse.redirect(new URL(image.url, request.url));
+  try {
+    const result = await get(image.storageKey, { access: "private", token: process.env.BLOB_READ_WRITE_TOKEN });
+    if (!result || result.statusCode === 304 || !result.stream) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    return new Response(result.stream, { headers: { "Content-Type": result.blob.contentType ?? image.mimeType, "Cache-Control": "private, max-age=3600" } });
+  } catch (error) {
+    console.error("[archive-images] private blob read failed", error);
+    return NextResponse.json({ error: "이미지를 불러오지 못했습니다." }, { status: 500 });
+  }
+}
 
 export async function DELETE(_: NextRequest, { params }: Params) {
   const { projectId, postId, imageId } = await params;
