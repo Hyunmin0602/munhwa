@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { put, del } from "@vercel/blob";
@@ -65,7 +66,7 @@ export async function POST(request: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "파일 내용이 이미지 형식과 일치하지 않습니다." }, { status: 400 });
   }
 
-  const storageKey = `archive/${postId}/${crypto.randomUUID()}.${archiveImageExtension(file.type)}`;
+  const storageKey = `archive/${postId}/${randomUUID()}.${archiveImageExtension(file.type)}`;
   const hasBlobStorage = !!process.env.BLOB_READ_WRITE_TOKEN;
   const useLocalStorage = !hasBlobStorage && !process.env.VERCEL;
   if (!hasBlobStorage && !useLocalStorage) {

@@ -118,7 +118,9 @@ export async function apiFetch(input: RequestInfo, init?: RequestInit, options?:
           await new Promise((resolve) => setTimeout(resolve, 200 * Math.pow(2, attempt)));
           continue;
         }
-        throw new ApiFetchError("Server error", res.status);
+        const payload = await res.clone().json().catch(() => null);
+        const message = typeof payload?.error === "string" ? payload.error : "Server error";
+        throw new ApiFetchError(message, res.status);
       }
 
       return res;
