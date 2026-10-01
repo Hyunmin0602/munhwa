@@ -73,21 +73,26 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
   let blob: Awaited<ReturnType<typeof put>> | undefined;
   let localFilePath: string | undefined;
+  let uploadStage = "저장 준비";
   try {
     let imageUrl: string;
     let persistedStorageKey: string;
     if (hasBlobStorage) {
-      const uploadedBlob = await put(storageKey, file, { access: "public", token: process.env.BLOB_READ_WRITE_TOKEN, contentType: file.type, addRandomSuffix: false });
+      uploadStage = "Blob 업로드";
+      const uploadBody = new Blob([bytes], { type: file.type });
+      const uploadedBlob = await put(storageKey, uploadBody, { access: "public", token: process.env.BLOB_READ_WRITE_TOKEN, contentType: file.type, addRandomSuffix: false });
       blob = uploadedBlob;
       imageUrl = uploadedBlob.url;
       persistedStorageKey = uploadedBlob.pathname;
     } else {
+      uploadStage = "로컬 파일 저장";
       localFilePath = localImagePath(storageKey);
       await mkdir(path.dirname(localFilePath), { recursive: true });
       await writeFile(localFilePath, bytes);
       imageUrl = `/uploads/${storageKey}`;
       persistedStorageKey = storageKey;
     }
+    uploadStage = "데이터베이스 기록";
     const image = await withDbRetry(() => prisma.archiveImage.create({
       data: { postId, uploaderId: session.user.id, storageKey: persistedStorageKey, url: imageUrl, mimeType: file.type, byteSize: file.size },
     }));
@@ -95,7 +100,8 @@ export async function POST(request: NextRequest, { params }: Params) {
   } catch (error) {
     if (blob) await del(blob.url).catch(() => {});
     if (localFilePath) await unlink(localFilePath).catch(() => {});
-    console.error("[archive-images] upload failed", error);
-    return NextResponse.json({ error: "이미지 업로드에 실패했습니다." }, { status: 500 });
+    const reason = error instanceof Error ? error.message : "알 수 없는 오류";
+    console.error("[archive-images] upload failed", { stage: uploadStage, reason, postId });
+    return NextResponse.json({ error: `${uploadStage} 단계에서 이미지 업로드에 실패했습니다.` }, { status: 500 });
   }
 }
