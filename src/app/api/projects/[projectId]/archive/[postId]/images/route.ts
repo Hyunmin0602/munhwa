@@ -103,6 +103,6 @@ export async function POST(request: NextRequest, { params }: Params) {
     if (localFilePath) await unlink(localFilePath).catch(() => {});
     const reason = error instanceof Error ? error.message : "알 수 없는 오류";
     console.error("[archive-images] upload failed", { stage: uploadStage, reason, postId });
-    return NextResponse.json({ error: `${uploadStage} 단계에서 이미지 업로드에 실패했습니다.` }, { status: 500 });
+    return NextResponse.json({ error: `${uploadStage} 단계에서 이미지 업로드에 실패했습니다. (${reason})` }, { status: 500 });
   }
 }
