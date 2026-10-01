@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
+import path from "node:path";
 import { put, del } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -9,6 +11,10 @@ import { archiveImageExtension, hasValidArchiveImageSignature, isArchiveImageMim
 export const runtime = "nodejs";
 
 type Params = { params: Promise<{ projectId: string; postId: string }> };
+
+function localImagePath(storageKey: string) {
+  return path.join(process.cwd(), "public", "uploads", storageKey);
+}
 
 async function canEditArchiveImage(userId: string, projectId: string, postId: string) {
   if (!(await assertProjectMember(userId, projectId))) return false;
@@ -41,10 +47,6 @@ export async function POST(request: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await canEditArchiveImage(session.user.id, projectId, postId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  if (!process.env.BLOB_READ_WRITE_TOKEN) {
-    return NextResponse.json({ error: "이미지 저장소가 아직 설정되지 않았습니다." }, { status: 503 });
-  }
-
   const formData = await request.formData();
   const file = formData.get("file");
   if (!(file instanceof File)) return NextResponse.json({ error: "이미지 파일이 필요합니다." }, { status: 400 });
@@ -57,16 +59,34 @@ export async function POST(request: NextRequest, { params }: Params) {
   }
 
   const storageKey = `archive/${postId}/${crypto.randomUUID()}.${archiveImageExtension(file.type)}`;
+  const hasBlobStorage = !!process.env.BLOB_READ_WRITE_TOKEN;
+  if (!hasBlobStorage && process.env.NODE_ENV !== "development") {
+    return NextResponse.json({ error: "이미지 저장소가 아직 설정되지 않았습니다. BLOB_READ_WRITE_TOKEN을 설정해주세요." }, { status: 503 });
+  }
   let blob: Awaited<ReturnType<typeof put>> | undefined;
+  let localFilePath: string | undefined;
   try {
-    const uploadedBlob = await put(storageKey, file, { access: "public", contentType: file.type, addRandomSuffix: false });
-    blob = uploadedBlob;
+    let imageUrl: string;
+    let persistedStorageKey: string;
+    if (hasBlobStorage) {
+      const uploadedBlob = await put(storageKey, file, { access: "public", contentType: file.type, addRandomSuffix: false });
+      blob = uploadedBlob;
+      imageUrl = uploadedBlob.url;
+      persistedStorageKey = uploadedBlob.pathname;
+    } else {
+      localFilePath = localImagePath(storageKey);
+      await mkdir(path.dirname(localFilePath), { recursive: true });
+      await writeFile(localFilePath, bytes);
+      imageUrl = `/uploads/${storageKey}`;
+      persistedStorageKey = storageKey;
+    }
     const image = await withDbRetry(() => prisma.archiveImage.create({
-      data: { postId, uploaderId: session.user.id, storageKey: uploadedBlob.pathname, url: uploadedBlob.url, mimeType: file.type, byteSize: file.size },
+      data: { postId, uploaderId: session.user.id, storageKey: persistedStorageKey, url: imageUrl, mimeType: file.type, byteSize: file.size },
     }));
     return NextResponse.json(image, { status: 201 });
   } catch (error) {
     if (blob) await del(blob.url).catch(() => {});
+    if (localFilePath) await unlink(localFilePath).catch(() => {});
     console.error("[archive-images] upload failed", error);
     return NextResponse.json({ error: "이미지 업로드에 실패했습니다." }, { status: 500 });
   }

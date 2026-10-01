@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { unlink } from "node:fs/promises";
+import path from "node:path";
 import { del } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
@@ -25,10 +27,11 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   if (!image) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const isCollaborator = image.post.collaborators.some(({ userId }) => userId === session.user.id);
   if (!canManage && image.uploaderId !== session.user.id && !isCollaborator) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  if (!process.env.BLOB_READ_WRITE_TOKEN) return NextResponse.json({ error: "이미지 저장소가 아직 설정되지 않았습니다." }, { status: 503 });
+  if (!process.env.BLOB_READ_WRITE_TOKEN && !image.url.startsWith("/uploads/")) return NextResponse.json({ error: "이미지 저장소가 아직 설정되지 않았습니다." }, { status: 503 });
 
   try {
-    await del(image.url);
+    if (process.env.BLOB_READ_WRITE_TOKEN) await del(image.url);
+    else await unlink(path.join(process.cwd(), "public", image.url.replace(/^\//, ""))).catch(() => {});
     await withDbRetry(() => prisma.archiveImage.delete({ where: { id: image.id } }));
     return NextResponse.json({ ok: true });
   } catch (error) {
