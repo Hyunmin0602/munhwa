@@ -400,24 +400,24 @@ export default function IntegratedKanban() {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-slate-50 p-4 md:p-6">
       <header className="mx-auto w-full max-w-[1800px] pb-4">
-        <div className="flex justify-end">
+        <div className="flex items-center gap-3">
+          <div className="relative min-w-0 flex-1">
+            <Search size={16} className="absolute left-3 top-3 text-slate-400" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="카드 제목, 담당자, 사업명, 열 이름으로 검색"
+              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
+            />
+          </div>
           <button
             type="button"
             onClick={() => setShowFilter(true)}
-            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm"
+            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm"
           >
             <SlidersHorizontal size={16} />
             필터
           </button>
-        </div>
-        <div className="relative mt-3 max-w-xl">
-          <Search size={16} className="absolute left-3 top-3 text-slate-400" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="카드 제목, 담당자, 사업명, 열 이름으로 검색"
-            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200"
-          />
         </div>
       </header>
       {error && (

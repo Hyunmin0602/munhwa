@@ -168,7 +168,6 @@ export default function IntegratedArchive() {
       <header className="mb-4 border-b border-gray-200 pb-4">
         <div className="flex items-end justify-between gap-4">
           <div>
-            <p className="mb-1 text-[11px] font-semibold tracking-wide text-indigo-600">전체 기록</p>
             <h1 className="text-xl font-bold tracking-tight text-gray-900">통합 아카이브</h1>
           </div>
           <div className="flex items-center gap-2">

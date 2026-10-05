@@ -129,21 +129,23 @@ export default function IntegratedCalendar() {
     <div className="mx-auto flex h-full max-w-7xl flex-col gap-4 p-4 md:p-6">
       <CalendarHeader onCreate={() => openCreate()} />
       {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>}
-      <MonthCalendar
-        month={month}
-        selected={selected}
-        getDayEvents={getDayEvents}
-        onMonthChange={setMonth}
-        onSelect={setSelected}
-        onCreate={openCreate}
-        onToday={goToToday}
-      />
-      <SelectedDayEvents
-        date={selected}
-        events={getDayEvents(selected)}
-        projects={projects}
-        onRemove={remove}
-      />
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <MonthCalendar
+          month={month}
+          selected={selected}
+          getDayEvents={getDayEvents}
+          onMonthChange={setMonth}
+          onSelect={setSelected}
+          onCreate={openCreate}
+          onToday={goToToday}
+        />
+        <SelectedDayEvents
+          date={selected}
+          events={getDayEvents(selected)}
+          projects={projects}
+          onRemove={remove}
+        />
+      </div>
       {form && (
         <EventFormModal
           form={form}
@@ -163,7 +165,6 @@ function CalendarHeader({ onCreate }: { onCreate: () => void }) {
     <header className="flex items-center justify-between">
       <div>
         <h1 className="text-xl font-bold">통합 일정</h1>
-        <p className="text-xs text-gray-400">전역, 사업별, 개인 일정을 한 달력에서 관리합니다.</p>
       </div>
       <button type="button" onClick={onCreate} className="inline-flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-sm font-semibold text-white">
         <Plus size={16} /> 일정 등록
@@ -190,7 +191,7 @@ function MonthCalendar({ month, selected, getDayEvents, onMonthChange, onSelect,
   while (cells.length % 7) cells.push(null);
 
   return (
-    <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-gray-200 bg-white p-3">
+    <section className="flex min-h-0 flex-col rounded-2xl border border-gray-200 bg-white p-3">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => onMonthChange(month.subtract(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="이전 달">
@@ -254,7 +255,7 @@ function CalendarCell({ day, selected, events, onSelect, onCreate }: CalendarCel
 
 function SelectedDayEvents({ date, events,projects, onRemove }: { date: dayjs.Dayjs; events: CalendarEvent[];projects:Project[]; onRemove: (event: CalendarEvent) => void }) {
   return (
-    <section className="rounded-2xl border border-gray-200 bg-white p-4">
+    <section className="h-fit rounded-2xl border border-gray-200 bg-white p-4 lg:sticky lg:top-4">
       <h3 className="mb-2 text-sm font-bold">{date.format("M월 D일")} 일정</h3>
       {events.map((event) => (
         <div key={event.id} className="flex items-center gap-2 py-1 text-sm">
