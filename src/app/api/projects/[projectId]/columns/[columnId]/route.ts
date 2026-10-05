@@ -1,0 +1,106 @@
+import { NextRequest, NextResponse } from "next/server";
+import { auth } from "@/auth";
+import { withDbRetry } from "@/lib/db-retry";
+import { prisma } from "@/lib/prisma";
+import { assertProjectAccess, assertProjectOwner, canManageProject } from "@/lib/server-utils";
+import { booleanValue, InputValidationError, integratedKanbanStatus, readJsonObject } from "@/lib/validation";
+
+function logApiError(action: string, error: unknown) {
+  console.error(`[api/projects/:projectId/columns/:columnId] ${action} failed`, error);
+}
+
+type Params = { params: Promise<{ projectId: string; columnId: string }> };
+
+async function ensureIntegratedKanbanColumns() {
+  const tableInfo = await prisma.$queryRawUnsafe<Array<{ name: string }>>("PRAGMA table_info(KanbanColumn)");
+  const columnNames = new Set(tableInfo.map((column) => column.name));
+
+  if (!columnNames.has("integratedStatus")) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "KanbanColumn" ADD COLUMN "integratedStatus" TEXT');
+  }
+  if (!columnNames.has("isIntegratedPrimary")) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "KanbanColumn" ADD COLUMN "isIntegratedPrimary" BOOLEAN NOT NULL DEFAULT false');
+  }
+  await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "KanbanColumn_projectId_integratedStatus_idx" ON "KanbanColumn"("projectId", "integratedStatus")');
+}
+
+export async function PATCH(req: NextRequest, { params }: Params) {
+  try {
+    const { projectId, columnId } = await params;
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = session.user.id;
+
+    if (!(await assertProjectAccess(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
+    if (!canManageColumns) return NextResponse.json({ error: "사업 관리자 또는 공간 관리자만 칸반 열을 수정할 수 있습니다." }, { status: 403 });
+
+    const data = await readJsonObject(req);
+    const updatesIntegratedMapping = data.integratedStatus !== undefined || data.isIntegratedPrimary !== undefined;
+    if (updatesIntegratedMapping) await ensureIntegratedKanbanColumns();
+
+    const existing = await withDbRetry(() => prisma.kanbanColumn.findFirst({ where: { id: columnId, projectId } }));
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const updateData: { name?: string; order?: number; integratedStatus?: string | null; isIntegratedPrimary?: boolean } = {};
+
+    if (data.name !== undefined) {
+      const name = typeof data.name === "string" ? data.name.trim() : "";
+      if (!name) return NextResponse.json({ error: "name required" }, { status: 400 });
+      updateData.name = name;
+    }
+
+    if (data.order !== undefined) {
+      const order = Number(data.order);
+      if (!Number.isInteger(order) || order < 0) return NextResponse.json({ error: "invalid order" }, { status: 400 });
+      updateData.order = order;
+    }
+
+    if (updatesIntegratedMapping) {
+      if (data.integratedStatus !== undefined) updateData.integratedStatus = integratedKanbanStatus(data.integratedStatus);
+      if (data.isIntegratedPrimary !== undefined) updateData.isIntegratedPrimary = booleanValue(data.isIntegratedPrimary, "대표 열");
+      const resultingStatus = updateData.integratedStatus === undefined ? existing.integratedStatus : updateData.integratedStatus;
+      if (updateData.isIntegratedPrimary && !resultingStatus) return NextResponse.json({ error: "대표 열은 통합 상태를 선택한 뒤 지정할 수 있습니다." }, { status: 400 });
+      if (resultingStatus === null) updateData.isIntegratedPrimary = false;
+    }
+
+    if (Object.keys(updateData).length === 0) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
+
+    const column = await withDbRetry(() => prisma.$transaction(async (tx) => {
+      if (updateData.isIntegratedPrimary && updateData.integratedStatus) {
+        await tx.kanbanColumn.updateMany({
+          where: { projectId, integratedStatus: updateData.integratedStatus, id: { not: columnId } },
+          data: { isIntegratedPrimary: false },
+        });
+      }
+      return tx.kanbanColumn.update({ where: { id: columnId }, data: updateData });
+    }));
+    return NextResponse.json(column);
+  } catch (error) {
+    if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });
+    logApiError("PATCH", error);
+    return NextResponse.json({ error: "컬럼 수정에 실패했습니다." }, { status: 500 });
+  }
+}
+
+export async function DELETE(_: NextRequest, { params }: Params) {
+  try {
+    const { projectId, columnId } = await params;
+    const session = await auth();
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const userId = session.user.id;
+
+    const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
+    if (!canManageColumns) return NextResponse.json({ error: "사업 관리자 또는 공간 관리자만 칸반 열을 삭제할 수 있습니다." }, { status: 403 });
+
+    const existing = await withDbRetry(() => prisma.kanbanColumn.findFirst({ where: { id: columnId, projectId } }));
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (existing.integratedStatus) return NextResponse.json({ error: "진행 전, 진행 중, 진행 완료 열은 삭제할 수 없습니다." }, { status: 400 });
+
+    await withDbRetry(() => prisma.kanbanColumn.delete({ where: { id: columnId } }));
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    logApiError("DELETE", error);
+    return NextResponse.json({ error: "컬럼 삭제에 실패했습니다." }, { status: 500 });
+  }
+}

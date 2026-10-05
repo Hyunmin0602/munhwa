@@ -1,0 +1,371 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          String    @default("member")
+  cohortId      String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts     Account[]
+  sessions     Session[]
+  projects     ProjectMember[]
+  tasks        Task[]         @relation("TaskAssignee")
+  createdTasks Task[]         @relation("TaskCreator")
+  archivePosts ArchivePost[]
+  archiveImages ArchiveImage[]
+  events       Event[]
+  cohort       Cohort?   @relation(fields: [cohortId], references: [id], onDelete: SetNull)
+  ownedProjects Project[] @relation("ProjectOwner")
+  spaceMemberships SpaceMember[]
+  sentInvites  ProjectInvitation[] @relation("InvitationSender")
+  receivedInvites ProjectInvitation[] @relation("InvitationRecipient")
+  administeredSpace SpaceAdministration? @relation("SpaceAdministrator")
+  performedSpaceAdminTransfers SpaceAdminTransferLog[] @relation("SpaceAdminTransferActor")
+  transferredSpaceAdminFrom SpaceAdminTransferLog[] @relation("SpaceAdminTransferPrevious")
+  transferredSpaceAdminTo SpaceAdminTransferLog[] @relation("SpaceAdminTransferNext")
+  administeredSpaces Space[] @relation("SpaceAdministrator")
+  adminAuditLogs AdminAuditLog[] @relation("AdminAuditActor")
+  activityLogs ActivityLog[] @relation("ActivityActor")
+  archiveCollaborations ArchivePostCollaborator[]
+}
+
+model Space {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  adminUserId String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  admin       User          @relation("SpaceAdministrator", fields: [adminUserId], references: [id], onDelete: Restrict)
+  members     SpaceMember[]
+  projects    Project[]
+  adminTransfers SpaceAdminTransferLog[] @relation("SpaceTransferLogs")
+  auditLogs   AdminAuditLog[]
+  activityLogs ActivityLog[]
+  events       Event[]       @relation("SpaceEvents")
+
+  @@index([adminUserId])
+}
+
+model SpaceMember {
+  id       String   @id @default(cuid())
+  spaceId  String
+  userId   String
+  role     String   @default("member")
+  joinedAt DateTime @default(now())
+
+  space Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([spaceId, userId])
+}
+
+model SpaceAdministration {
+  id               String   @id @default("culture-sports")
+  spaceAdminUserId String   @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  spaceAdmin User @relation("SpaceAdministrator", fields: [spaceAdminUserId], references: [id], onDelete: Restrict)
+}
+
+model SpaceAdminTransferLog {
+  id                  String   @id @default(cuid())
+  spaceId             String?
+  actorUserId         String
+  previousAdminUserId String
+  nextAdminUserId     String
+  createdAt           DateTime @default(now())
+
+  actor         User @relation("SpaceAdminTransferActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  previousAdmin User @relation("SpaceAdminTransferPrevious", fields: [previousAdminUserId], references: [id], onDelete: Restrict)
+  nextAdmin     User @relation("SpaceAdminTransferNext", fields: [nextAdminUserId], references: [id], onDelete: Restrict)
+  space         Space? @relation("SpaceTransferLogs", fields: [spaceId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([spaceId, createdAt])
+  @@index([previousAdminUserId])
+  @@index([nextAdminUserId])
+}
+
+model AdminAuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String
+  spaceId     String?
+  action      String
+  targetType  String
+  targetId    String?
+  beforeData  String?
+  afterData   String?
+  reason      String?
+  createdAt   DateTime @default(now())
+
+  actor User  @relation("AdminAuditActor", fields: [actorUserId], references: [id], onDelete: Restrict)
+  space Space? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+
+  @@index([spaceId, createdAt])
+  @@index([targetType, targetId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model ActivityLog {
+  id         String   @id @default(cuid())
+  spaceId    String
+  actorId    String
+  projectId  String?
+  type       String
+  action     String
+  entityType String
+  entityId   String
+  title      String?
+  metadata   String?
+  beforeData String?
+  afterData  String?
+  createdAt  DateTime @default(now())
+
+  space   Space @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  actor   User  @relation("ActivityActor", fields: [actorId], references: [id], onDelete: Restrict)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([spaceId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([entityType, entityId, createdAt])
+}
+
+model Cohort {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users User[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  spaceId     String?
+  ownerId     String?
+  name        String
+  description String?
+  category    String?
+  tags        String?
+  summary     String?
+  status      String    @default("planning")
+  color       String   @default("#6366f1")
+  order       Int       @default(0)
+  sharingMode String    @default("PUBLIC")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members      ProjectMember[]
+  columns      KanbanColumn[]
+  archivePosts ArchivePost[]
+  events       Event[]
+  invitations  ProjectInvitation[]
+  space        Space? @relation(fields: [spaceId], references: [id], onDelete: Restrict)
+  owner        User?  @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  activityLogs ActivityLog[]
+
+  @@index([spaceId, updatedAt])
+  @@index([ownerId])
+}
+
+model ProjectMember {
+  id        String   @id @default(cuid())
+  userId    String
+  projectId String
+  role      String   @default("member")
+  joinedAt  DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+}
+
+model ProjectInvitation {
+  id         String   @id @default(cuid())
+  projectId  String
+  inviteeId  String
+  invitedBy  String
+  status     String   @default("PENDING")
+  expiresAt  DateTime
+  respondedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  invitee User    @relation("InvitationRecipient", fields: [inviteeId], references: [id], onDelete: Cascade)
+  sender  User    @relation("InvitationSender", fields: [invitedBy], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, inviteeId, status])
+  @@index([inviteeId, status])
+  @@index([projectId, status])
+}
+
+model KanbanColumn {
+  id                  String   @id @default(cuid())
+  name                String
+  order               Int      @default(0)
+  projectId           String
+  integratedStatus    String?
+  isIntegratedPrimary Boolean  @default(false)
+  createdAt           DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  order       Int       @default(0)
+  priority    String    @default("medium")
+  dueDate     DateTime?
+  columnId    String
+  assigneeId  String?
+  creatorId   String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  column   KanbanColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
+  assignee User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  creator  User         @relation("TaskCreator", fields: [creatorId], references: [id])
+
+  @@index([dueDate])
+}
+
+model ArchivePost {
+  id          String    @id @default(cuid())
+  title       String
+  content     String    @default("")
+  slug        String    @unique
+  kind        String    @default("DOCUMENT")
+  visibility  String    @default("PRIVATE")
+  shareToken  String?   @unique
+  shareEnabled Boolean  @default(false)
+  published   Boolean   @default(false)
+  publishedAt DateTime?
+  projectId   String
+  authorId    String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  author  User    @relation(fields: [authorId], references: [id])
+  images  ArchiveImage[]
+  collaborators ArchivePostCollaborator[]
+
+  @@index([projectId, kind, updatedAt])
+  @@index([authorId, visibility])
+}
+
+model ArchiveImage {
+  id         String   @id @default(cuid())
+  postId     String
+  uploaderId String
+  storageKey String   @unique
+  url        String
+  mimeType   String
+  byteSize   Int
+  width      Int?
+  height     Int?
+  createdAt  DateTime @default(now())
+
+  post     ArchivePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  uploader User        @relation(fields: [uploaderId], references: [id], onDelete: Cascade)
+
+  @@index([postId])
+  @@index([uploaderId, createdAt])
+}
+
+model ArchivePostCollaborator {
+  id        String   @id @default(cuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post ArchivePost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, userId])
+  @@index([userId, createdAt])
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  startDate   DateTime
+  endDate     DateTime
+  allDay      Boolean  @default(false)
+  color       String   @default("#6366f1")
+  type        String   @default("BUSINESS")
+  scope       String   @default("PROJECT")
+  spaceId     String
+  projectId   String?
+  creatorId   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  space   Space   @relation("SpaceEvents", fields: [spaceId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  creator User    @relation(fields: [creatorId], references: [id])
+
+  @@index([spaceId, startDate])
+  @@index([projectId, startDate])
+  @@index([creatorId, startDate])
+}

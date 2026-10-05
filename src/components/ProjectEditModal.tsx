@@ -1,0 +1,300 @@
+"use client";
+import { useState, useEffect } from "react";
+import { Search, UserPlus } from "lucide-react";
+import { apiFetch } from "@/lib/client-fetch";
+import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
+
+const COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#8b5cf6"];
+
+interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  category?: string | null;
+  color: string;
+}
+
+interface Member {
+  id: string;
+  role: string;
+  user: { name: string | null; email: string };
+}
+
+interface UserSearchResult {
+  id: string;
+  name: string | null;
+  email: string;
+}
+
+interface Props {
+  project: Project;
+  onClose: () => void;
+  onUpdated: (project: Project) => void;
+  onDeleted: (projectId: string) => void;
+}
+
+export default function ProjectEditModal({ project, onClose, onUpdated, onDeleted }: Props) {
+  const [name, setName] = useState(project.name);
+  const [description, setDescription] = useState(project.description ?? "");
+  const [category, setCategory] = useState(project.category ?? "");
+  const [color, setColor] = useState(project.color);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [members, setMembers] = useState<Member[]>([]);
+  const [membersLoading, setMembersLoading] = useState(true);
+  const [canManageMembers, setCanManageMembers] = useState(false);
+  const [memberQuery, setMemberQuery] = useState("");
+  const [userResults, setUserResults] = useState<UserSearchResult[]>([]);
+  const [searchingUsers, setSearchingUsers] = useState(false);
+  const [hasSearchedUsers, setHasSearchedUsers] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const res = await apiFetch(`/api/projects/${project.id}/members`);
+        if (!res.ok) return setMembersLoading(false);
+        const data = await res.json();
+        if (mounted) {
+          setMembers(data);
+          setCanManageMembers(res.headers.get("X-Project-Can-Manage-Members") === "true");
+        }
+      } catch {
+      } finally {
+        if (mounted) setMembersLoading(false);
+      }
+    })();
+    return () => { mounted = false; };
+  }, [project.id]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const nextName = name.trim();
+    if (!nextName) return;
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const res = await fetch(`/api/projects/${project.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: nextName,
+          description: description.trim() || null,
+          category: category.trim() || null,
+          color,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "수정 실패. 다시 시도해주세요.");
+        return;
+      }
+
+      const updatedProject = await res.json();
+      onUpdated({ ...project, ...updatedProject });
+    } catch {
+      setError("네트워크 또는 서버 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const searchUsers = async () => {
+    const query = memberQuery.trim();
+    if (!query) {
+      setUserResults([]);
+      return;
+    }
+    setSearchingUsers(true);
+    setHasSearchedUsers(true);
+    setError("");
+    try {
+      const res = await apiFetch(`/api/projects/${project.id}/members?query=${encodeURIComponent(query)}`);
+      const data = await res.json();
+      if (!res.ok) {
+        setUserResults([]);
+        setError(data?.error ?? "사용자를 검색하지 못했습니다.");
+        return;
+      }
+      setUserResults(Array.isArray(data.users) ? data.users : []);
+    } catch {
+      setError("사용자를 검색하지 못했습니다.");
+    } finally {
+      setSearchingUsers(false);
+    }
+  };
+
+  const addMember = async (user: UserSearchResult) => {
+    setInviteLoading(true);
+    setError("");
+    try {
+      const res = await apiFetch(`/api/projects/${project.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.id }) });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "초대 실패");
+        return;
+      }
+      const member = await res.json();
+      setMembers((m) => [...m, member]);
+      setMemberQuery("");
+      setUserResults([]);
+    } catch {
+      setError("초대 중 오류가 발생했습니다.");
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
+  const removeMember = async (id: string) => {
+    if (!confirm("멤버를 삭제하시겠습니까?")) return;
+    try {
+      const res = await apiFetch(`/api/projects/${project.id}/members/${id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "삭제 실패");
+        return;
+      }
+      setMembers((m) => m.filter((x) => x.id !== id));
+    } catch {
+      setError("삭제 중 오류가 발생했습니다.");
+    }
+  };
+
+  const deleteProject = async () => {
+    if (!confirm("이 사업과 칸반, 일정, 아카이브를 모두 삭제하시겠습니까?")) return;
+    setLoading(true);
+    setError("");
+    try {
+      const res = await apiFetch(`/api/projects/${project.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        setError(data?.error ?? "사업 삭제에 실패했습니다.");
+        return;
+      }
+      onDeleted(project.id);
+    } catch {
+      setError("네트워크 또는 서버 오류가 발생했습니다.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <ModalFrame title="사업 수정" onClose={onClose} className="max-w-md p-6">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-lg font-bold text-gray-900">사업 수정</h2>
+          <ModalCloseButton label="사업 수정 닫기" onClick={onClose} />
+        </div>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">사업명 *</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+              maxLength={100}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              placeholder="사업명을 입력하세요"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">사업 소개</label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              maxLength={5000}
+              rows={3}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm resize-none"
+              placeholder="사업의 목적과 주요 내용을 입력하세요"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">카테고리</label>
+            <input
+              type="text"
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              maxLength={50}
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              placeholder="예: 행사, 교육, 운영"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">색상</label>
+            <div className="flex gap-2">
+              {COLORS.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setColor(c)}
+                  className={`w-7 h-7 rounded-full transition-all ${
+                    color === c ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : ""
+                  }`}
+                  style={{ backgroundColor: c }}
+                  title={c}
+                />
+              ))}
+            </div>
+          </div>
+          {error && <p className="text-sm text-red-500">{error}</p>}
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={deleteProject}
+              disabled={loading}
+              className="px-3 py-2.5 text-rose-500 hover:bg-rose-50 rounded-xl text-sm disabled:opacity-50"
+            >
+              삭제
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 hover:border-gray-300 hover:-translate-y-0.5 transition-all"
+            >
+              취소
+            </button>
+            <button
+              type="submit"
+              disabled={loading || !name.trim()}
+              className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
+            >
+              {loading ? "저장 중..." : "저장"}
+            </button>
+          </div>
+        </form>
+
+        <div className="mt-6 border-t pt-4">
+          <h3 className="text-sm font-semibold text-gray-700 mb-2">멤버 관리</h3>
+          {membersLoading ? (
+            <p className="text-xs text-gray-400">로딩 중...</p>
+          ) : (
+            <div className="space-y-2">
+              {members.map((m) => (
+                <div key={m.id} className="flex items-center justify-between bg-gray-50 p-2 rounded">
+                  <div className="text-sm">
+                    <div className="font-medium">{m.user.name ?? m.user.email}</div>
+                    <div className="text-xs text-gray-400">{m.user.email} · {m.role}</div>
+                  </div>
+                  {canManageMembers && <button type="button" onClick={() => removeMember(m.id)} className="text-sm text-rose-500">삭제</button>}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {canManageMembers && <div className="mt-3">
+            <div className="flex gap-2">
+              <input value={memberQuery} onChange={(e) => { setMemberQuery(e.target.value); setUserResults([]); setHasSearchedUsers(false); }} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); searchUsers(); } }} placeholder="이름 또는 이메일로 사용자 검색" className="flex-1 px-3 py-2 border rounded" />
+              <button type="button" onClick={searchUsers} disabled={searchingUsers} aria-label="사용자 검색" title="사용자 검색" className="flex h-10 w-10 items-center justify-center rounded bg-indigo-600 text-white disabled:opacity-50"><Search size={17} /></button>
+            </div>
+            {userResults.length > 0 && <div className="mt-2 divide-y overflow-hidden rounded border border-gray-200">{userResults.map((user) => <div key={user.id} className="flex items-center gap-2 px-3 py-2"><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium text-gray-700">{user.name ?? user.email}</p><p className="truncate text-xs text-gray-400">{user.email}</p></div><button type="button" onClick={() => addMember(user)} disabled={inviteLoading || members.some((member) => member.user.email === user.email)} aria-label={`${user.name ?? user.email} 추가`} title="멤버 추가" className="flex h-8 w-8 items-center justify-center rounded text-indigo-600 hover:bg-indigo-50 disabled:text-gray-300"><UserPlus size={17} /></button></div>)}</div>}
+            {!searchingUsers && hasSearchedUsers && userResults.length === 0 && !error && <p className="mt-2 text-xs text-gray-400">일치하는 등록 사용자가 없습니다.</p>}
+          </div>}
+        </div>
+    </ModalFrame>
+  );
+}
