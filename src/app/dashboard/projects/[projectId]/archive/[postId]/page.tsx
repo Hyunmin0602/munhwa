@@ -7,7 +7,7 @@ export default async function ArchivePostPage({
 }) {
   const { projectId, postId } = await params;
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex h-full min-h-0 flex-col">
       <ArchiveEditor projectId={projectId} postId={postId} />
     </div>
   );

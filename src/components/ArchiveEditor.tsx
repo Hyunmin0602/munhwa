@@ -552,11 +552,11 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex h-full min-h-0 flex-col bg-white">
       {/* ── Top Bar ── */}
-      <div className="flex items-center justify-between px-3 md:px-5 py-3 border-b border-gray-100 flex-shrink-0 bg-white z-10">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 px-3 py-3 md:flex-nowrap md:px-5 border-b border-gray-100 flex-shrink-0 bg-white z-10">
         {/* Left */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex min-w-0 w-full flex-1 items-center gap-3 md:w-auto">
           <button type="button" onClick={navigateBack} aria-label="아카이브 목록으로 돌아가기" className="text-gray-400 hover:text-gray-700 flex-shrink-0 transition-colors">
             <ArrowLeft size={16} />
           </button>
@@ -584,11 +584,11 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         </div>
 
         {/* Right */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 md:w-auto md:flex-nowrap md:flex-shrink-0">
           {saved && (
             <span className="text-xs text-emerald-600 font-medium animate-fade-in">저장됨 ✓</span>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <select
               value={kind}
               onChange={(e) => setKind(e.target.value as ArchiveKind)}
@@ -784,10 +784,10 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       </div>
 
       {/* ── Editor / Preview Body ── */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Editor pane - 모바일에서 split일 때 editor만 표시 */}
         {(viewMode === "editor" || viewMode === "split") && (
-          <div className={`flex flex-col ${viewMode === "split" ? "hidden md:flex w-1/2 border-r border-gray-100" : "w-full"} overflow-hidden`}>
+          <div className={`flex min-h-0 flex-col ${viewMode === "split" ? "hidden md:flex w-1/2 border-r border-gray-100" : "w-full"} overflow-hidden`}>
             {viewMode === "split" && (
               <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex-shrink-0">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">편집</span>
@@ -811,7 +811,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
 
         {/* Preview pane */}
         {(viewMode === "preview" || viewMode === "split") && (
-          <div className={`flex flex-col ${viewMode === "split" ? "w-full md:w-1/2" : "w-full"} overflow-hidden`}>
+          <div className={`flex min-h-0 flex-col ${viewMode === "split" ? "w-full md:w-1/2" : "w-full"} overflow-hidden`}>
             {viewMode === "split" && (
               <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex-shrink-0">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">미리보기</span>

@@ -56,6 +56,12 @@ body {
 }
 
 @media (max-width: 767px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+
   .md-figure--small img,
   .md-figure--medium img,
   .md-figure--large img {
