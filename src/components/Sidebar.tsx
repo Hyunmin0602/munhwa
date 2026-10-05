@@ -108,16 +108,6 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
             <LayoutGrid size={16} />
             통합 화면
           </Link>
-          <Link
-            href="/dashboard/meetings"
-            onClick={onClose}
-            className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-              pathname === "/dashboard/meetings" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            <BookOpen size={16} />
-            회의록
-          </Link>
           {(isSpaceAdmin || isSystemAdmin) && (
             <Link
               href={isSystemAdmin ? "/dashboard/admin" : "/dashboard/space-management"}

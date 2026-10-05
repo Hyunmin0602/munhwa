@@ -68,10 +68,23 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
     }
   };
 
-  const deletePost = async (id: string) => {
+  const deletePost = async (id: string, commitImmediately = false) => {
     const post = posts.find((item) => item.id === id);
-    if (!post || !confirm(`'${post.title}' 문서를 삭제하시겠습니까? 삭제 후 8초 동안만 실행 취소할 수 있습니다.`)) return;
+    if (!post || !confirm(`'${post.title}' 문서를 삭제하시겠습니까?${commitImmediately ? " 삭제 후 복구할 수 없습니다." : " 실행취소 버튼이 사라진 후엔 문서를 복구할 수 없습니다."}`)) return;
     const index = posts.findIndex((item) => item.id === id);
+
+    if (commitImmediately) {
+      setActionPostId(null);
+      try {
+        const res = await apiFetch(`/api/projects/${projectId}/archive/${id}`, { method: "DELETE" });
+        if (!res.ok) throw new Error("Archive delete request failed");
+        setPosts((prev) => prev.filter((item) => item.id !== id));
+      } catch {
+        showToast("문서를 삭제하지 못했습니다. 다시 시도해주세요.");
+      }
+      return;
+    }
+
     setPosts((prev) => prev.filter((item) => item.id !== id));
     setActionPostId(null);
     showUndoToast(
@@ -259,7 +272,7 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
           <div className="fixed inset-0 z-50 bg-black/40 md:hidden" onClick={() => setActionPostId(null)} />
           <div className="fixed bottom-[5.25rem] left-0 right-0 z-50 rounded-t-xl border-t border-gray-200 bg-white p-4 shadow-xl md:hidden">
             <p className="mb-3 text-sm font-semibold text-gray-800">문서 작업</p>
-            <button type="button" onClick={() => deletePost(actionPostId)} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">
+            <button type="button" onClick={() => deletePost(actionPostId, true)} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">
               <Trash2 size={17} />문서 삭제
             </button>
             <button type="button" onClick={() => setActionPostId(null)} className="mt-2 w-full rounded-lg bg-gray-100 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-200">취소</button>

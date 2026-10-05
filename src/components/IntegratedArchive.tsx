@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
-import { BookOpen, FileText, Globe, Lock, Plus, RotateCw, Search } from "lucide-react";
+import { BookOpen, FileText, Globe, Lock, Plus, RotateCw, Search, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -80,6 +80,7 @@ export default function IntegratedArchive() {
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const [creating, setCreating] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -145,6 +146,24 @@ export default function IntegratedArchive() {
     }
   };
 
+  const deletePost = async (post: ArchivePost) => {
+    if (!confirm(`'${post.title}' 문서를 삭제하시겠습니까? 삭제 후 복구할 수 없습니다.`)) return;
+    setDeletingPostId(post.id);
+    setActionError(null);
+    try {
+      const response = await apiFetch(`/api/projects/${post.projectId}/archive/${post.id}`, { method: "DELETE" });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error ?? "문서를 삭제하지 못했습니다.");
+      }
+      setPosts((current) => current.filter((item) => item.id !== post.id));
+    } catch (cause) {
+      setActionError(cause instanceof Error ? cause.message : "문서를 삭제하지 못했습니다.");
+    } finally {
+      setDeletingPostId(null);
+    }
+  };
+
   const projectsById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
 
   const filteredPosts = useMemo(() => {
@@ -164,31 +183,22 @@ export default function IntegratedArchive() {
   const meetingCount = posts.filter((post) => post.kind === "MEETING").length;
 
   return (
-    <div className="mx-auto flex h-full max-w-6xl flex-col p-4 md:p-6">
+    <div className="mx-auto flex h-full w-full flex-col p-4 md:p-6">
       <header className="mb-4 border-b border-gray-200 pb-4">
-        <div className="flex items-end justify-between gap-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
           <div>
             <h1 className="text-xl font-bold tracking-tight text-gray-900">통합 아카이브</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)} disabled={projects.length === 0 || creating} aria-label="문서를 만들 사업 선택" className="max-w-40 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs text-gray-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100">
+          <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+            <select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)} disabled={projects.length === 0 || creating} aria-label="문서를 만들 사업 선택" className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs text-gray-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 sm:w-40 sm:flex-none">
               {projects.length === 0 ? <option value="">사업 없음</option> : projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
             <button type="button" onClick={() => void createPost()} disabled={creating || projects.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />{creating ? "생성 중" : "새 문서"}</button>
           </div>
         </div>
         {actionError && <p className="mt-3 text-sm font-medium text-rose-600">{actionError}</p>}
-        <div className="mt-4 flex flex-col gap-2 md:flex-row md:items-center">
-          <div className="relative min-w-0 flex-1">
-            <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-          <input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="제목, 작성자, 사업명으로 검색"
-              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
-          />
-          </div>
-          <div className="flex gap-1 overflow-x-auto rounded-lg bg-gray-100 p-1">
+        <div className="mt-4 flex w-full items-center gap-1.5">
+          <div className="flex min-w-0 max-w-[55%] shrink-0 gap-1 overflow-x-auto rounded-lg bg-gray-100 p-1 sm:max-w-none">
           {[
               { value: "all" as const, label: "전체", count: posts.length },
               { value: "DOCUMENT" as const, label: "문서", count: documentCount },
@@ -198,11 +208,20 @@ export default function IntegratedArchive() {
               key={option.value}
               type="button"
               onClick={() => setKindFilter(option.value)}
-                className={`inline-flex min-w-max items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${kindFilter === option.value ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+                className={`inline-flex min-w-max items-center gap-1 rounded-md px-1.5 py-1.5 text-[10px] font-medium transition-colors sm:px-2 sm:text-[11px] ${kindFilter === option.value ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
             >
                 {option.label}<span className={`${kindFilter === option.value ? "text-indigo-600" : "text-gray-400"}`}>{loading ? "-" : option.count}</span>
             </button>
           ))}
+          </div>
+          <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
+            <Search size={15} className="pointer-events-none absolute right-0 top-1/2 mr-3 -translate-y-1/2 text-gray-400" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="제목, 작성자, 사업명으로 검색"
+              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-3 pr-9 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+            />
           </div>
         </div>
       </header>
@@ -230,15 +249,16 @@ export default function IntegratedArchive() {
               <span className="hidden sm:inline">최근 수정 순</span>
             </div>
             <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-              <div className="hidden grid-cols-[minmax(0,1fr)_10rem_8rem_7rem] gap-4 border-b border-gray-100 bg-gray-50 px-4 py-2 text-[11px] font-semibold text-gray-400 md:grid">
-                <span>문서</span><span>사업</span><span>작성자</span><span>공개 범위</span>
+              <div className="hidden grid-cols-[minmax(0,1fr)_14rem_8rem_7rem_2.5rem] gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2 text-[11px] font-semibold text-gray-400 md:grid">
+                <span>문서</span><span>사업</span><span>작성자</span><span>공개 범위</span><span aria-hidden="true" />
               </div>
               {filteredPosts.map((post) => {
                 const project = projectsById.get(post.projectId);
                 const accent = project?.color ?? "#6366f1";
                 return (
-                  <Link key={post.id} href={`/dashboard/projects/${post.projectId}/archive/${post.id}`} className="group grid gap-2 border-b border-gray-100 px-4 py-3 transition-colors last:border-b-0 hover:bg-indigo-50/40 md:grid-cols-[minmax(0,1fr)_10rem_8rem_7rem] md:items-center md:gap-4">
-                    <div className="flex min-w-0 items-center gap-3">
+                  <div key={post.id} className="group relative border-b border-gray-100 last:border-b-0">
+                    <Link href={`/dashboard/projects/${post.projectId}/archive/${post.id}`} className="grid grid-cols-2 gap-1.5 px-3 py-2.5 pr-14 transition-colors hover:bg-indigo-50/40 md:grid-cols-[minmax(0,1fr)_14rem_8rem_7rem_2.5rem] md:items-center md:gap-3 md:px-4 md:py-2.5 md:pr-4">
+                    <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-1">
                       <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md" style={{ backgroundColor: `${accent}18`, color: accent }}>
                         {post.kind === "MEETING" ? <BookOpen size={15} /> : <FileText size={15} />}
                       </div>
@@ -247,10 +267,24 @@ export default function IntegratedArchive() {
                         <p className="mt-0.5 text-[11px] text-gray-400">{post.kind === "MEETING" ? "회의록" : "문서"} · {dayjs(post.updatedAt).format("YYYY.MM.DD HH:mm")}</p>
                       </div>
                     </div>
-                    <p className="truncate pl-11 text-xs font-medium text-gray-600 md:pl-0">{project?.name ?? "알 수 없는 사업"}</p>
-                    <p className="truncate pl-11 text-xs text-gray-500 md:pl-0">{post.author.name ?? "작성자 없음"}</p>
-                    <div className="pl-11 md:pl-0"><VisibilityBadge visibility={post.visibility} /></div>
-                  </Link>
+                    <div className="col-span-2 flex min-w-0 items-center gap-2 pl-11 pr-12 md:contents">
+                      <p className="min-w-0 max-w-[50%] truncate text-xs font-medium text-gray-600 md:max-w-none">{project?.name ?? "알 수 없는 사업"}</p>
+                      <p className="min-w-0 max-w-[28%] truncate text-xs text-gray-500 md:max-w-none">{post.author.name ?? "작성자 없음"}</p>
+                      <div className="ml-auto shrink-0"><VisibilityBadge visibility={post.visibility} /></div>
+                    </div>
+                    <span aria-hidden="true" className="hidden md:block" />
+                    </Link>
+                    <button
+                      type="button"
+                      onClick={() => void deletePost(post)}
+                      disabled={deletingPostId === post.id}
+                      aria-label={`${post.title} 삭제`}
+                      title="문서 삭제"
+                      className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-rose-50 hover:text-rose-500 disabled:cursor-wait disabled:opacity-50 md:right-1 md:opacity-0 md:group-hover:opacity-100"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
                 );
               })}
             </div>
