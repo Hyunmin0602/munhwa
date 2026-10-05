@@ -173,6 +173,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const [collaboratorData, setCollaboratorData] = useState<CollaboratorData | null>(null);
   const [canManageCollaborators, setCanManageCollaborators] = useState(false);
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
   const [savingCollaborators, setSavingCollaborators] = useState(false);
   const [draggingImages, setDraggingImages] = useState(false);
@@ -584,7 +585,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         </div>
 
         {/* Right */}
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 md:w-auto md:flex-nowrap md:flex-shrink-0">
+        <div className="hidden w-full min-w-0 flex-wrap items-center gap-2 md:flex md:w-auto md:flex-nowrap md:flex-shrink-0">
           {saved && (
             <span className="text-xs text-emerald-600 font-medium animate-fade-in">저장됨 ✓</span>
           )}
@@ -650,7 +651,77 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
             {saving ? "저장 중…" : "저장"}
           </button>
         </div>
+        <button
+          type="button"
+          onClick={() => setMobileDetailsOpen((current) => !current)}
+          aria-expanded={mobileDetailsOpen}
+          className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-600 md:hidden"
+        >
+          <span>상세 설정</span>
+          <ChevronDown size={14} className={`transition-transform ${mobileDetailsOpen ? "rotate-180" : ""}`} />
+        </button>
       </div>
+
+      {mobileDetailsOpen && (
+        <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50/80 px-3 py-3 md:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as ArchiveKind)}
+              className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 outline-none focus:border-indigo-300"
+            >
+              <option value="DOCUMENT">일반 문서</option>
+              <option value="MEETING">회의록</option>
+            </select>
+            <select
+              value={visibility}
+              onChange={(e) => setVisibility(e.target.value as ArchiveVisibility)}
+              className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 outline-none focus:border-indigo-300"
+            >
+              <option value="PRIVATE">비공개</option>
+              <option value="INTERNAL">내부 공유</option>
+              <option value="EXTERNAL">외부 공유</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={togglePublish}
+              disabled={publishing}
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium ${
+                visibility === "EXTERNAL"
+                  ? "bg-emerald-50 text-emerald-700"
+                  : visibility === "INTERNAL"
+                    ? "bg-sky-50 text-sky-700"
+                    : "bg-gray-200 text-gray-600"
+              }`}
+            >
+              {visibility === "EXTERNAL" ? <Globe size={12} /> : visibility === "INTERNAL" ? <Globe size={12} /> : <Lock size={12} />}
+              {visibility === "EXTERNAL" ? "외부 공개" : visibility === "INTERNAL" ? "내부 공유" : "비공개"}
+            </button>
+            {visibility === "EXTERNAL" && post.shareEnabled && post.shareToken && (
+              <a href={`/p/${post.shareToken}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-indigo-600">
+                <ExternalLink size={12} />
+                공개 링크
+              </a>
+            )}
+            {visibility === "EXTERNAL" && (
+              <button type="button" onClick={() => updateShareLink(post.shareEnabled ? "revoke" : "regenerate")} disabled={sharing} className="text-xs font-medium text-gray-500 disabled:opacity-50">
+                {sharing ? "처리 중..." : post.shareEnabled ? "링크 폐기" : "링크 재생성"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving}
+              className="ml-auto flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              <Save size={12} />
+              {saving ? "저장 중…" : "저장"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {actionError && (
         <div className="flex-shrink-0 border-b border-rose-100 bg-rose-50 px-4 py-2 text-xs font-medium text-rose-700">
