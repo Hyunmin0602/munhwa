@@ -124,8 +124,17 @@ export default function IntegratedCalendar() {
 
   const goToToday = () => {
     const today = dayjs();
-    setMonth(today);
+    setMonth(today.startOf("month"));
     setSelected(today);
+  };
+
+  const changeMonth = (value: dayjs.Dayjs) => {
+    setMonth(value.startOf("month"));
+  };
+
+  const selectDate = (value: dayjs.Dayjs) => {
+    setSelected(value);
+    setMonth(value.startOf("month"));
   };
 
   return (
@@ -138,8 +147,8 @@ export default function IntegratedCalendar() {
             month={month}
             selected={selected}
             getDayEvents={getDayEvents}
-            onMonthChange={setMonth}
-            onSelect={setSelected}
+            onMonthChange={changeMonth}
+            onSelect={selectDate}
             onCreate={openCreate}
             onToday={goToToday}
           />
@@ -149,9 +158,8 @@ export default function IntegratedCalendar() {
             month={month}
             selected={selected}
             events={getDayEvents(selected)}
-            onMonthChange={setMonth}
-            onSelect={setSelected}
-            onCreate={openCreate}
+            onMonthChange={changeMonth}
+            onSelect={selectDate}
             onToday={goToToday}
           />
         </div>
@@ -212,11 +220,11 @@ function MonthCalendar({ month, selected, getDayEvents, onMonthChange, onSelect,
     <section className="flex min-h-0 flex-col rounded-2xl border border-gray-200 bg-white p-3">
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => onMonthChange(month.subtract(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="이전 달">
+          <button type="button" onClick={() => onMonthChange(month.startOf("month").subtract(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="이전 달">
             <ChevronLeft size={17} />
           </button>
           <b>{month.format("YYYY년 M월")}</b>
-          <button type="button" onClick={() => onMonthChange(month.add(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="다음 달">
+          <button type="button" onClick={() => onMonthChange(month.startOf("month").add(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="다음 달">
             <ChevronRight size={17} />
           </button>
         </div>
@@ -241,27 +249,25 @@ function MonthCalendar({ month, selected, getDayEvents, onMonthChange, onSelect,
   );
 }
 
-function MobileDayCalendar({ month, selected, events, onMonthChange, onSelect, onCreate, onToday }: {
+function MobileDayCalendar({ month, selected, events, onMonthChange, onSelect, onToday }: {
   month: dayjs.Dayjs;
   selected: dayjs.Dayjs;
   events: CalendarEvent[];
   onMonthChange: (value: dayjs.Dayjs) => void;
   onSelect: (value: dayjs.Dayjs) => void;
-  onCreate: (date: dayjs.Dayjs) => void;
   onToday: () => void;
 }) {
   const moveDay = (date: dayjs.Dayjs) => {
     onSelect(date);
-    onMonthChange(date);
   };
 
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <button type="button" onClick={() => onMonthChange(month.subtract(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="이전 달"><ChevronLeft size={17} /></button>
+          <button type="button" onClick={() => onMonthChange(month.startOf("month").subtract(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="이전 달"><ChevronLeft size={17} /></button>
           <b>{month.format("YYYY년 M월")}</b>
-          <button type="button" onClick={() => onMonthChange(month.add(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="다음 달"><ChevronRight size={17} /></button>
+          <button type="button" onClick={() => onMonthChange(month.startOf("month").add(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="다음 달"><ChevronRight size={17} /></button>
         </div>
         <button type="button" onClick={onToday} className="rounded-lg border px-3 py-1.5 text-xs">오늘</button>
       </div>
@@ -275,11 +281,10 @@ function MobileDayCalendar({ month, selected, events, onMonthChange, onSelect, o
       </div>
       <div className="mt-4 flex items-center justify-between">
         <p className="text-sm font-semibold text-gray-800">일정 {events.length}개</p>
-        <button type="button" onClick={() => onCreate(selected)} className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white"><Plus size={14} />일정 추가</button>
       </div>
       <div className="mt-3 space-y-2">
         {events.length === 0 ? (
-          <button type="button" onClick={() => onCreate(selected)} className="flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"><Plus size={20} />이 날짜에 일정 추가</button>
+          <div className="flex min-h-32 items-center justify-center rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400">등록된 일정이 없습니다.</div>
         ) : events.map((event) => (
           <div key={event.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${event.scope === "SPACE" ? "bg-slate-50 font-semibold ring-1 ring-slate-200" : "border border-gray-100"}`}>
             <span className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
