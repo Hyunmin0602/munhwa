@@ -552,7 +552,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-white">
+    <div className="flex min-h-0 flex-1 flex-col bg-white">
       {/* ── Top Bar ── */}
       <div className="flex flex-wrap items-center justify-between gap-y-2 px-3 py-3 md:flex-nowrap md:px-5 border-b border-gray-100 flex-shrink-0 bg-white z-10">
         {/* Left */}
