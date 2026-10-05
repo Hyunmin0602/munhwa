@@ -140,10 +140,10 @@ export default function IntegratedCalendar() {
   };
 
   return (
-    <div className="mx-auto flex h-full max-w-7xl flex-col gap-4 p-4 md:p-6">
+    <div className="mx-auto flex h-auto min-h-full max-w-7xl flex-col gap-4 p-4 md:h-full md:p-6">
       <CalendarHeader onCreate={() => openCreate()} />
       {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>}
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid min-h-0 flex-none gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="hidden min-h-0 md:block">
           <MonthCalendar
             month={month}
