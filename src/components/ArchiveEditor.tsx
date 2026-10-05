@@ -557,14 +557,14 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       {/* ── Top Bar ── */}
       <div className="flex flex-wrap items-center justify-between gap-y-2 px-3 py-3 md:flex-nowrap md:px-5 border-b border-gray-100 flex-shrink-0 bg-white z-10">
         {/* Left */}
-        <div className="flex min-w-0 w-full flex-1 items-center gap-3 md:w-auto">
+        <div className="flex min-w-0 basis-full items-center gap-3 md:w-auto md:basis-auto md:flex-1">
           <button type="button" onClick={navigateBack} aria-label="아카이브 목록으로 돌아가기" className="text-gray-400 hover:text-gray-700 flex-shrink-0 transition-colors">
             <ArrowLeft size={16} />
           </button>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="text-base font-bold text-gray-900 bg-transparent outline-none border-none min-w-0 flex-1 placeholder-gray-300 hover:bg-gray-50 focus:bg-gray-50 rounded-lg px-2 py-1 transition-colors"
+            className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-base font-bold text-gray-900 outline-none placeholder-gray-400 transition-colors hover:border-indigo-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
             placeholder="문서 제목"
           />
         </div>
