@@ -129,7 +129,9 @@ export default function IntegratedCalendar() {
   };
 
   const changeMonth = (value: dayjs.Dayjs) => {
-    setMonth(value.startOf("month"));
+    const nextMonth = value.startOf("month");
+    setMonth(nextMonth);
+    setSelected(nextMonth);
   };
 
   const selectDate = (value: dayjs.Dayjs) => {
@@ -157,7 +159,7 @@ export default function IntegratedCalendar() {
           <MobileDayCalendar
             month={month}
             selected={selected}
-            events={getDayEvents(selected)}
+            getDayEvents={getDayEvents}
             onMonthChange={changeMonth}
             onSelect={selectDate}
             onToday={goToToday}
@@ -249,49 +251,75 @@ function MonthCalendar({ month, selected, getDayEvents, onMonthChange, onSelect,
   );
 }
 
-function MobileDayCalendar({ month, selected, events, onMonthChange, onSelect, onToday }: {
+function MobileDayCalendar({ month, selected, getDayEvents, onMonthChange, onSelect, onToday }: {
   month: dayjs.Dayjs;
   selected: dayjs.Dayjs;
-  events: CalendarEvent[];
+  getDayEvents: (date: dayjs.Dayjs) => CalendarEvent[];
   onMonthChange: (value: dayjs.Dayjs) => void;
   onSelect: (value: dayjs.Dayjs) => void;
   onToday: () => void;
 }) {
-  const moveDay = (date: dayjs.Dayjs) => {
-    onSelect(date);
-  };
+  const weekStart = selected.startOf("week");
+  const weekDays = Array.from({ length: 7 }, (_, index) => weekStart.add(index, "day"));
+  const moveWeek = (amount: number) => onSelect(selected.add(amount, "week"));
+  const monthLabel = month.format("YYYY년 M월");
+  const weekLabel = `${weekStart.format("M월 D일")} - ${weekStart.add(6, "day").format("M월 D일")}`;
 
   return (
     <section className="rounded-2xl border border-gray-200 bg-white p-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button type="button" onClick={() => onMonthChange(month.startOf("month").subtract(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="이전 달"><ChevronLeft size={17} /></button>
-          <b>{month.format("YYYY년 M월")}</b>
+          <b>{monthLabel}</b>
           <button type="button" onClick={() => onMonthChange(month.startOf("month").add(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="다음 달"><ChevronRight size={17} /></button>
         </div>
         <button type="button" onClick={onToday} className="rounded-lg border px-3 py-1.5 text-xs">오늘</button>
       </div>
       <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-2 py-2">
-        <button type="button" onClick={() => moveDay(selected.subtract(1, "day"))} className="rounded-lg p-2 hover:bg-white" aria-label="이전 날짜"><ChevronLeft size={17} /></button>
-        <button type="button" onClick={onToday} className="text-center">
-          <p className="text-base font-bold text-gray-900">{selected.format("M월 D일")}</p>
-          <p className="text-xs text-gray-400">{selected.format("dddd")}</p>
-        </button>
-        <button type="button" onClick={() => moveDay(selected.add(1, "day"))} className="rounded-lg p-2 hover:bg-white" aria-label="다음 날짜"><ChevronRight size={17} /></button>
+        <button type="button" onClick={() => moveWeek(-1)} className="rounded-lg p-2 hover:bg-white" aria-label="이전 주"><ChevronLeft size={17} /></button>
+        <div className="text-center">
+          <p className="text-base font-bold text-gray-900">{weekLabel}</p>
+          <p className="text-xs text-gray-400">주간 일정</p>
+        </div>
+        <button type="button" onClick={() => moveWeek(1)} className="rounded-lg p-2 hover:bg-white" aria-label="다음 주"><ChevronRight size={17} /></button>
       </div>
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-sm font-semibold text-gray-800">일정 {events.length}개</p>
+        <p className="text-sm font-semibold text-gray-800">
+          이번 주 일정 {weekDays.reduce((count, day) => count + getDayEvents(day).length, 0)}개
+        </p>
       </div>
       <div className="mt-3 space-y-2">
-        {events.length === 0 ? (
-          <div className="flex min-h-32 items-center justify-center rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400">등록된 일정이 없습니다.</div>
-        ) : events.map((event) => (
-          <div key={event.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${event.scope === "SPACE" ? "bg-slate-50 font-semibold ring-1 ring-slate-200" : "border border-gray-100"}`}>
-            <span className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
-            <span className="min-w-0 flex-1 truncate">{event.title}</span>
-            {event.scope === "SPACE" && <span className="shrink-0 text-[10px] text-slate-500">전역</span>}
-          </div>
-        ))}
+        {weekDays.map((day) => {
+          const dayEvents = getDayEvents(day);
+          return (
+            <button
+              key={day.format("YYYY-MM-DD")}
+              type="button"
+              onClick={() => onSelect(day)}
+              className={`w-full rounded-xl border px-3 py-3 text-left ${day.isSame(selected, "day") ? "border-indigo-300 bg-indigo-50" : "border-gray-100 bg-white"}`}
+            >
+              <div className="flex items-start gap-3">
+                <div className="w-12 shrink-0">
+                  <p className={`text-xs font-semibold ${day.day() === 0 ? "text-rose-500" : day.day() === 6 ? "text-blue-500" : "text-gray-400"}`}>
+                    {WEEKDAYS[day.day()]}
+                  </p>
+                  <p className="text-lg font-bold text-gray-900">{day.date()}</p>
+                </div>
+                <div className="min-w-0 flex-1 space-y-1">
+                  {dayEvents.length === 0 ? (
+                    <p className="py-1 text-xs text-gray-400">일정 없음</p>
+                  ) : dayEvents.map((event) => (
+                    <div key={event.id} className="flex items-center gap-2 rounded-lg bg-white px-2 py-1.5 text-sm shadow-sm">
+                      <span className="h-6 w-1 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
+                      <span className="min-w-0 flex-1 truncate">{event.title}</span>
+                      {event.scope === "SPACE" && <span className="shrink-0 text-[10px] text-slate-500">전역</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </button>
+          );
+        })}
       </div>
     </section>
   );
