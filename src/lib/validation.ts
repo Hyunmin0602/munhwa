@@ -90,6 +90,18 @@ export function eventAllDay(value: unknown) {
   return value;
 }
 
+export function eventType(value: unknown) {
+  if (value === undefined || value === null) return "BUSINESS";
+  if (typeof value !== "string" || !["BUSINESS", "MEETING", "OTHER"].includes(value)) invalid("올바른 일정 유형을 선택해주세요.");
+  return value;
+}
+
+export function eventScope(value: unknown) {
+  if (value === undefined || value === null) return "PROJECT";
+  if (typeof value !== "string" || !["SPACE", "PROJECT", "PERSONAL"].includes(value)) invalid("올바른 일정 공개 범위를 선택해주세요.");
+  return value;
+}
+
 export function integratedKanbanStatus(value: unknown) {
   if (value === null) return null;
   if (typeof value !== "string" || !["BEFORE", "IN_PROGRESS", "DONE"].includes(value)) {

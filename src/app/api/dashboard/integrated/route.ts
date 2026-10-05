@@ -325,7 +325,7 @@ export async function GET(request: NextRequest) {
       dueDate: event.startDate.toISOString(),
       authorName: event.creator.name,
       href: `/dashboard/projects/${event.projectId}/schedule`,
-      project: projectById.get(event.projectId)!,
+      project: projectById.get(event.projectId ?? "")!,
     })),
     ...archives.map((post) => ({
         id: post.id,
@@ -372,7 +372,7 @@ export async function GET(request: NextRequest) {
         dueDate: event.startDate.toISOString(),
         authorName: event.creator.name,
         href: `/dashboard/projects/${event.projectId}/schedule`,
-        project: projectById.get(event.projectId)!,
+        project: projectById.get(event.projectId ?? "")!,
       })) ?? [],
       documents: overview?.[1].map((post) => ({
         id: post.id,
@@ -405,7 +405,7 @@ export async function GET(request: NextRequest) {
           dueDate: event.startDate.toISOString(),
           authorName: event.creator.name,
           href: `/dashboard/projects/${event.projectId}/schedule`,
-          project: projectById.get(event.projectId)!,
+          project: projectById.get(event.projectId ?? "")!,
         })),
         ...overview[4].map((post) => ({
           id: post.id,

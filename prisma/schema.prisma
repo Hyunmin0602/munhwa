@@ -55,6 +55,7 @@ model Space {
   adminTransfers SpaceAdminTransferLog[] @relation("SpaceTransferLogs")
   auditLogs   AdminAuditLog[]
   activityLogs ActivityLog[]
+  events       Event[]       @relation("SpaceEvents")
 
   @@index([adminUserId])
 }
@@ -352,13 +353,19 @@ model Event {
   endDate     DateTime
   allDay      Boolean  @default(false)
   color       String   @default("#6366f1")
-  projectId   String
+  type        String   @default("BUSINESS")
+  scope       String   @default("PROJECT")
+  spaceId     String
+  projectId   String?
   creatorId   String
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  space   Space   @relation("SpaceEvents", fields: [spaceId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
   creator User    @relation(fields: [creatorId], references: [id])
 
+  @@index([spaceId, startDate])
   @@index([projectId, startDate])
+  @@index([creatorId, startDate])
 }

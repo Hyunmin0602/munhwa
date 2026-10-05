@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { withDbRetry } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
 import { assertProjectMember, recordActivity } from "@/lib/server-utils";
-import { eventAllDay, eventDates, InputValidationError, optionalText, projectColor, readJsonObject, requiredText } from "@/lib/validation";
+import { eventAllDay, eventDates, eventScope, eventType, InputValidationError, optionalText, projectColor, readJsonObject, requiredText } from "@/lib/validation";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId/events] ${action} failed`, error);
@@ -47,6 +47,12 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { start, end } = eventDates(data.startDate, data.endDate);
     const allDay = eventAllDay(data.allDay);
     const color = projectColor(data.color);
+    const type = eventType(data.type);
+    const scope = eventScope(data.scope);
+    if (scope !== "PROJECT") return NextResponse.json({ error: "사업 일정은 사업별 공개 범위만 사용할 수 있습니다." }, { status: 400 });
+    const project = await withDbRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { spaceId: true } }));
+    if (!project?.spaceId) return NextResponse.json({ error: "사업의 space 정보를 찾을 수 없습니다." }, { status: 400 });
+    const spaceId = project.spaceId;
 
     const event = await withDbRetry(() =>
       prisma.event.create({
@@ -57,6 +63,9 @@ export async function POST(req: NextRequest, { params }: Params) {
           endDate: end,
           allDay,
           color,
+          type,
+          scope,
+          spaceId,
           projectId,
           creatorId: userId,
         },
