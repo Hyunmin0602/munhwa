@@ -128,7 +128,7 @@ export default function IntegratedOverview({
   const { events, documents, recentUpdates } = summary;
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-auto min-h-full flex-col md:h-full">
       <header className="border-b border-gray-100 bg-white px-4 py-4 md:px-6 lg:px-8">
         <div className="mx-auto flex max-w-6xl items-start justify-between gap-3">
           <div>
@@ -162,7 +162,7 @@ export default function IntegratedOverview({
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 py-5 pb-24 md:px-6 md:py-6 lg:px-8 lg:pb-8">
+      <main className="flex-1 overflow-visible px-4 py-5 pb-24 md:px-6 md:py-6 lg:overflow-y-auto lg:px-8 lg:pb-8">
         <div className="mx-auto max-w-6xl space-y-8">
           <section>
             <div className="mb-3">

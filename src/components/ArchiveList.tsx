@@ -172,7 +172,7 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
           <p className="text-gray-400 text-sm">오른쪽 상단의 <span className="text-indigo-500 font-medium">새 문서</span> 버튼으로 시작하세요</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto">
+        <div className="flex-1 overflow-visible lg:overflow-y-auto">
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {posts.map((post) => {
               const preview = getPreview(post.content);

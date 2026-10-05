@@ -115,7 +115,7 @@ export default function IntegratedFocusedView({
   const isDocument = type === "archive" || type === "meeting";
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex h-auto min-h-full flex-col md:h-full">
       <header className="border-b border-gray-100 bg-white px-4 py-4 md:px-6 lg:px-8">
         <div className="mx-auto flex max-w-6xl items-start justify-between gap-3">
           <div>
@@ -134,7 +134,7 @@ export default function IntegratedFocusedView({
         </div>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 py-5 pb-24 md:px-6 md:py-6 lg:px-8 lg:pb-8">
+      <main className="flex-1 overflow-visible px-4 py-5 pb-24 md:px-6 md:py-6 lg:overflow-y-auto lg:px-8 lg:pb-8">
         <div className="mx-auto max-w-4xl">
           {loading ? <div className="divide-y divide-gray-100 border-y border-gray-100">{[...Array(6)].map((_, index) => <Skeleton key={index} className="my-3 h-14 rounded" />)}</div> : error ? <div className="flex h-64 flex-col items-center justify-center text-center"><AlertCircle size={28} className="mb-3 text-rose-400" /><p className="font-medium text-gray-700">{error}</p><button type="button" onClick={onRetry} className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-600 hover:bg-gray-50"><RotateCw size={14} />다시 시도</button></div> : items.length === 0 ? <div className="flex h-64 flex-col items-center justify-center text-center"><Icon size={28} className="mb-3 text-gray-300" /><p className="font-medium text-gray-600">{empty}</p></div> : <div className="divide-y divide-gray-100 border-y border-gray-100">{items.map((item) => {
             const date = dayjs(item.dueDate ?? item.timestamp);

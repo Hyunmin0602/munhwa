@@ -183,7 +183,7 @@ export default function IntegratedArchive() {
   const meetingCount = posts.filter((post) => post.kind === "MEETING").length;
 
   return (
-    <div className="mx-auto flex h-full w-full flex-col p-4 md:p-6">
+    <div className="mx-auto flex h-auto min-h-full w-full flex-col p-4 md:h-full md:p-6">
       <header className="mb-4 border-b border-gray-200 pb-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between sm:gap-4">
           <div>
@@ -226,7 +226,7 @@ export default function IntegratedArchive() {
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-visible lg:overflow-y-auto">
         {loading ? (
           <ArchiveListSkeleton />
         ) : error ? (

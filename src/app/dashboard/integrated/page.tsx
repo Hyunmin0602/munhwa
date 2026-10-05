@@ -18,7 +18,7 @@ export default function IntegratedPage() {
   const [tab, setTab] = useState<Tab>("kanban");
 
   return (
-    <div className="flex h-full flex-col bg-gray-50">
+    <div className="flex h-auto min-h-full flex-col bg-gray-50 md:h-full">
       <nav className="flex flex-shrink-0 gap-1 border-b border-gray-200 bg-white px-4 pt-3 md:px-6" aria-label="통합 업무 유형">
         {tabs.map(({ id, label, Icon }) => (
           <button
@@ -31,7 +31,7 @@ export default function IntegratedPage() {
           </button>
         ))}
       </nav>
-      <main className="min-h-0 flex-1">
+      <main className="min-h-0 flex-1 overflow-visible">
         {tab === "kanban" && <IntegratedKanban />}
         {tab === "calendar" && <IntegratedCalendar />}
         {tab === "archive" && <IntegratedArchive />}

@@ -172,7 +172,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button type="button" onClick={() => setProjectsRequestNonce((current) => current + 1)} className="font-medium text-rose-700 underline hover:text-rose-900">다시 시도</button>
         </div>
       )}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-w-0 pb-[5.25rem] lg:overflow-hidden lg:pb-0">
+      <main className="flex min-h-0 flex-1 touch-pan-y flex-col overflow-y-auto overflow-x-hidden overscroll-y-auto pb-[5.25rem] lg:overflow-hidden lg:pb-0">
         {/* 모바일 상단바 */}
         <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
           <button
