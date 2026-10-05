@@ -300,7 +300,7 @@ function ColumnHeader({ column, projectId, visibleTaskCount, accentClass, dragHa
       <div className="flex items-center gap-1 flex-shrink-0 ml-2">
         <>
           <button onClick={openSettings} aria-label={`${column.name} 설정`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors md:opacity-0 md:group-hover/hdr:opacity-100" title="열 설정"><Pencil size={13} /></button>
-          {isOwner && (
+          {isOwner && !column.integratedStatus && (
             <button onClick={handleDelete} aria-label={`${column.name} 컬럼 삭제`} className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-rose-500 hover:bg-rose-50 transition-colors" title="컬럼 삭제"><Trash2 size={13} /></button>
           )}
         </>
@@ -329,7 +329,6 @@ function ColumnHeader({ column, projectId, visibleTaskCount, accentClass, dragHa
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setShowDeleteConfirm(false)}>
           <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
-            <p className="text-xs font-semibold text-rose-600">열 삭제</p>
             <h3 className="mt-1 text-lg font-bold text-slate-900">열을 삭제하시겠습니까?</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">이 열의 카드 {column.tasks.length}개도 함께 삭제됩니다. 계속하려면 열 이름을 입력하세요.</p>
             <input value={deleteName} onChange={(event) => setDeleteName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void confirmDelete(); }} placeholder={column.name} autoFocus className="mt-4 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-rose-200" />

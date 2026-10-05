@@ -11,6 +11,7 @@ type Kind = "BUSINESS" | "MEETING" | "OTHER";
 type CalendarEvent = {
   id: string;
   projectId: string | null;
+  project: Project | null;
   scope: Scope;
   type: Kind;
   title: string;
@@ -49,6 +50,8 @@ const getEventScopeLabel = (scope: Scope, projectID:string | null, projects:Proj
   const foundProject = projects.find((p) => projectID && p.id === projectID);
   return foundProject ?`${foundProject.name}` : "사업별" ;
 };
+
+const getEventColor = (event: CalendarEvent) => event.scope === "PROJECT" ? event.project?.color ?? event.color : event.color;
 
 export default function IntegratedCalendar() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -130,21 +133,36 @@ export default function IntegratedCalendar() {
       <CalendarHeader onCreate={() => openCreate()} />
       {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>}
       <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <MonthCalendar
-          month={month}
-          selected={selected}
-          getDayEvents={getDayEvents}
-          onMonthChange={setMonth}
-          onSelect={setSelected}
-          onCreate={openCreate}
-          onToday={goToToday}
-        />
-        <SelectedDayEvents
-          date={selected}
-          events={getDayEvents(selected)}
-          projects={projects}
-          onRemove={remove}
-        />
+        <div className="hidden min-h-0 md:block">
+          <MonthCalendar
+            month={month}
+            selected={selected}
+            getDayEvents={getDayEvents}
+            onMonthChange={setMonth}
+            onSelect={setSelected}
+            onCreate={openCreate}
+            onToday={goToToday}
+          />
+        </div>
+        <div className="md:hidden">
+          <MobileDayCalendar
+            month={month}
+            selected={selected}
+            events={getDayEvents(selected)}
+            onMonthChange={setMonth}
+            onSelect={setSelected}
+            onCreate={openCreate}
+            onToday={goToToday}
+          />
+        </div>
+        <div className="hidden lg:block">
+          <SelectedDayEvents
+            date={selected}
+            events={getDayEvents(selected)}
+            projects={projects}
+            onRemove={remove}
+          />
+        </div>
       </div>
       {form && (
         <EventFormModal
@@ -223,6 +241,57 @@ function MonthCalendar({ month, selected, getDayEvents, onMonthChange, onSelect,
   );
 }
 
+function MobileDayCalendar({ month, selected, events, onMonthChange, onSelect, onCreate, onToday }: {
+  month: dayjs.Dayjs;
+  selected: dayjs.Dayjs;
+  events: CalendarEvent[];
+  onMonthChange: (value: dayjs.Dayjs) => void;
+  onSelect: (value: dayjs.Dayjs) => void;
+  onCreate: (date: dayjs.Dayjs) => void;
+  onToday: () => void;
+}) {
+  const moveDay = (date: dayjs.Dayjs) => {
+    onSelect(date);
+    onMonthChange(date);
+  };
+
+  return (
+    <section className="rounded-2xl border border-gray-200 bg-white p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <button type="button" onClick={() => onMonthChange(month.subtract(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="이전 달"><ChevronLeft size={17} /></button>
+          <b>{month.format("YYYY년 M월")}</b>
+          <button type="button" onClick={() => onMonthChange(month.add(1, "month"))} className="rounded-lg p-2 hover:bg-gray-100" aria-label="다음 달"><ChevronRight size={17} /></button>
+        </div>
+        <button type="button" onClick={onToday} className="rounded-lg border px-3 py-1.5 text-xs">오늘</button>
+      </div>
+      <div className="mt-4 flex items-center justify-between rounded-xl bg-slate-50 px-2 py-2">
+        <button type="button" onClick={() => moveDay(selected.subtract(1, "day"))} className="rounded-lg p-2 hover:bg-white" aria-label="이전 날짜"><ChevronLeft size={17} /></button>
+        <button type="button" onClick={onToday} className="text-center">
+          <p className="text-base font-bold text-gray-900">{selected.format("M월 D일")}</p>
+          <p className="text-xs text-gray-400">{selected.format("dddd")}</p>
+        </button>
+        <button type="button" onClick={() => moveDay(selected.add(1, "day"))} className="rounded-lg p-2 hover:bg-white" aria-label="다음 날짜"><ChevronRight size={17} /></button>
+      </div>
+      <div className="mt-4 flex items-center justify-between">
+        <p className="text-sm font-semibold text-gray-800">일정 {events.length}개</p>
+        <button type="button" onClick={() => onCreate(selected)} className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-semibold text-white"><Plus size={14} />일정 추가</button>
+      </div>
+      <div className="mt-3 space-y-2">
+        {events.length === 0 ? (
+          <button type="button" onClick={() => onCreate(selected)} className="flex min-h-32 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"><Plus size={20} />이 날짜에 일정 추가</button>
+        ) : events.map((event) => (
+          <div key={event.id} className={`flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${event.scope === "SPACE" ? "bg-slate-50 font-semibold ring-1 ring-slate-200" : "border border-gray-100"}`}>
+            <span className="h-8 w-1 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
+            <span className="min-w-0 flex-1 truncate">{event.title}</span>
+            {event.scope === "SPACE" && <span className="shrink-0 text-[10px] text-slate-500">전역</span>}
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 type CalendarCellProps = {
   day: dayjs.Dayjs | null;
   selected: dayjs.Dayjs;
@@ -237,16 +306,17 @@ function CalendarCell({ day, selected, events, onSelect, onCreate }: CalendarCel
       type="button"
       onClick={() => day && onSelect(day)}
       onDoubleClick={() => day && onCreate(day)}
-      className={`min-w-0 border-b border border-gray-200 p-1 text-left ${day?.isSame(selected, "day") ? "bg-indigo-50" : "hover:bg-gray-50"}`}
+      className={`flex min-w-0 flex-col items-start justify-start border-b border border-gray-200 p-1 text-left ${day?.isSame(selected, "day") ? "bg-indigo-50" : "hover:bg-gray-50"}`}
     >
       {day && (
         <>
           <span className="text-xs">{day.date()}</span>
           {events.slice(0, 3).map((event) => (
-            <span key={event.id} className="mt-1 block truncate rounded px-1 py-0.5 text-[10px] text-white" style={{ backgroundColor: event.color }}>
+            <span key={event.id} className={`mt-1 flex w-full items-center truncate rounded px-1.5 py-0.5 text-[10px] text-white ${event.scope === "SPACE" ? "font-bold shadow-sm ring-2 ring-slate-900/20" : ""}`} style={{ backgroundColor: getEventColor(event) }}>
               {event.title}
             </span>
           ))}
+          {events.length > 3 && <span className="mt-1 block w-full truncate px-1 text-[10px] font-medium text-gray-500">+{events.length - 3}개 더 보기</span>}
         </>
       )}
     </button>
@@ -258,8 +328,8 @@ function SelectedDayEvents({ date, events,projects, onRemove }: { date: dayjs.Da
     <section className="h-fit rounded-2xl border border-gray-200 bg-white p-4 lg:sticky lg:top-4">
       <h3 className="mb-2 text-sm font-bold">{date.format("M월 D일")} 일정</h3>
       {events.map((event) => (
-        <div key={event.id} className="flex items-center gap-2 py-1 text-sm">
-          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: event.color }} />
+        <div key={event.id} className={`flex items-center gap-2 rounded-lg py-1 text-sm ${event.scope === "SPACE" ? "bg-slate-50 px-2 font-semibold" : ""}`}>
+          <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
           <span className="flex-1">
             {event.title}
             <small className="ml-2 text-xs text-gray-400">{getEventScopeLabel(event.scope, event.projectId,projects)}</small>

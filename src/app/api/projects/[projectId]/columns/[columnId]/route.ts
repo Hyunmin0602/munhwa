@@ -95,6 +95,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
 
     const existing = await withDbRetry(() => prisma.kanbanColumn.findFirst({ where: { id: columnId, projectId } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (existing.integratedStatus) return NextResponse.json({ error: "진행 전, 진행 중, 진행 완료 열은 삭제할 수 없습니다." }, { status: 400 });
 
     await withDbRetry(() => prisma.kanbanColumn.delete({ where: { id: columnId } }));
     return NextResponse.json({ ok: true });

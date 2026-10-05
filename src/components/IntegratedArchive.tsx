@@ -280,7 +280,7 @@ export default function IntegratedArchive() {
                       disabled={deletingPostId === post.id}
                       aria-label={`${post.title} 삭제`}
                       title="문서 삭제"
-                      className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-rose-50 hover:text-rose-500 disabled:cursor-wait disabled:opacity-50 md:right-1 md:opacity-0 md:group-hover:opacity-100"
+                      className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-md text-gray-300 transition-colors hover:bg-rose-50 hover:text-rose-500 disabled:cursor-wait disabled:opacity-50 md:right-1 md:opacity-100 lg:opacity-0 lg:group-hover:opacity-100"
                     >
                       <Trash2 size={14} />
                     </button>

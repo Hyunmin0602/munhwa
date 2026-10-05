@@ -17,6 +17,7 @@ import {
   LayoutGrid,
   ListOrdered,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 
@@ -108,16 +109,24 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
             <LayoutGrid size={16} />
             통합 화면
           </Link>
+          {isSystemAdmin && (
+            <Link
+              href="/dashboard/admin"
+              onClick={onClose}
+              className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/admin" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"}`}
+            >
+              <ShieldCheck size={16} />
+              시스템 관리자
+            </Link>
+          )}
           {(isSpaceAdmin || isSystemAdmin) && (
             <Link
-              href={isSystemAdmin ? "/dashboard/admin" : "/dashboard/space-management"}
+              href="/dashboard/space-management"
               onClick={onClose}
-              className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-                (pathname === "/dashboard/admin" || pathname === "/dashboard/space-management") ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
-              }`}
+              className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/space-management" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"}`}
             >
-              {isSystemAdmin ? <ShieldCheck size={16} /> : null}
-              {isSystemAdmin ? "시스템 관리자" : "관리자 설정"}
+              <Users size={16} />
+              공간 관리
             </Link>
           )}
           <div className="flex items-center justify-between px-3 py-1 mb-1">

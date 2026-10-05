@@ -214,7 +214,7 @@ export default function IntegratedKanban() {
       const payload = await response.json();
       const data = (Array.isArray(payload?.items) ? payload.items : []) as Project[];
       setProjects(data);
-      setSelectedProjects(data.map((project) => project.id));
+      if (showLoading) setSelectedProjects(data.map((project) => project.id));
     } catch {
       setError("통합 칸반을 불러오지 못했습니다.");
     } finally {
@@ -232,6 +232,14 @@ export default function IntegratedKanban() {
         .filter((item): item is string => !!item),
     ),
   ];
+  const activeFilterCount = [
+    selectedProjects.length !== projects.length,
+    selectedCategories.length > 0,
+    priorities.length > 0,
+    due !== "all",
+    query.trim().length > 0,
+  ].filter(Boolean).length;
+  const hasActiveFilters = activeFilterCount > 0;
   const filteredProjects = projects.filter((project) => {
     return (
       selectedProjects.includes(project.id) &&
@@ -367,7 +375,7 @@ export default function IntegratedKanban() {
       });
       if (!response.ok) throw new Error();
       setCreateStatus(null);
-      await load();
+      await load(false);
     } catch {
       setError("카드를 등록하지 못했습니다.");
     } finally {
@@ -384,7 +392,7 @@ export default function IntegratedKanban() {
       );
       if (!response.ok) throw new Error("Integrated task delete request failed");
       setSelected(null);
-      await load();
+      await load(false);
       return true;
     } catch {
       setError("카드를 삭제하지 못했습니다.");
@@ -413,10 +421,12 @@ export default function IntegratedKanban() {
           <button
             type="button"
             onClick={() => setShowFilter(true)}
-            className="inline-flex shrink-0 items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-600 shadow-sm"
+            aria-pressed={hasActiveFilters}
+            className={`inline-flex shrink-0 items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold shadow-sm transition-colors ${hasActiveFilters ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-600"}`}
           >
             <SlidersHorizontal size={16} />
-            필터
+            <span>{hasActiveFilters ? "적용됨" : "필터"}</span>
+            {hasActiveFilters && <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-indigo-600 px-1.5 text-[10px] font-bold text-white">{activeFilterCount}</span>}
           </button>
         </div>
       </header>

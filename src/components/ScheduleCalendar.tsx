@@ -234,7 +234,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                   key={idx}
                   onClick={() => day && setSelectedDay(day)}
                   onContextMenu={(event) => { if (!day) return; event.preventDefault(); setSelectedDay(day); setContextMenu({ x: event.clientX, y: event.clientY, date: day }); }}
-                  className={`border-r border-b border-gray-100 p-1.5 cursor-pointer transition-colors
+                  className={`flex flex-col items-start justify-start border-r border-b border-gray-100 p-1.5 cursor-pointer transition-colors
                     ${!day ? "bg-gray-50/50" : isSelected ? "bg-indigo-50" : "hover:bg-gray-50"}
                     ${idx % 7 === 6 ? "border-r-0" : ""}
                   `}
