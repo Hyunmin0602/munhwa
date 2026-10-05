@@ -57,7 +57,7 @@ export default function MeetingsPage() {
         <p className="mb-1 text-xs text-gray-400">전체 사업</p>
         <h1 className="text-xl font-bold text-gray-900">회의록</h1>
       </header>
-      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-8 md:py-6">
+      <div className="flex-1 overflow-visible px-4 py-4 md:px-8 md:py-6 lg:overflow-y-auto">
         {loading ? (
           <div className="space-y-3">
             {[...Array(4)].map((_, index) => <Skeleton key={index} className="h-20 w-full rounded-xl" />)}

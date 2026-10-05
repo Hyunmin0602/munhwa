@@ -99,7 +99,7 @@ export default function SystemAdminPage() {
   };
 
   return (
-    <main className="h-full overflow-y-auto bg-gray-50 px-4 py-6 pb-24 md:px-8 md:py-8 lg:pb-8">
+    <main className="h-auto min-h-full overflow-visible bg-gray-50 px-4 py-6 pb-24 md:px-8 md:py-8 lg:h-full lg:overflow-y-auto lg:pb-8">
       <div className="mx-auto max-w-7xl">
         <header className="border-b border-gray-200 pb-6"><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-600">ADMINISTRATION</p><h1 className="text-2xl font-bold text-gray-900">관리자</h1><p className="mt-2 text-sm text-gray-500">시스템 관리자와 Space 관리 권한을 한 곳에서 관리합니다.</p></header>
         {error && <div className="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}

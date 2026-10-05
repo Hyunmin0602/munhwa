@@ -82,7 +82,7 @@ export default function SpaceAdministrationClient() {
   }
 
   return (
-    <main className="h-full overflow-y-auto px-4 py-6 pb-24 md:px-6 lg:px-8 lg:pb-8">
+    <main className="h-auto min-h-full overflow-visible px-4 py-6 pb-24 md:px-6 lg:h-full lg:overflow-y-auto lg:px-8 lg:pb-8">
       <div className="mx-auto max-w-2xl space-y-6">
         <header>
           <p className="mb-1 text-xs text-gray-400">문화체육위원회</p>

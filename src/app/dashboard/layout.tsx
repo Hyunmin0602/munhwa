@@ -71,7 +71,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (status === "loading") {
     return (
-      <div className="flex h-screen overflow-hidden bg-gray-50">
+      <div className="flex min-h-screen flex-col overflow-visible bg-gray-50 lg:h-screen lg:flex-row lg:overflow-hidden">
         {/* Sidebar skeleton */}
         <div className="w-56 flex-shrink-0 bg-white border-r border-gray-100 flex flex-col p-4 gap-3">
           <Skeleton className="h-8 w-32 mb-2 rounded-xl" />
@@ -157,7 +157,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div className="flex min-h-screen flex-col overflow-visible bg-gray-50 lg:h-screen lg:flex-row lg:overflow-hidden">
       <Sidebar
         projects={projects}
         onNewProject={() => setShowModal(true)}
@@ -172,7 +172,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <button type="button" onClick={() => setProjectsRequestNonce((current) => current + 1)} className="font-medium text-rose-700 underline hover:text-rose-900">다시 시도</button>
         </div>
       )}
-      <main className="flex min-h-0 flex-1 touch-pan-y flex-col overflow-y-auto overflow-x-hidden overscroll-y-auto pb-[5.25rem] lg:overflow-hidden lg:pb-0">
+      <main className="flex min-w-0 flex-1 touch-pan-y flex-col overflow-visible overflow-x-hidden pb-[5.25rem] lg:min-h-0 lg:overflow-hidden lg:pb-0">
         {/* 모바일 상단바 */}
         <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
           <button

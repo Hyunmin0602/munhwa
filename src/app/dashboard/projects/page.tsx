@@ -48,7 +48,7 @@ export default function ProjectsPage() {
         <h1 className="text-xl font-bold text-gray-900 md:text-2xl">사업</h1>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-4 py-4 md:px-8 md:py-6">
+      <main className="flex-1 overflow-visible px-4 py-4 md:px-8 md:py-6 lg:overflow-y-auto">
         {loading ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {[...Array(3)].map((_, index) => (
