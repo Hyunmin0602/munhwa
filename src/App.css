@@ -1,31 +1,219 @@
-.App {
+:root {
+  color: #1f2937;
+  background: #f5f7fb;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+}
+
+.calendar-app {
+  min-height: 100vh;
+  padding: 20px 16px;
+}
+
+.calendar-card {
+  width: min(100%, 480px);
+  margin: 0 auto;
+  padding: 24px 18px 28px;
+  border: 1px solid #e8ecf4;
+  border-radius: 24px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgb(30 45 80 / 7%);
+}
+
+.calendar-header,
+.date-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  color: #8b95a7;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+
+h1 {
+  margin: 0;
+  font-size: 25px;
+  letter-spacing: -0.04em;
+}
+
+.today-button {
+  border: 1px solid #dce2ec;
+  border-radius: 10px;
+  padding: 8px 13px;
+  color: #566176;
+  background: #fff;
+  cursor: pointer;
+}
+
+.today-button.is-active {
+  border-color: #536dfe;
+  color: #536dfe;
+}
+
+.view-switcher {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  margin: 24px 0 18px;
+  padding: 4px;
+  border-radius: 12px;
+  background: #f2f4f8;
+}
+
+.view-switcher button {
+  border: 0;
+  border-radius: 9px;
+  padding: 9px;
+  color: #8b95a7;
+  background: transparent;
+  cursor: pointer;
+}
+
+.view-switcher button.selected {
+  color: #293348;
+  background: #fff;
+  box-shadow: 0 2px 6px rgb(30 45 80 / 10%);
+  font-weight: 700;
+}
+
+.date-navigation {
+  margin-bottom: 14px;
+}
+
+.date-navigation button {
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  color: #657089;
+  background: #f5f7fb;
+  font-size: 25px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.date-navigation strong {
+  font-size: 15px;
+}
+
+.weekday-row,
+.month-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
   text-align: center;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.weekday-row {
+  margin-bottom: 4px;
+  color: #9aa3b3;
+  font-size: 12px;
+  font-weight: 700;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+.weekday-row span:first-child,
+.sunday {
+  color: #ef6b78;
 }
 
-.App-link {
-  color: #61dafb;
+.weekday-row span:last-child,
+.saturday {
+  color: #5e82e8;
 }
 
-.heart {
-  color: #ff0000;
+.day-cell {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 49px;
+  border: 0;
+  color: #354052;
+  background: transparent;
+  cursor: pointer;
 }
 
-.small {
-  font-size: 0.75rem;
+.day-cell span {
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+}
+
+.day-cell.outside-month {
+  color: #c9ced8;
+}
+
+.day-cell.selected-day span {
+  color: #fff;
+  background: #536dfe;
+  font-weight: 700;
+}
+
+.day-cell i {
+  position: absolute;
+  bottom: 3px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #536dfe;
+}
+
+.day-cell.selected-day i {
+  background: #fff;
+}
+
+.day-view {
+  padding: 28px 8px 6px;
+  text-align: center;
+}
+
+.day-label {
+  margin: 0;
+  color: #536dfe;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.large-date {
+  margin: 10px 0 0;
+  color: #263248;
+  font-size: 72px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.full-date {
+  margin: 10px 0 28px;
+  color: #7d8799;
+}
+
+.empty-schedule {
+  padding: 34px 12px;
+  border-radius: 14px;
+  color: #a1a9b8;
+  background: #f7f8fb;
+  font-size: 14px;
+}
+
+@media (min-width: 600px) {
+  .calendar-app {
+    padding-top: 56px;
+  }
 }
