@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, CheckSquare, FileText } from "lucide-react";
+import { CalendarDays, CheckSquare } from "lucide-react";
 import IntegratedArchive from "@/components/IntegratedArchive";
 import IntegratedCalendar from "@/components/IntegratedCalendar";
 import IntegratedKanban from "@/components/IntegratedKanban";
@@ -11,7 +11,7 @@ type Tab = "kanban" | "calendar" | "archive";
 const tabs: Array<{ id: Tab; label: string; Icon: typeof CheckSquare }> = [
   { id: "kanban", label: "칸반", Icon: CheckSquare },
   { id: "calendar", label: "일정", Icon: CalendarDays },
-  { id: "archive", label: "아카이브", Icon: FileText },
+  { id: "archive", label: "아카이브", Icon: CheckSquare },
 ];
 
 export default function IntegratedPage() {

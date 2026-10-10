@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dayjs from "dayjs";
-import { AlertCircle, BookOpen, CalendarDays, CheckSquare, ChevronRight, FileText, RotateCw, X } from "lucide-react";
+import { AlertCircle, CalendarDays, CheckSquare, ChevronRight, RotateCw, X } from "lucide-react";
 import { Skeleton } from "@/components/ui/Skeleton";
 
 type ItemType = "task" | "event" | "archive" | "meeting";
@@ -61,8 +61,8 @@ const tabs: Array<{ type: "all" | ItemType; label: string }> = [
 const typeConfig = {
   task: { title: "마감 작업", empty: "해당 기간에 마감인 작업이 없습니다.", Icon: CheckSquare },
   event: { title: "일정", empty: "해당 기간에 예정된 일정이 없습니다.", Icon: CalendarDays },
-  archive: { title: "아카이브", empty: "해당 기간에 수정된 아카이브가 없습니다.", Icon: FileText },
-  meeting: { title: "회의록", empty: "해당 기간에 수정된 회의록이 없습니다.", Icon: BookOpen },
+  archive: { title: "아카이브", empty: "해당 기간에 수정된 아카이브가 없습니다." },
+  meeting: { title: "회의록", empty: "해당 기간에 수정된 회의록이 없습니다." },
 };
 
 function rangeOptions(type: ItemType) {
@@ -111,7 +111,7 @@ export default function IntegratedFocusedView({
   onRetry,
   onLoadMore,
 }: Props) {
-  const { title, empty, Icon } = typeConfig[type];
+  const { title, empty } = typeConfig[type];
   const isDocument = type === "archive" || type === "meeting";
 
   return (
@@ -136,10 +136,10 @@ export default function IntegratedFocusedView({
 
       <main className="flex-1 overflow-visible px-4 py-5 pb-24 md:px-6 md:py-6 lg:overflow-y-auto lg:px-8 lg:pb-8">
         <div className="mx-auto max-w-4xl">
-          {loading ? <div className="divide-y divide-gray-100 border-y border-gray-100">{[...Array(6)].map((_, index) => <Skeleton key={index} className="my-3 h-14 rounded" />)}</div> : error ? <div className="flex h-64 flex-col items-center justify-center text-center"><AlertCircle size={28} className="mb-3 text-rose-400" /><p className="font-medium text-gray-700">{error}</p><button type="button" onClick={onRetry} className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-600 hover:bg-gray-50"><RotateCw size={14} />다시 시도</button></div> : items.length === 0 ? <div className="flex h-64 flex-col items-center justify-center text-center"><Icon size={28} className="mb-3 text-gray-300" /><p className="font-medium text-gray-600">{empty}</p></div> : <div className="divide-y divide-gray-100 border-y border-gray-100">{items.map((item) => {
+          {loading ? <div className="divide-y divide-gray-100 border-y border-gray-100">{[...Array(6)].map((_, index) => <Skeleton key={index} className="my-3 h-14 rounded" />)}</div> : error ? <div className="flex h-64 flex-col items-center justify-center text-center"><AlertCircle size={28} className="mb-3 text-rose-400" /><p className="font-medium text-gray-700">{error}</p><button type="button" onClick={onRetry} className="mt-3 inline-flex h-10 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-600 hover:bg-gray-50"><RotateCw size={14} />다시 시도</button></div> : items.length === 0 ? <div className="flex h-64 flex-col items-center justify-center text-center"><p className="font-medium text-gray-600">{empty}</p></div> : <div className="divide-y divide-gray-100 border-y border-gray-100">{items.map((item) => {
             const date = dayjs(item.dueDate ?? item.timestamp);
             if (type === "event") return <Link key={item.id} href={item.href} className="flex min-h-20 items-center gap-4 py-3 transition-colors hover:bg-gray-50"><div className="w-12 flex-shrink-0 text-center"><p className="text-[11px] font-medium text-indigo-600">{date.format("M월")}</p><p className="text-xl font-bold leading-6 text-gray-800">{date.format("D")}</p></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900">{item.title}</p><div className="mt-1 flex min-w-0 items-center gap-2"><span className="flex-shrink-0 text-xs text-gray-400">{date.format("HH:mm")}</span><ProjectName item={item} /></div></div><ChevronRight size={16} className="flex-shrink-0 text-gray-300" /></Link>;
-            if (isDocument) return <Link key={item.id} href={item.href} className="flex min-h-16 items-center gap-3 py-3 transition-colors hover:bg-gray-50"><div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ color: item.project.color, backgroundColor: `${item.project.color}18` }}><Icon size={16} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900">{item.title}</p><div className="mt-1 flex min-w-0 items-center gap-2"><ProjectName item={item} /><span className="flex-shrink-0 text-xs text-gray-400">{dayjs(item.timestamp).format("M월 D일")}</span></div></div><span className="flex-shrink-0 text-[11px] font-medium text-gray-400">{type === "meeting" ? "회의록" : "문서"}</span></Link>;
+            if (isDocument) return <Link key={item.id} href={item.href} className="flex min-h-16 items-center gap-3 py-3 transition-colors hover:bg-gray-50"><div className="h-9 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: item.project.color }} /><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900">{item.title}</p><div className="mt-1 flex min-w-0 items-center gap-2"><ProjectName item={item} /><span className="flex-shrink-0 text-xs text-gray-400">{dayjs(item.timestamp).format("M월 D일")}</span></div></div><span className="flex-shrink-0 text-[11px] font-medium text-gray-400">{type === "meeting" ? "회의록" : "문서"}</span></Link>;
             const priority = item.priority === "high" ? "높음" : item.priority === "low" ? "낮음" : "보통";
             return <Link key={item.id} href={item.href} className="flex min-h-16 items-center gap-3 py-3 transition-colors hover:bg-gray-50"><div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ color: item.project.color, backgroundColor: `${item.project.color}18` }}><CheckSquare size={16} /></div><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-gray-900">{item.title}</p><div className="mt-1 flex min-w-0 items-center gap-2"><ProjectName item={item} /><span className="flex-shrink-0 text-xs text-gray-400">{item.dueDate ? date.format("M월 D일") : "마감일 없음"}</span></div></div><div className="flex flex-shrink-0 flex-col items-end gap-1"><span className="text-[11px] font-medium text-gray-500">{item.status}</span><span className="text-[11px] text-gray-400">{priority}</span></div></Link>;
           })}</div>}

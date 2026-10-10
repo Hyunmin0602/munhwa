@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
             ? {}
             : canViewSpace
               ? { spaceId: DEFAULT_SPACE_ID }
-              : { members: { some: { userId } } },
+              : { OR: [{ members: { some: { userId } } }, { ownerId: userId }] },
           select: {
             id: true,
             name: true,

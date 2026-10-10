@@ -22,7 +22,7 @@ export async function GET(_: NextRequest, { params }: Params) {
     const events = await withDbRetry(() =>
       prisma.event.findMany({
         where: { projectId },
-        include: { creator: { select: { id: true, name: true } } },
+        include: { creator: { select: { id: true, name: true } }, label: { select: { id: true, name: true, description: true, color: true } } },
         orderBy: { startDate: "asc" },
       })
     );
@@ -49,10 +49,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     const color = projectColor(data.color);
     const type = eventType(data.type);
     const scope = eventScope(data.scope);
+    const requestedLabelId = typeof data.labelId === "string" && data.labelId.trim() ? data.labelId.trim() : null;
     if (scope !== "PROJECT") return NextResponse.json({ error: "사업 일정은 사업별 공개 범위만 사용할 수 있습니다." }, { status: 400 });
     const project = await withDbRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { spaceId: true } }));
     if (!project?.spaceId) return NextResponse.json({ error: "사업의 space 정보를 찾을 수 없습니다." }, { status: 400 });
     const spaceId = project.spaceId;
+    const label = requestedLabelId
+      ? await withDbRetry(() => prisma.eventLabel.findUnique({ where: { id: requestedLabelId }, select: { id: true, color: true } }))
+      : null;
+    if (requestedLabelId && !label) return NextResponse.json({ error: "존재하지 않는 라벨입니다." }, { status: 400 });
 
     const event = await withDbRetry(() =>
       prisma.event.create({
@@ -62,7 +67,8 @@ export async function POST(req: NextRequest, { params }: Params) {
           startDate: start,
           endDate: end,
           allDay,
-          color,
+          color: label?.color ?? color,
+          labelId: label?.id ?? null,
           type,
           scope,
           spaceId,
@@ -71,7 +77,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         },
       })
     );
-    await recordActivity({ actorId: userId, projectId, type: "일정", action: "생성", entityType: "EVENT", entityId: event.id, title: event.title, afterData: { title: event.title, startDate: event.startDate, endDate: event.endDate, allDay: event.allDay } });
+    await recordActivity({ actorId: userId, projectId, type: "일정", action: "생성", entityType: "EVENT", entityId: event.id, title: event.title, afterData: { title: event.title, startDate: event.startDate, endDate: event.endDate, allDay: event.allDay, labelId: event.labelId } });
     return NextResponse.json(event, { status: 201 });
   } catch (error) {
     if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });

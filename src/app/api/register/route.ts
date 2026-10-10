@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
-import { withDbRetry } from "@/lib/db-retry";
+import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
+import { DEFAULT_SPACE_ID } from "@/lib/server-utils";
 import { checkRateLimit, getClientIp, rateLimitResponse, REGISTRATION_EMAIL_LIMIT, REGISTRATION_IP_LIMIT } from "@/lib/rate-limit";
 import { InputValidationError, normalizeEmail, password, readJsonObject, requiredText } from "@/lib/validation";
 
@@ -18,21 +19,30 @@ export async function POST(req: NextRequest) {
     const emailLimit = await checkRateLimit(req, "registration-email", email, REGISTRATION_EMAIL_LIMIT);
     if (!emailLimit.allowed) return rateLimitResponse(emailLimit);
 
-    const cohort = await withDbRetry(() => prisma.cohort.findFirst({ where: { id: cohortId, isActive: true } }), { operation: `auth:check-cohort:${cohortId}` });
+    const cohort = await withDbReadRetry(() => prisma.cohort.findFirst({ where: { id: cohortId, isActive: true } }), { operation: `auth:check-cohort:${cohortId}` });
     if (!cohort) {
       return NextResponse.json({ error: "선택한 기수를 찾을 수 없거나 가입할 수 없습니다." }, { status: 400 });
     }
 
-    const existing = await withDbRetry(() => prisma.user.findUnique({ where: { email } }), { operation: `auth:check-user:${email}` });
+    const existing = await withDbReadRetry(() => prisma.user.findUnique({ where: { email } }), { operation: `auth:check-user:${email}` });
     if (existing) {
       return NextResponse.json({ ok: true }, { status: 201 });
     }
 
     const hashed = await bcrypt.hash(plainPassword, 10);
-    const user = await withDbRetry(
-      () =>
-        prisma.user.create({ data: { name, email, password: hashed, cohortId }, select: { id: true, name: true, email: true, cohortId: true } }),
-      { operation: `auth:create-user:${email}` }
+    const user = await withDbWrite(() =>
+      prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: { name, email, password: hashed, cohortId },
+          select: { id: true, name: true, email: true, cohortId: true },
+        });
+        await tx.spaceMember.upsert({
+          where: { spaceId_userId: { spaceId: DEFAULT_SPACE_ID, userId: createdUser.id } },
+          create: { spaceId: DEFAULT_SPACE_ID, userId: createdUser.id, role: "member" },
+          update: {},
+        });
+        return createdUser;
+      })
     );
 
     return NextResponse.json({ ok: true, user }, { status: 201 });

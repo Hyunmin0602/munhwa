@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import dayjs from "dayjs";
 import "dayjs/locale/ko";
-import { ChevronLeft, ChevronRight, Plus, X, Clock, CalendarDays, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Clock, CalendarDays, Trash2, Tags, PencilLine, Trash } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
@@ -16,26 +16,35 @@ interface Event {
   endDate: string;
   allDay: boolean;
   color: string;
+  label: { id: string; name: string; description: string | null; color: string } | null;
 }
 
-const EVENT_COLORS = [
-  { label: "인디고", value: "#6366f1" },
-  { label: "핑크",   value: "#ec4899" },
-  { label: "에메랄드", value: "#10b981" },
-  { label: "앰버",   value: "#f59e0b" },
-  { label: "스카이", value: "#0ea5e9" },
-  { label: "로즈",   value: "#f43f5e" },
-];
+interface Label {
+  id: string;
+  name: string;
+  description: string | null;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string | null;
+}
 
 export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   const [current, setCurrent] = useState(dayjs());
   const [events, setEvents] = useState<Event[]>([]);
+  const [labels, setLabels] = useState<Label[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [showLabelModal, setShowLabelModal] = useState(false);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editingEventColor, setEditingEventColor] = useState<string | null>(null);
   const [form, setForm] = useState({
-    title: "", description: "", startDate: "", endDate: "", allDay: false, color: "#6366f1",
+    title: "", description: "", startDate: "", endDate: "", allDay: false, labelId: "",
   });
+  const [labelForm, setLabelForm] = useState({ id: "", name: "", description: "", color: "#6366f1" });
   const [saving, setSaving] = useState(false);
+  const [labelSaving, setLabelSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [labelError, setLabelError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedDay, setSelectedDay] = useState<dayjs.Dayjs | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; date: dayjs.Dayjs } | null>(null);
@@ -45,10 +54,17 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
     (async () => {
       setError(null);
       try {
-        const res = await apiFetch(`/api/projects/${projectId}/events`);
-        if (!res.ok) throw new Error("일정 조회 실패");
-        const data = await res.json();
-        if (!cancelled) setEvents(Array.isArray(data) ? data : []);
+        const [eventRes, labelRes] = await Promise.all([
+          apiFetch(`/api/projects/${projectId}/events`),
+          apiFetch("/api/event-labels"),
+        ]);
+        if (!eventRes.ok || !labelRes.ok) throw new Error("일정 조회 실패");
+        const eventData = await eventRes.json();
+        const labelData = await labelRes.json();
+        if (!cancelled) {
+          setEvents(Array.isArray(eventData) ? eventData : []);
+          setLabels(Array.isArray(labelData) ? labelData : []);
+        }
       } catch {
         if (!cancelled) setError("일정을 불러오지 못했습니다.");
       }
@@ -67,34 +83,114 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   // pad to complete weeks
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const getEventsForDay = (day: dayjs.Dayjs) =>
-    events.filter((e) => {
-      const s = dayjs(e.startDate).startOf("day");
-      const en = dayjs(e.endDate).startOf("day");
-      const d = day.startOf("day");
-      return !d.isBefore(s) && !d.isAfter(en);
+  const weekRows = Array.from({ length: cells.length / 7 }, (_, weekIndex) => cells.slice(weekIndex * 7, weekIndex * 7 + 7));
+
+  const eventSegments = weekRows.flatMap((week, weekIndex) => {
+    const visibleDays = week.filter(Boolean) as dayjs.Dayjs[];
+    if (visibleDays.length === 0) return [];
+
+    const weekStart = visibleDays[0].startOf("day");
+    const weekEnd = visibleDays[visibleDays.length - 1].startOf("day");
+
+    const segments = events.flatMap((event) => {
+      const eventStart = dayjs(event.startDate).startOf("day");
+      const eventEnd = dayjs(event.endDate).startOf("day");
+      if (eventEnd.isBefore(weekStart) || eventStart.isAfter(weekEnd)) return [];
+
+      const segmentStart = eventStart.isAfter(weekStart) ? eventStart : weekStart;
+      const segmentEnd = eventEnd.isBefore(weekEnd) ? eventEnd : weekEnd;
+      const startCol = week.findIndex((day) => day && day.isSame(segmentStart, "day"));
+      let endCol = -1;
+      for (let index = week.length - 1; index >= 0; index -= 1) {
+        const day = week[index];
+        if (day && day.isSame(segmentEnd, "day")) {
+          endCol = index;
+          break;
+        }
+      }
+      if (startCol < 0 || endCol < 0 || endCol < startCol) return [];
+
+      return [{
+        event,
+        weekIndex,
+        startCol,
+        endCol,
+        isContinuation: !segmentStart.isSame(eventStart, "day"),
+      }];
     });
+
+    const laneEnds: number[] = [];
+    return segments
+      .sort((a, b) => a.startCol - b.startCol || a.endCol - b.endCol)
+      .map((segment) => {
+        let laneIndex = laneEnds.findIndex((endCol) => segment.startCol > endCol);
+        if (laneIndex === -1) {
+          laneIndex = laneEnds.length;
+          laneEnds.push(segment.endCol);
+        } else {
+          laneEnds[laneIndex] = segment.endCol;
+        }
+        return { ...segment, laneIndex };
+      });
+  });
+
+  const getEventsForDay = (day: dayjs.Dayjs) =>
+    events.filter((event) => {
+      const eventStart = dayjs(event.startDate).startOf("day");
+      const eventEnd = dayjs(event.endDate).startOf("day");
+      const targetDay = day.startOf("day");
+      return !targetDay.isBefore(eventStart) && !targetDay.isAfter(eventEnd);
+    });
+
+  const resetEventForm = () => {
+    setShowModal(false);
+    setEditingEventId(null);
+    setEditingEventColor(null);
+  };
 
   const openModal = (date: dayjs.Dayjs) => {
     const ds = date.format("YYYY-MM-DD");
-    setForm({ title: "", description: "", startDate: ds + "T09:00", endDate: ds + "T10:00", allDay: false, color: "#6366f1" });
+    setEditingEventId(null);
+    setEditingEventColor(null);
+    setForm({ title: "", description: "", startDate: ds + "T09:00", endDate: ds + "T10:00", allDay: false, labelId: "" });
     setShowModal(true);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const openEditModal = (event: Event) => {
+    setEditingEventId(event.id);
+    setEditingEventColor(event.color);
+    setForm({
+      title: event.title,
+      description: event.description ?? "",
+      startDate: dayjs(event.startDate).format("YYYY-MM-DDTHH:mm"),
+      endDate: dayjs(event.endDate).format("YYYY-MM-DDTHH:mm"),
+      allDay: event.allDay,
+      labelId: event.label?.id ?? "",
+    });
+    setShowModal(true);
+  };
+
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      const res = await apiFetch(`/api/projects/${projectId}/events`, {
-        method: "POST",
+      const res = await apiFetch(
+        editingEventId ? `/api/projects/${projectId}/events/${editingEventId}` : `/api/projects/${projectId}/events`,
+        {
+        method: editingEventId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+        body: JSON.stringify({
+          ...form,
+          ...(editingEventId ? { color: editingEventColor ?? undefined } : {}),
+          labelId: form.labelId || null,
+        }),
+        }
+      );
       if (!res.ok) throw new Error("일정 저장 실패");
       const ev = await res.json();
-      setEvents((prev) => [...prev, ev]);
-      setShowModal(false);
+      setEvents((prev) => editingEventId ? prev.map((item) => item.id === ev.id ? ev : item) : [...prev, ev]);
+      resetEventForm();
     } catch {
       setError("일정을 저장하지 못했습니다. 입력 내용을 확인한 뒤 다시 시도해주세요.");
     } finally { setSaving(false); }
@@ -112,6 +208,52 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
       setError("일정을 삭제하지 못했습니다. 다시 시도해주세요.");
     }
   };
+
+  const openLabelModal = (label?: Label) => {
+    setLabelError(null);
+    setLabelForm(label ? { id: label.id, name: label.name, description: label.description ?? "", color: label.color } : { id: "", name: "", description: "", color: "#6366f1" });
+    setShowLabelModal(true);
+  };
+
+  const saveLabel = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!labelForm.name.trim()) return;
+    setLabelSaving(true);
+    setLabelError(null);
+    try {
+      const response = await apiFetch(labelForm.id ? `/api/event-labels/${labelForm.id}` : "/api/event-labels", {
+        method: labelForm.id ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: labelForm.name.trim(), description: labelForm.description, color: labelForm.color }),
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error ?? "라벨 저장 실패");
+      const nextLabel = payload as Label;
+      setLabels((current) => labelForm.id ? current.map((item) => item.id === nextLabel.id ? nextLabel : item) : [...current, nextLabel]);
+      setShowLabelModal(false);
+    } catch (cause) {
+      setLabelError(cause instanceof Error ? cause.message : "라벨을 저장하지 못했습니다.");
+    } finally {
+      setLabelSaving(false);
+    }
+  };
+
+  const removeLabel = async (label: Label) => {
+    if (!confirm(`'${label.name}' 라벨을 삭제하시겠습니까?`)) return;
+    setLabelError(null);
+    try {
+      const response = await apiFetch(`/api/event-labels/${label.id}`, { method: "DELETE" }, { showGlobalError: false });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.error ?? "라벨 삭제 실패");
+      setLabels((current) => current.filter((item) => item.id !== label.id));
+      setForm((current) => current.labelId === label.id ? { ...current, labelId: "" } : current);
+    } catch (cause) {
+      setLabelError(cause instanceof Error ? cause.message : "라벨을 삭제하지 못했습니다.");
+    }
+  };
+
+  const getEventColor = (event: Event) => event.label?.color ?? event.color;
+  const getEventLabel = (event: Event) => event.label?.name ?? "라벨 없음";
 
   const selectedEvents = selectedDay ? getEventsForDay(selectedDay) : [];
   const upcomingEvents = events
@@ -156,12 +298,17 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
             <div className="space-y-2">
               {mobileEvents.map((event) => (
                 <div key={event.id} className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
-                  <div className="mt-1 h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: event.color }} />
-                  <div className="min-w-0 flex-1">
+                  <div className="mt-1 h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
+                  <button
+                    type="button"
+                    onClick={() => openEditModal(event)}
+                    className="min-w-0 flex-1 text-left"
+                  >
                     <p className="truncate text-sm font-semibold text-gray-800">{event.title}</p>
                     <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><Clock size={12} />{event.allDay ? "종일" : `${dayjs(event.startDate).format("HH:mm")} - ${dayjs(event.endDate).format("HH:mm")}`}</p>
                     {event.description && <p className="mt-2 text-xs leading-relaxed text-gray-400">{event.description}</p>}
-                  </div>
+                    <p className="mt-1 text-[10px] text-gray-400">{getEventLabel(event)}</p>
+                  </button>
                   <button type="button" onClick={() => deleteEvent(event.id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500" aria-label={`${event.title} 삭제`}><Trash2 size={15} /></button>
                 </div>
               ))}
@@ -175,7 +322,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
       {/* Calendar */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="flex items-center justify-between mb-4 flex-shrink-0">
+        <div className="flex items-center justify-between mb-4 flex-shrink-0 gap-3">
           <div className="flex items-center gap-2">
             <button
               onClick={() => setCurrent((c) => c.subtract(1, "month"))}
@@ -199,13 +346,22 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
               오늘
             </button>
           </div>
-          <button
-            onClick={() => openModal(selectedDay ?? dayjs())}
-            className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors"
-          >
-            <Plus size={14} />
-            일정 추가
-          </button>
+          <div className="ml-auto flex items-center gap-2">
+            <button
+              onClick={() => openModal(selectedDay ?? dayjs())}
+              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors"
+            >
+              <Plus size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => openLabelModal()}
+              className="flex items-center gap-1.5 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              <Tags size={14} />
+              라벨 관리
+            </button>
+          </div>
         </div>
 
         {/* Day headers */}
@@ -221,10 +377,9 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
         </div>
 
         {/* Grid */}
-        <div className="flex-1 overflow-hidden border border-gray-200 rounded-2xl overflow-y-auto">
-          <div className="grid grid-cols-7 h-full" style={{ gridAutoRows: "minmax(80px, 1fr)" }}>
+        <div className="relative flex-1 overflow-hidden border border-gray-200 rounded-2xl overflow-y-auto">
+          <div className="grid grid-cols-7 h-full" style={{ gridTemplateRows: `repeat(${weekRows.length}, minmax(80px, 1fr))` }}>
             {cells.map((day, idx) => {
-              const dayEvents = day ? getEventsForDay(day) : [];
               const isToday = day?.isSame(dayjs(), "day");
               const isSelected = day && selectedDay?.isSame(day, "day");
               const col = idx % 7;
@@ -234,14 +389,14 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                   key={idx}
                   onClick={() => day && setSelectedDay(day)}
                   onContextMenu={(event) => { if (!day) return; event.preventDefault(); setSelectedDay(day); setContextMenu({ x: event.clientX, y: event.clientY, date: day }); }}
-                  className={`flex flex-col items-start justify-start border-r border-b border-gray-100 p-1.5 cursor-pointer transition-colors
+                  className={`group flex min-w-0 flex-col items-start justify-start overflow-hidden border-r border-b border-gray-100 p-1.5 cursor-pointer transition-colors
                     ${!day ? "bg-gray-50/50" : isSelected ? "bg-indigo-50" : "hover:bg-gray-50"}
                     ${idx % 7 === 6 ? "border-r-0" : ""}
                   `}
                 >
                   {day && (
                     <>
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex w-full min-w-0 items-center justify-between mb-1">
                         <span
                           className={`text-xs font-semibold w-6 h-6 flex items-center justify-center rounded-full
                             ${isToday ? "bg-indigo-600 text-white" : isSun ? "text-rose-500" : isSat ? "text-sky-500" : "text-gray-700"}
@@ -249,37 +404,41 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                         >
                           {day.date()}
                         </span>
-                        {dayEvents.length > 0 && (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); openModal(day); }}
-                            aria-label={`${day.format("M월 D일")} 일정 추가`}
-                            className="opacity-0 hover:opacity-100 group-hover:opacity-100 w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-100 transition-all"
-                          >
-                            <Plus size={10} />
-                          </button>
-                        )}
-                      </div>
-                      <div className="space-y-0.5">
-                        {dayEvents.slice(0, 3).map((ev) => (
-                          <div
-                            key={ev.id}
-                            onClick={(e) => e.stopPropagation()}
-                            title={ev.title}
-                            className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded-md text-white truncate"
-                            style={{ backgroundColor: ev.color }}
-                          >
-                            <span className="truncate">{ev.title}</span>
-                          </div>
-                        ))}
-                        {dayEvents.length > 3 && (
-                          <span className="text-xs text-gray-400 pl-1">+{dayEvents.length - 3}개</span>
-                        )}
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openModal(day); }}
+                          aria-label={`${day.format("M월 D일")} 일정 추가`}
+                          className="opacity-0 group-hover:opacity-100 w-4 h-4 flex items-center justify-center rounded text-gray-400 hover:text-indigo-600 hover:bg-indigo-100 transition-all"
+                        >
+                          <Plus size={10} />
+                        </button>
                       </div>
                     </>
                   )}
                 </div>
               );
             })}
+          </div>
+          <div className="pointer-events-none absolute inset-0 grid grid-cols-7" style={{ gridTemplateRows: `repeat(${weekRows.length}, minmax(80px, 1fr))` }}>
+            {eventSegments.map((segment) => (
+              <button
+                key={`${segment.event.id}-${segment.weekIndex}-${segment.startCol}-${segment.endCol}`}
+                type="button"
+                onClick={(event) => { event.stopPropagation(); openEditModal(segment.event); }}
+                title={segment.event.title}
+                aria-label={segment.event.title}
+                className="pointer-events-auto z-10 mx-1 flex h-7 min-w-0 items-center overflow-hidden rounded-xl px-2.5 text-[11px] font-semibold leading-none text-white shadow-sm ring-1 ring-white/35"
+                style={{
+                  backgroundColor: getEventColor(segment.event),
+                  gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`,
+                  gridRow: segment.weekIndex + 1,
+                  marginTop: `${18 + segment.laneIndex * 20}px`,
+                }}
+              >
+                {segment.isContinuation ? null : (
+                  <span className="min-w-0 truncate">{segment.event.title}</span>
+                )}
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -311,17 +470,19 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
             ) : (
               <div className="space-y-2">
                 {selectedEvents.map((ev) => (
-                  <div key={ev.id} className="flex items-start gap-2 group">
-                    <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: ev.color }} />
+                  <div key={ev.id} onClick={() => openEditModal(ev)} className="flex w-full cursor-pointer items-start gap-2 rounded-lg px-1 py-1 text-left group hover:bg-gray-50">
+                    <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: getEventColor(ev) }} />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-medium text-gray-800 truncate">{ev.title}</p>
                       <p className="text-xs text-gray-400">
                         {dayjs(ev.startDate).format("HH:mm")} – {dayjs(ev.endDate).format("HH:mm")}
                       </p>
+                      <p className="text-[10px] text-gray-400">{getEventLabel(ev)}</p>
                     </div>
                     <button
-                      onClick={() => deleteEvent(ev.id)}
+                      onClick={(event) => { event.stopPropagation(); deleteEvent(ev.id); }}
                       className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-rose-400 transition-all"
+                      type="button"
                     >
                       <X size={12} />
                     </button>
@@ -343,10 +504,10 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
           ) : (
             <div className="space-y-2.5">
               {upcomingEvents.map((ev) => (
-                <div key={ev.id} className="flex items-start gap-2.5 group">
+                <div key={ev.id} onClick={() => openEditModal(ev)} className="flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-1 py-1 text-left group hover:bg-gray-50">
                   <div
                     className="w-1 rounded-full flex-shrink-0 self-stretch"
-                    style={{ backgroundColor: ev.color, minHeight: "28px" }}
+                    style={{ backgroundColor: getEventColor(ev), minHeight: "28px" }}
                   />
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-medium text-gray-800 truncate">{ev.title}</p>
@@ -354,10 +515,12 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                       <Clock size={9} />
                       {dayjs(ev.startDate).format("M/D HH:mm")}
                     </p>
+                    <p className="text-[10px] text-gray-400">{getEventLabel(ev)}</p>
                   </div>
                   <button
-                    onClick={() => deleteEvent(ev.id)}
+                    onClick={(event) => { event.stopPropagation(); deleteEvent(ev.id); }}
                     className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-rose-400 transition-all"
+                    type="button"
                   >
                     <X size={11} />
                   </button>
@@ -372,10 +535,10 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
 
       {/* Add event modal */}
       {showModal && (
-        <ModalFrame title="일정 추가" onClose={() => setShowModal(false)} className="max-w-md p-6">
+        <ModalFrame title={editingEventId ? "일정 수정" : "일정 추가"} onClose={resetEventForm} className="max-w-md p-6">
             <div className="flex items-center justify-between mb-5">
-              <h3 className="text-base font-bold text-gray-900">일정 추가</h3>
-              <ModalCloseButton label="일정 추가 닫기" onClick={() => setShowModal(false)} />
+              <h3 className="text-base font-bold text-gray-900">{editingEventId ? "일정 수정" : "일정 추가"}</h3>
+              <ModalCloseButton label={editingEventId ? "일정 수정 닫기" : "일정 추가 닫기"} onClick={resetEventForm} />
             </div>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
@@ -410,19 +573,18 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                 </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">색상</label>
-                <div className="flex gap-2">
-                  {EVENT_COLORS.map((c) => (
-                    <button
-                      key={c.value}
-                      type="button"
-                      onClick={() => setForm((f) => ({ ...f, color: c.value }))}
-                      className={`w-7 h-7 rounded-full transition-all ${form.color === c.value ? "ring-2 ring-offset-2 ring-gray-400 scale-110" : "hover:scale-105"}`}
-                      style={{ backgroundColor: c.value }}
-                      title={c.label}
-                    />
+                <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">라벨</label>
+                <select
+                  value={form.labelId}
+                  onChange={(e) => setForm((f) => ({ ...f, labelId: e.target.value }))}
+                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                >
+                  <option value="">라벨 없음</option>
+                  {labels.map((label) => (
+                    <option key={label.id} value={label.id}>{label.name}</option>
                   ))}
-                </div>
+                </select>
+                <p className="mt-1 text-[11px] text-gray-400">라벨 색상이 일정 카드와 달력에 적용됩니다.</p>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">설명</label>
@@ -437,7 +599,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
               <div className="flex gap-3 pt-1">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
+                  onClick={resetEventForm}
                   className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors"
                 >
                   취소
@@ -447,10 +609,66 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                   disabled={saving}
                   className="flex-1 px-4 py-2.5 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 disabled:opacity-60 transition-colors"
                 >
-                  {saving ? "저장 중..." : "저장"}
+                  {saving ? "저장 중..." : editingEventId ? "수정" : "저장"}
                 </button>
               </div>
             </form>
+        </ModalFrame>
+      )}
+      {showLabelModal && (
+        <ModalFrame title="라벨 관리" onClose={() => setShowLabelModal(false)} className="max-w-2xl p-6">
+          <div className="grid gap-6 lg:grid-cols-[20rem_1fr]">
+            <form onSubmit={saveLabel} className="space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <p className="text-sm font-semibold text-gray-800">{labelForm.id ? "라벨 수정" : "새 라벨 추가"}</p>
+                <button type="button" onClick={() => openLabelModal()} className="text-xs text-gray-500 underline underline-offset-2">초기화</button>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600">이름</label>
+                <input value={labelForm.name} onChange={(event) => setLabelForm((current) => ({ ...current, name: event.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" placeholder="예: 회의, 홍보, 긴급" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600">설명</label>
+                <textarea value={labelForm.description} onChange={(event) => setLabelForm((current) => ({ ...current, description: event.target.value }))} className="min-h-20 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" placeholder="라벨 설명" />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-xs font-semibold text-gray-600">색상</label>
+                <input type="color" value={labelForm.color} onChange={(event) => setLabelForm((current) => ({ ...current, color: event.target.value }))} className="h-10 w-full rounded-xl border border-gray-200 bg-white p-1" />
+              </div>
+              {labelError && <p className="text-xs font-medium text-rose-600">{labelError}</p>}
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setShowLabelModal(false)} className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">닫기</button>
+                <button type="submit" disabled={labelSaving} className="flex-1 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">{labelSaving ? "저장 중..." : labelForm.id ? "수정" : "추가"}</button>
+              </div>
+            </form>
+            <div className="space-y-3 rounded-2xl border border-gray-200 bg-white p-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-2">
+                <p className="text-sm font-semibold text-gray-800">공용 라벨</p>
+                <span className="text-xs text-gray-400">{labels.length}개</span>
+              </div>
+              {labels.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-gray-200 px-4 py-6 text-center text-sm text-gray-400">아직 라벨이 없습니다.</div>
+              ) : (
+                <div className="space-y-2">
+                  {labels.map((label) => (
+                    <div key={label.id} className="flex items-start justify-between gap-3 rounded-xl border border-gray-200 px-4 py-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="h-3 w-3 rounded-full" style={{ backgroundColor: label.color }} />
+                          <p className="truncate text-sm font-semibold text-gray-900">{label.name}</p>
+                        </div>
+                        {label.description && <p className="mt-1 text-xs text-gray-500">{label.description}</p>}
+                      </div>
+                      <div className="flex shrink-0 gap-1">
+                        <button type="button" onClick={() => openLabelModal(label)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700" aria-label={`${label.name} 수정`}><PencilLine size={14} /></button>
+                        <button type="button" onClick={() => removeLabel(label)} className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500" aria-label={`${label.name} 삭제`}><Trash size={14} /></button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </ModalFrame>
       )}
       {contextMenu && (

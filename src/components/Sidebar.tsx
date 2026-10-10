@@ -6,7 +6,7 @@ import { signOut, useSession } from "next-auth/react";
 import {
   FolderKanban,
   CalendarDays,
-  BookOpen,
+  CheckSquare,
   LogOut,
   ChevronRight,
   Plus,
@@ -202,7 +202,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
                     {[
                       { href: `${base}/kanban`, label: "칸반", Icon: FolderKanban },
                       { href: `${base}/schedule`, label: "일정", Icon: CalendarDays },
-                      { href: `${base}/archive`, label: "아카이브", Icon: BookOpen },
+                      { href: `${base}/archive`, label: "아카이브", Icon: CheckSquare },
                     ].map(({ href, label, Icon: SubIcon }) => (
                       <Link
                         key={href}

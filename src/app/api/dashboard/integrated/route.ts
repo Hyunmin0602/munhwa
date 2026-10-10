@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
   const range = searchParams.get("range");
   const dayRange = getDayRange(range);
   const recentRange = getRecentRange(range);
-  const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 20, 1), 50);
+  const limit = Math.min(Math.max(Number(searchParams.get("limit")) || 10, 1), 10);
   const rawCursor = parseCursor(searchParams.get("cursor"));
   const activeType = !isOverview && types.length === 1 ? types[0] : null;
   const needsTasks = isOverview || types.includes("task");

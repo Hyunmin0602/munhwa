@@ -58,14 +58,17 @@ export async function PATCH(request: NextRequest) {
     if (!userId || !role) return validationError("대상 구성원과 올바른 역할이 필요합니다.");
     if (userId === access.userId && role !== "space_manager") return validationError("현재 계정의 관리자 권한은 스스로 회수할 수 없습니다.");
 
-    const member = await withDbWrite(() => prisma.spaceMember.update({
+    const targetUser = await withDbReadRetry(() => prisma.user.findUnique({ where: { id: userId }, select: { id: true } }));
+    if (!targetUser) return notFound("해당 사용자를 찾을 수 없습니다.");
+
+    const member = await withDbWrite(() => prisma.spaceMember.upsert({
       where: { spaceId_userId: { spaceId: DEFAULT_SPACE_ID, userId } },
-      data: { role },
+      update: { role },
+      create: { spaceId: DEFAULT_SPACE_ID, userId, role },
       select: { id: true, role: true, joinedAt: true, user: { select: { id: true, name: true, email: true, role: true, cohort: { select: { id: true, name: true } }, projects: { where: { project: { spaceId: DEFAULT_SPACE_ID } }, select: { role: true, project: { select: { id: true, name: true } } } } } } },
     }));
     return NextResponse.json(member);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Record to update not found")) return notFound("Space 구성원을 찾을 수 없습니다.");
     console.error("[api/space-management/members] PATCH failed", error);
     return internalError("구성원 역할 변경에 실패했습니다.");
   }

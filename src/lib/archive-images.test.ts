@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { hasValidArchiveImageSignature, isArchiveImageMimeType, MAX_ARCHIVE_IMAGE_BYTES } from "./archive-images";
+import { hasValidArchiveImageSignature, isArchiveImageMimeType, MAX_ARCHIVE_IMAGE_BYTES, partitionArchiveImageUrls } from "./archive-images";
 
 test("only approved archive image MIME types are accepted", () => {
   assert.equal(isArchiveImageMimeType("image/jpeg"), true);
@@ -19,4 +19,20 @@ test("archive image signatures must match their MIME type", () => {
 
 test("archive image limit is four mebibytes", () => {
   assert.equal(MAX_ARCHIVE_IMAGE_BYTES, 4 * 1024 * 1024);
+});
+
+test("partitionArchiveImageUrls separates local uploads and remote blob URLs", () => {
+  const result = partitionArchiveImageUrls([
+    "/uploads/archive/post-1/image1.png",
+    "https://blob.vercel-storage.com/archive/post-1/image2.jpg",
+    "/uploads/archive/post-1/image3.webp",
+    "invalid-url",
+  ]);
+  assert.deepEqual(result.localImageUrls, [
+    "/uploads/archive/post-1/image1.png",
+    "/uploads/archive/post-1/image3.webp",
+  ]);
+  assert.deepEqual(result.blobImageUrls, [
+    "https://blob.vercel-storage.com/archive/post-1/image2.jpg",
+  ]);
 });

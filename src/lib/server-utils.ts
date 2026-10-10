@@ -21,8 +21,9 @@ export async function assertProjectMember(userId: string, projectId: string) {
 
   const project = await prisma.project.findUnique({
     where: { id: projectId },
-    select: { space: { select: { id: true, adminUserId: true } } },
+    select: { ownerId: true, space: { select: { id: true, adminUserId: true } } },
   });
+  if (project?.ownerId === userId) return true;
   if (project?.space?.adminUserId === userId) return true;
   if (project?.space?.id && await assertSpaceManager(userId, project.space.id)) return true;
 

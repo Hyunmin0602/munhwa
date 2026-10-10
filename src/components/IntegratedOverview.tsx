@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import dayjs from "dayjs";
-import { BookOpen, CalendarDays, CheckSquare, ChevronRight, FileText, RotateCw, X } from "lucide-react";
+import { CalendarDays, CheckSquare, ChevronRight, FileText, RotateCw, X } from "lucide-react";
 
 type ItemType = "task" | "event" | "archive" | "meeting";
 
@@ -58,11 +58,11 @@ interface Props {
   onCloseFilters: () => void;
 }
 
-const typeDetails = {
+const typeDetails: Record<ItemType, { Icon: typeof CheckSquare; label: string }> = {
   task: { Icon: CheckSquare, label: "작업" },
   event: { Icon: CalendarDays, label: "일정" },
   archive: { Icon: FileText, label: "문서" },
-  meeting: { Icon: BookOpen, label: "회의록" },
+  meeting: { Icon: FileText, label: "회의록" },
 };
 
 const tabs: Array<{ type: "all" | ItemType; label: string }> = [
@@ -261,12 +261,10 @@ export default function IntegratedOverview({
               </div>
               <div className="divide-y divide-gray-100 border-y border-gray-100">
                 {documents.slice(0, 5).map((document) => {
-                  const { Icon, label } = typeDetails[document.type];
+                  const { label } = typeDetails[document.type];
                   return (
                     <Link key={`${document.type}-${document.id}`} href={document.href} className="flex min-h-16 items-center gap-3 py-3 transition-colors hover:bg-gray-50">
-                      <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ color: document.project.color, backgroundColor: `${document.project.color}18` }}>
-                        <Icon size={16} />
-                      </div>
+                      <div className="h-9 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: document.project.color }} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-sm font-semibold text-gray-800">{document.title}</p>
                         <div className="mt-1 flex min-w-0 items-center gap-2">

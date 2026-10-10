@@ -16,14 +16,22 @@ export async function GET() {
     const session = await auth();
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
-    const [spaceIds, projects] = await Promise.all([
-      accessibleSpaceIds(userId),
-      prisma.project.findMany({ where: { OR: [{ members: { some: { userId } } }, { space: { adminUserId: userId } }] }, select: { id: true } }),
-    ]);
+    const spaceIds = await accessibleSpaceIds(userId);
+    const projects = await prisma.project.findMany({
+      where: {
+        OR: [
+          { members: { some: { userId } } },
+          { ownerId: userId },
+          { space: { adminUserId: userId } },
+          { spaceId: { in: spaceIds } },
+        ],
+      },
+      select: { id: true },
+    });
     const projectIds = projects.map((project) => project.id);
     const events = await withDbRetry(() => prisma.event.findMany({
       where: { OR: [{ scope: "SPACE", spaceId: { in: spaceIds } }, { scope: "PROJECT", projectId: { in: projectIds } }, { scope: "PERSONAL", creatorId: userId }] },
-      include: { project: { select: { id: true, name: true, color: true } }, creator: { select: { id: true, name: true } } },
+      include: { project: { select: { id: true, name: true, color: true } }, creator: { select: { id: true, name: true } }, label: { select: { id: true, name: true, description: true, color: true } } },
       orderBy: { startDate: "asc" },
     }));
     return NextResponse.json(events);
@@ -47,8 +55,13 @@ export async function POST(req: NextRequest) {
     const type = eventType(data.type);
     const scope = eventScope(data.scope);
     const requestedProjectId = typeof data.projectId === "string" && data.projectId ? data.projectId : null;
+    const requestedLabelId = typeof data.labelId === "string" && data.labelId.trim() ? data.labelId.trim() : null;
     let projectId: string | null = null;
     let spaceId = typeof data.spaceId === "string" && data.spaceId ? data.spaceId : null;
+    const label = requestedLabelId
+      ? await withDbRetry(() => prisma.eventLabel.findUnique({ where: { id: requestedLabelId }, select: { id: true, color: true } }))
+      : null;
+    if (requestedLabelId && !label) return NextResponse.json({ error: "존재하지 않는 라벨입니다." }, { status: 400 });
 
     if (scope === "PROJECT") {
       if (!requestedProjectId || !(await assertProjectMember(userId, requestedProjectId))) return NextResponse.json({ error: "사업 일정에 접근할 수 없습니다." }, { status: 403 });
@@ -62,7 +75,7 @@ export async function POST(req: NextRequest) {
       if (!allowed && !(await assertSpaceManager(userId, spaceId))) return NextResponse.json({ error: "해당 space에 일정을 등록할 수 없습니다." }, { status: 403 });
     }
 
-    const event = await withDbRetry(() => prisma.event.create({ data: { title, description, startDate: start, endDate: end, allDay, color, type, scope, spaceId, projectId, creatorId: userId }, include: { project: { select: { id: true, name: true, color: true } } } }));
+    const event = await withDbRetry(() => prisma.event.create({ data: { title, description, startDate: start, endDate: end, allDay, color: label?.color ?? color, labelId: label?.id ?? null, type, scope, spaceId, projectId, creatorId: userId }, include: { project: { select: { id: true, name: true, color: true } }, label: { select: { id: true, name: true, description: true, color: true } } } }));
     return NextResponse.json(event, { status: 201 });
   } catch (error) {
     if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });

@@ -32,6 +32,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const type = eventType(data.type);
     const scope = eventScope(data.scope);
     if (scope !== "PROJECT") return NextResponse.json({ error: "사업 일정은 사업별 공개 범위만 사용할 수 있습니다." }, { status: 400 });
+    const requestedLabelId = typeof data.labelId === "string" && data.labelId.trim() ? data.labelId.trim() : null;
+    const label = requestedLabelId
+      ? await withDbRetry(() => prisma.eventLabel.findUnique({ where: { id: requestedLabelId }, select: { id: true, color: true } }))
+      : null;
+    if (requestedLabelId && !label) return NextResponse.json({ error: "존재하지 않는 라벨입니다." }, { status: 400 });
     const event = await withDbRetry(() =>
       prisma.event.update({
         where: { id: eventId },
@@ -41,13 +46,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           startDate: start,
           endDate: end,
           allDay,
-          color,
+          color: label?.color ?? color,
+          labelId: label?.id ?? null,
           type,
           scope,
         },
       })
     );
-    await recordActivity({ actorId: userId, projectId, type: "일정", action: "수정", entityType: "EVENT", entityId: event.id, title: event.title, beforeData: { title: existing.title, description: existing.description, startDate: existing.startDate, endDate: existing.endDate, allDay: existing.allDay, color: existing.color }, afterData: { title: event.title, description: event.description, startDate: event.startDate, endDate: event.endDate, allDay: event.allDay, color: event.color } });
+    await recordActivity({ actorId: userId, projectId, type: "일정", action: "수정", entityType: "EVENT", entityId: event.id, title: event.title, beforeData: { title: existing.title, description: existing.description, startDate: existing.startDate, endDate: existing.endDate, allDay: existing.allDay, color: existing.color, labelId: existing.labelId }, afterData: { title: event.title, description: event.description, startDate: event.startDate, endDate: event.endDate, allDay: event.allDay, color: event.color, labelId: event.labelId } });
     return NextResponse.json(event);
   } catch (error) {
     if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });

@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { assertProjectMember, canViewAllArchivePosts, recordActivity } from "@/lib/server-utils";
+import { assertProjectMember, recordActivity } from "@/lib/server-utils";
 
 type Params = { params: Promise<{ projectId: string }> };
 
@@ -13,17 +13,14 @@ export async function GET(request: NextRequest, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
   if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const canViewAll = await canViewAllArchivePosts(userId, projectId);
 
-  const requestedLimit = Number(request.nextUrl.searchParams.get("limit"));
-  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 30, 1), 50);
+  const limitParam = request.nextUrl.searchParams.get("limit");
+  const requestedLimit = limitParam === null ? 10 : Number(limitParam);
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 10, 1), 10);
   const cursor = request.nextUrl.searchParams.get("cursor");
   const posts = await withDbReadRetry(() =>
     prisma.archivePost.findMany({
-      where: {
-        projectId,
-        ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
-      },
+      where: { projectId },
       select: {
         id: true,
         title: true,

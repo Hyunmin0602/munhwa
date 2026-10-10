@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { Plus, Globe, Lock, Trash2, FileText, Clock, MoreHorizontal } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import dayjs from "dayjs";
 import "dayjs/locale/ko";
 import { Skeleton } from "./ui/Skeleton";
@@ -25,26 +25,68 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
-  const [actionPostId, setActionPostId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [loadingPage, setLoadingPage] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [cursorHistory, setCursorHistory] = useState<string[]>([]);
+  const [currentCursor, setCurrentCursor] = useState<string | null>(null);
   const router = useRouter();
+  const previousProjectId = useRef(projectId);
 
   useEffect(() => {
+    if (previousProjectId.current !== projectId) {
+      previousProjectId.current = projectId;
+      setPosts([]);
+      setCurrentCursor(null);
+      setCursorHistory([]);
+      setNextCursor(null);
+      setReloadKey((current) => current + 1);
+      return;
+    }
+
+    let cancelled = false;
     (async () => {
+      setLoading(true);
       try {
-        const res = await apiFetch(`/api/projects/${projectId}/archive`);
+        const query = new URLSearchParams({ limit: "10" });
+        if (currentCursor) query.set("cursor", currentCursor);
+        const res = await apiFetch(`/api/projects/${projectId}/archive?${query.toString()}`);
         if (!res.ok) throw new Error("Archive list request failed");
         const data = await res.json();
         setPosts(Array.isArray(data?.items) ? data.items : []);
+        setNextCursor(typeof data?.nextCursor === "string" ? data.nextCursor : null);
         setError(null);
       } catch {
-        setError("문서를 불러오지 못했습니다.");
+        if (!cancelled) setError("문서를 불러오지 못했습니다.");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     })();
-  }, [projectId, reloadKey]);
+    return () => { cancelled = true; };
+  }, [projectId, reloadKey, currentCursor]);
+
+  const goNextPage = () => {
+    if (!nextCursor || loadingPage) return;
+    setLoadingPage(true);
+    setError(null);
+    setCursorHistory((current) => [...current, currentCursor ?? ""]);
+    setCurrentCursor(nextCursor);
+    setLoadingPage(false);
+  };
+
+  const goPreviousPage = () => {
+    if (!cursorHistory.length || loadingPage) return;
+    setLoadingPage(true);
+    setError(null);
+    setCursorHistory((current) => {
+      const nextHistory = [...current];
+      const previousCursor = nextHistory.pop() ?? "";
+      setCurrentCursor(previousCursor || null);
+      return nextHistory;
+    });
+    setLoadingPage(false);
+  };
 
   const createPost = async () => {
     setCreating(true);
@@ -74,7 +116,6 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
     const index = posts.findIndex((item) => item.id === id);
 
     if (commitImmediately) {
-      setActionPostId(null);
       try {
         const res = await apiFetch(`/api/projects/${projectId}/archive/${id}`, { method: "DELETE" });
         if (!res.ok) throw new Error("Archive delete request failed");
@@ -86,7 +127,6 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
     }
 
     setPosts((prev) => prev.filter((item) => item.id !== id));
-    setActionPostId(null);
     showUndoToast(
       `'${post.title}' 문서를 삭제했습니다.`,
       async () => {
@@ -102,33 +142,17 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
     );
   };
 
-  const getPreview = (content?: string | null) => {
-    if (!content?.trim()) return null;
-    // Strip markdown syntax for plain preview
-    return content
-      .replace(/#{1,6}\s+/g, "")
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .replace(/\*(.*?)\*/g, "$1")
-      .replace(/`{1,3}[^`]*`{1,3}/g, "")
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/>\s+/g, "")
-      .replace(/[-*+]\s+/g, "")
-      .replace(/\n+/g, " ")
-      .trim()
-      .slice(0, 120);
-  };
-
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex h-full flex-col">
       {/* Toolbar */}
-      <div className="flex items-center justify-between mb-5 flex-shrink-0">
+      <div className="mb-4 flex flex-shrink-0 items-center justify-between gap-3">
         <p className="text-sm text-gray-500">
           문서 <span className="font-semibold text-gray-800">{posts.length}개</span>
         </p>
         <button
           onClick={createPost}
           disabled={creating}
-          className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
+          className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none disabled:translate-y-0"
         >
           <Plus size={14} />
           {creating ? "생성 중..." : "새 문서"}
@@ -142,143 +166,96 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
         </div>
       ) : loading ? (
         <>
-          <Skeleton className="h-4 w-24 mb-5 rounded" />
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          <Skeleton className="mb-4 h-4 w-24 rounded" />
+          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+            <div className="hidden grid-cols-[minmax(0,1fr)_7rem_7rem_7rem_2.5rem] gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2 text-[11px] font-semibold text-gray-400 md:grid">
+              <span>문서</span><span>작성자</span><span>공개 범위</span><span>수정일</span><span aria-hidden="true" />
+            </div>
             {[...Array(5)].map((_, i) => (
-              <div key={i} className="bg-white rounded-2xl border border-gray-100 overflow-hidden flex flex-col">
-                <div className="p-5 flex-1 space-y-3">
-                  <div className="flex justify-between items-start gap-2">
-                    <Skeleton className="h-4 w-3/4 rounded-lg" />
-                    <Skeleton className="w-4 h-4 rounded flex-shrink-0" />
+              <div key={i} className="relative border-b border-gray-100 last:border-b-0">
+                <div className="grid grid-cols-2 gap-1.5 px-3 py-3 pr-14 md:grid-cols-[minmax(0,1fr)_7rem_7rem_7rem_2.5rem] md:items-center md:gap-3 md:px-4 md:pr-4">
+                  <div className="col-span-2 min-w-0 md:col-span-1">
+                    <Skeleton className="h-4 w-2/3 rounded" />
+                    <Skeleton className="mt-1 h-3 w-1/3 rounded" />
                   </div>
-                  <Skeleton className="h-3 w-full rounded" />
-                  <Skeleton className="h-3 w-5/6 rounded" />
-                  <Skeleton className="h-3 w-2/3 rounded" />
-                  <div className="flex items-center justify-between pt-3 border-t border-gray-50">
-                    <Skeleton className="h-3 w-16 rounded" />
-                    <Skeleton className="h-5 w-12 rounded-full" />
-                  </div>
+                  <Skeleton className="h-3 w-3/4 rounded md:w-20" />
+                  <Skeleton className="h-5 w-14 rounded-full" />
+                  <Skeleton className="h-3 w-20 rounded" />
+                  <span aria-hidden="true" />
                 </div>
+                <Skeleton className="absolute right-2 top-1/2 h-8 w-8 -translate-y-1/2 rounded-lg md:right-1" />
               </div>
             ))}
           </div>
         </>
       ) : posts.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-center">
-          <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mb-4">
-            <FileText size={28} className="text-gray-300" />
-          </div>
+        <div className="flex flex-1 flex-col items-center justify-center text-center">
+          <div className="w-16 h-16 rounded-2xl bg-gray-100 mb-4" />
           <p className="text-gray-500 font-medium mb-1">아직 문서가 없습니다</p>
           <p className="text-gray-400 text-sm">오른쪽 상단의 <span className="text-indigo-500 font-medium">새 문서</span> 버튼으로 시작하세요</p>
         </div>
       ) : (
-        <div className="flex-1 overflow-visible lg:overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {posts.map((post) => {
-              const preview = getPreview(post.content);
-              return (
-                <Link
-                  key={post.id}
-                  href={`/dashboard/projects/${projectId}/archive/${post.id}`}
-                  className="group relative bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col"
-                >
-                  {/* Visibility bar */}
-                  {post.visibility === "EXTERNAL" && (
-                    <div className="h-1 w-full bg-gradient-to-r from-emerald-400 to-teal-400" />
-                  )}
-                  {post.visibility === "INTERNAL" && (
-                    <div className="h-1 w-full bg-gradient-to-r from-sky-400 to-indigo-400" />
-                  )}
-
-                  <div className="p-4 md:p-5 flex-1 flex flex-col">
-                    <div className="flex items-start justify-between gap-2 mb-3">
-                      <h3 className="font-bold text-gray-900 text-sm leading-snug line-clamp-2 group-hover:text-indigo-700 transition-colors flex-1">
-                        {post.title}
-                      </h3>
-                      <button
-                        type="button"
-                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); setActionPostId(post.id); }}
-                        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-700 md:hidden"
-                        aria-label={`${post.title} 작업 열기`}
-                      >
-                        <MoreHorizontal size={17} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => { event.preventDefault(); event.stopPropagation(); deletePost(post.id); }}
-                        className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-300 hover:bg-rose-50 hover:text-rose-500 md:flex md:opacity-0 md:group-hover:opacity-100"
-                        aria-label={`${post.title} 삭제`}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-
-                    {/* Markdown preview */}
-                    {preview ? (
-                      <p className="text-xs text-gray-400 leading-relaxed line-clamp-3 flex-1 mb-3">
-                        {preview}
-                      </p>
-                    ) : (
-                      <p className="text-xs text-gray-300 italic flex-1 mb-3">내용 없음</p>
-                    )}
-
-                    <div className="flex items-center justify-between pt-3 border-t border-gray-50">
-                      <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                        <Clock size={10} />
-                        <span>{dayjs(post.updatedAt).format("MM.DD HH:mm")}</span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        {post.visibility === "EXTERNAL" ? (
-                          <span className="flex items-center gap-1 text-xs text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full font-medium">
-                            <Globe size={9} />
-                            외부
-                          </span>
-                        ) : post.visibility === "INTERNAL" ? (
-                          <span className="flex items-center gap-1 text-xs text-sky-600 bg-sky-50 px-2 py-0.5 rounded-full font-medium">
-                            <Globe size={9} />
-                            내부
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
-                            <Lock size={9} />
-                            비공개
-                          </span>
-                        )}
-                        {post.author.name && (
-                          <span className="text-xs text-gray-300">{post.author.name}</span>
-                        )}
-                      </div>
-                    </div>
+        <div className="flex-1 overflow-hidden">
+          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
+            <div className="hidden grid-cols-[minmax(0,1fr)_7rem_7rem_7rem_2.5rem] gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2 text-[11px] font-semibold text-gray-400 md:grid">
+              <span>문서</span><span>작성자</span><span>공개 범위</span><span>수정일</span><span aria-hidden="true" />
+            </div>
+            {posts.map((post) => (
+              <div key={post.id} className="group relative border-b border-gray-100 last:border-b-0">
+                <Link href={`/dashboard/projects/${projectId}/archive/${post.id}`} className="grid grid-cols-2 gap-1.5 px-3 py-3 pr-14 transition-colors hover:bg-indigo-50/40 md:grid-cols-[minmax(0,1fr)_7rem_7rem_7rem_2.5rem] md:items-center md:gap-3 md:px-4 md:py-3 md:pr-4">
+                  <div className="col-span-2 min-w-0 md:col-span-1">
+                    <p className="truncate text-sm font-semibold text-gray-900 transition-colors group-hover:text-indigo-700">{post.title}</p>
+                    <p className="mt-0.5 text-[11px] text-gray-400">{dayjs(post.updatedAt).format("YYYY.MM.DD HH:mm")}</p>
                   </div>
+                  <p className="min-w-0 truncate text-xs font-medium text-gray-600 md:max-w-none">{post.author.name ?? "작성자 없음"}</p>
+                  <div className="flex justify-start md:justify-start">
+                    {post.visibility === "EXTERNAL" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-600">외부</span>
+                    ) : post.visibility === "INTERNAL" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-1.5 py-0.5 text-xs font-medium text-sky-600">내부</span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-1.5 py-0.5 text-xs text-gray-400">비공개</span>
+                    )}
+                  </div>
+                  <p className="min-w-0 truncate text-xs text-gray-500 md:max-w-none">{dayjs(post.updatedAt).format("MM.DD HH:mm")}</p>
+                  <span aria-hidden="true" className="hidden md:block" />
                 </Link>
-              );
-            })}
+                <button
+                  type="button"
+                  onClick={() => deletePost(post.id)}
+                  className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-gray-300 transition-colors hover:bg-rose-50 hover:text-rose-500 md:right-1"
+                  aria-label={`${post.title} 삭제`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
 
-            {/* Add new card */}
-            <button
-              onClick={createPost}
-              disabled={creating}
-              className="bg-gray-50 rounded-2xl border-2 border-dashed border-gray-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex flex-col items-center justify-center gap-2 text-gray-300 hover:text-indigo-400 min-h-[140px] p-5 disabled:opacity-60"
-            >
-              <Plus size={24} />
-              <span className="text-xs font-medium">새 문서</span>
-            </button>
+            <div className="flex items-center justify-center gap-2 border-t border-gray-100 px-4 py-3">
+              <button
+                type="button"
+                onClick={goPreviousPage}
+                disabled={!cursorHistory.length || loading || loadingPage}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                이전
+              </button>
+              <p className="min-w-14 text-center text-xs text-gray-400">
+                {cursorHistory.length + 1}페이지
+              </p>
+              <button
+                type="button"
+                onClick={goNextPage}
+                disabled={!nextCursor || loading || loadingPage}
+                className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                다음
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {actionPostId && (
-        <>
-          <div className="fixed inset-0 z-50 bg-black/40 md:hidden" onClick={() => setActionPostId(null)} />
-          <div className="fixed bottom-[5.25rem] left-0 right-0 z-50 rounded-t-xl border-t border-gray-200 bg-white p-4 shadow-xl md:hidden">
-            <p className="mb-3 text-sm font-semibold text-gray-800">문서 작업</p>
-            <button type="button" onClick={() => deletePost(actionPostId, true)} className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-left text-sm font-medium text-rose-600 hover:bg-rose-50">
-              <Trash2 size={17} />문서 삭제
-            </button>
-            <button type="button" onClick={() => setActionPostId(null)} className="mt-2 w-full rounded-lg bg-gray-100 px-3 py-3 text-sm font-medium text-gray-700 hover:bg-gray-200">취소</button>
-          </div>
-        </>
-      )}
     </div>
   );
 }

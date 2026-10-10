@@ -38,6 +38,7 @@ model User {
   administeredSpaces Space[] @relation("SpaceAdministrator")
   adminAuditLogs AdminAuditLog[] @relation("AdminAuditActor")
   activityLogs ActivityLog[] @relation("ActivityActor")
+  createdEventLabels EventLabel[] @relation("EventLabelCreator")
   archiveCollaborations ArchivePostCollaborator[]
 }
 
@@ -353,6 +354,7 @@ model Event {
   endDate     DateTime
   allDay      Boolean  @default(false)
   color       String   @default("#6366f1")
+  labelId     String?
   type        String   @default("BUSINESS")
   scope       String   @default("PROJECT")
   spaceId     String
@@ -363,9 +365,27 @@ model Event {
 
   space   Space   @relation("SpaceEvents", fields: [spaceId], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label   EventLabel? @relation(fields: [labelId], references: [id], onDelete: SetNull)
   creator User    @relation(fields: [creatorId], references: [id])
 
   @@index([spaceId, startDate])
   @@index([projectId, startDate])
+  @@index([labelId])
   @@index([creatorId, startDate])
+}
+
+model EventLabel {
+  id          String   @id @default(cuid())
+  name        String
+  nameKey     String   @unique
+  description String?
+  color       String   @default("#6366f1")
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator User?  @relation("EventLabelCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  events  Event[]
+
+  @@index([createdBy, createdAt])
 }

@@ -156,6 +156,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -376,6 +377,28 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       setActionError(getModalExceptionMessage(error, "공유 링크 변경"));
     } finally {
       setSharing(false);
+    }
+  };
+
+  const deletePost = async () => {
+    if (!window.confirm(`'${title || "제목 없음"}' 문서를 삭제하시겠습니까? 삭제 후 복구할 수 없습니다.`)) return;
+    setDeleting(true);
+    setActionError(null);
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, { method: "DELETE" }, { showGlobalError: false });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        const message = typeof payload?.error === "string"
+          ? payload.error
+          : (typeof payload?.error?.message === "string" ? payload.error.message : "문서를 삭제하지 못했습니다.");
+        setActionError(message);
+        return;
+      }
+      router.push(`/dashboard/projects/${projectId}/archive`);
+    } catch (error) {
+      setActionError(getModalExceptionMessage(error, "문서 삭제"));
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -644,11 +667,21 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
           )}
           <button
             onClick={save}
-            disabled={saving}
+            disabled={saving || deleting}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
           >
             <Save size={12} />
             {saving ? "저장 중…" : "저장"}
+          </button>
+          <button
+            type="button"
+            onClick={() => void deletePost()}
+            disabled={deleting || saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 border border-rose-200 rounded-xl hover:bg-rose-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title="문서 삭제"
+          >
+            <Trash2 size={12} />
+            {deleting ? "삭제 중…" : "삭제"}
           </button>
         </div>
         <button
@@ -712,8 +745,17 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
             )}
             <button
               type="button"
+              onClick={() => void deletePost()}
+              disabled={deleting || saving}
+              className="flex items-center gap-1.5 rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+            >
+              <Trash2 size={12} />
+              {deleting ? "삭제 중…" : "삭제"}
+            </button>
+            <button
+              type="button"
               onClick={save}
-              disabled={saving}
+              disabled={saving || deleting}
               className="ml-auto flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
             >
               <Save size={12} />
