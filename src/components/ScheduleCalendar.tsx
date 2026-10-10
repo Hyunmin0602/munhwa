@@ -254,6 +254,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
 
   const getEventColor = (event: Event) => event.label?.color ?? event.color;
   const getEventLabel = (event: Event) => event.label?.name ?? "라벨 없음";
+  const getEventTime = (event: Event) => event.allDay ? "종일" : `${dayjs(event.startDate).format("HH:mm")}–${dayjs(event.endDate).format("HH:mm")}`;
 
   const selectedEvents = selectedDay ? getEventsForDay(selectedDay) : [];
   const upcomingEvents = events
@@ -305,7 +306,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                     className="min-w-0 flex-1 text-left"
                   >
                     <p className="truncate text-sm font-semibold text-gray-800">{event.title}</p>
-                    <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><Clock size={12} />{event.allDay ? "종일" : `${dayjs(event.startDate).format("HH:mm")} - ${dayjs(event.endDate).format("HH:mm")}`}</p>
+                    <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><Clock size={12} />{getEventTime(event)}</p>
                     {event.description && <p className="mt-2 text-xs leading-relaxed text-gray-400">{event.description}</p>}
                     <p className="mt-1 text-[10px] text-gray-400">{getEventLabel(event)}</p>
                   </button>
@@ -424,18 +425,21 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                 key={`${segment.event.id}-${segment.weekIndex}-${segment.startCol}-${segment.endCol}`}
                 type="button"
                 onClick={(event) => { event.stopPropagation(); openEditModal(segment.event); }}
-                title={segment.event.title}
-                aria-label={segment.event.title}
-                className="pointer-events-auto z-10 mx-1 flex h-7 min-w-0 items-center overflow-hidden rounded-xl px-2.5 text-[11px] font-semibold leading-none text-white shadow-sm ring-1 ring-white/35"
+                title={`${segment.event.title} · ${getEventTime(segment.event)}`}
+                aria-label={`${segment.event.title}, ${getEventTime(segment.event)}`}
+                className="pointer-events-auto z-10 mx-1 flex h-6 min-w-0 items-center gap-1 overflow-hidden rounded-lg px-1.5 text-[10px] font-semibold leading-none text-white shadow-sm ring-1 ring-white/35"
                 style={{
                   backgroundColor: getEventColor(segment.event),
                   gridColumn: `${segment.startCol + 1} / ${segment.endCol + 2}`,
                   gridRow: segment.weekIndex + 1,
-                  marginTop: `${18 + segment.laneIndex * 20}px`,
+                  marginTop: `${32 + segment.laneIndex * 26}px`,
                 }}
               >
                 {segment.isContinuation ? null : (
-                  <span className="min-w-0 truncate">{segment.event.title}</span>
+                  <>
+                    <span className="min-w-0 truncate">{segment.event.title}</span>
+                    <span className="shrink-0 text-[9px] opacity-90">{getEventTime(segment.event)}</span>
+                  </>
                 )}
               </button>
             ))}

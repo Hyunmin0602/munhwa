@@ -60,6 +60,7 @@ const getEventScopeLabel = (scope: Scope, projectID:string | null, projects:Proj
 
 const getEventColor = (event: CalendarEvent) => event.label?.color ?? (event.scope === "PROJECT" ? event.project?.color ?? event.color : event.color);
 const getEventLabel = (event: CalendarEvent) => event.label?.name ?? "라벨 없음";
+const getEventTime = (event: CalendarEvent) => event.allDay ? "종일" : `${dayjs(event.startDate).format("HH:mm")}–${dayjs(event.endDate).format("HH:mm")}`;
 
 export default function IntegratedCalendar() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -474,6 +475,7 @@ function MobileDayCalendar({ month, selected, getDayEvents, onMonthChange, onSel
                     <button key={event.id} type="button" onClick={(clickEvent) => { clickEvent.stopPropagation(); onEventClick(event); }} className="flex w-full items-center gap-2 rounded-lg bg-white px-2 py-1.5 text-left text-sm shadow-sm hover:bg-indigo-50">
                       <span className="h-6 w-1 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
                       <span className="min-w-0 flex-1 truncate">{event.title}</span>
+                      <span className="shrink-0 text-[10px] text-gray-500">{getEventTime(event)}</span>
                       {event.scope === "SPACE" && <span className="shrink-0 text-[10px] text-slate-500">전역</span>}
                     </button>
                   ))}
@@ -515,6 +517,7 @@ function CalendarCell({ day, selected, events, onSelect, onCreate, onEventClick 
               style={{ backgroundColor: getEventColor(event) }}
             >
               <span className="min-w-0 truncate">{event.title}</span>
+              <span className="ml-1 shrink-0 text-[9px] opacity-90">{getEventTime(event)}</span>
             </button>
           ))}
           {events.length > 3 && <span className="mt-1 block w-full truncate px-1 text-[10px] font-medium text-gray-500">+{events.length - 3}개 더 보기</span>}
@@ -533,6 +536,7 @@ function SelectedDayEvents({ date, events,projects, onRemove, onEdit }: { date: 
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
           <span className="flex-1">
             {event.title}
+            <small className="ml-2 text-xs font-normal text-gray-500">{getEventTime(event)}</small>
             <small className="ml-2 text-xs text-gray-400">{getEventScopeLabel(event.scope, event.projectId,projects)}</small>
             <small className="ml-2 text-xs text-gray-400">{getEventLabel(event)}</small>
           </span>
