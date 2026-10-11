@@ -7,15 +7,16 @@ export default async function KanbanPage({
 }) {
   const { projectId } = await params;
   return (
-    <div className="h-full flex flex-col bg-slate-50">
-      <div className="px-4 md:px-6 py-4 md:py-5 border-b border-slate-200 bg-white flex-shrink-0">
-        <h2 className="mt-1 text-xl font-bold tracking-tight text-slate-900">사업 칸반</h2>
-        <p className="text-xs text-slate-500 mt-1">
+    <div className="business-page business-page-kanban h-full flex flex-col bg-slate-50">
+      <header className="business-page-header flex-shrink-0 border-b border-slate-200 bg-white px-4 py-4 md:px-8 md:py-6">
+        <p className="business-page-eyebrow text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">사업 업무</p>
+        <h1 className="mt-2 text-2xl font-bold tracking-tight text-slate-900">칸반 보드</h1>
+        <p className="mt-2 text-sm text-slate-500">
           <span className="hidden md:inline">드래그로 이동 · 빈 공간 또는 + 클릭으로 추가</span>
           <span className="md:hidden">화살표로 컬럼 이동 · 카드를 밀어 상태 변경</span>
         </p>
-      </div>
-      <div className="flex-1 overflow-hidden px-4 md:px-6 py-4 md:py-5">
+      </header>
+      <div className="business-page-content flex-1 overflow-hidden px-4 py-4 md:px-8 md:py-6">
         <KanbanBoard key={projectId} projectId={projectId} />
       </div>
     </div>

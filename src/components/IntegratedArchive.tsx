@@ -211,7 +211,7 @@ export default function IntegratedArchive() {
             <h1 className="text-xl font-bold tracking-tight text-gray-900">통합 아카이브</h1>
           </div>
           <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
-            <select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)} disabled={projects.length === 0 || creating} aria-label="문서를 만들 사업 선택" className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs text-gray-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 sm:w-40 sm:flex-none">
+            <select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)} disabled={projects.length === 0 || creating} aria-label="문서를 만들 사업 선택" className="min-w-0 flex-1 rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 sm:w-40 sm:flex-none">
               {projects.length === 0 ? <option value="">사업 없음</option> : projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
             <button type="button" onClick={() => void createPost()} disabled={creating || projects.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />{creating ? "생성 중" : "새 문서"}</button>
@@ -241,7 +241,7 @@ export default function IntegratedArchive() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="제목, 작성자, 사업명으로 검색"
-              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-3 pr-9 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              className="w-full rounded-md border border-gray-200 bg-white py-2.5 pl-3 pr-9 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
             />
           </div>
         </div>

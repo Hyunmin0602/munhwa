@@ -30,6 +30,7 @@ interface Project {
 
 interface SidebarProps {
   projects: Project[];
+  spaceName: string;
   onNewProject: () => void;
   onEditProject: (project: Project) => void;
   onMoveProject: (projectId: string, direction: "up" | "down") => void;
@@ -37,7 +38,7 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, onClose }: SidebarProps) {
+function SidebarContent({ projects, spaceName, onNewProject, onEditProject, onMoveProject, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [isReordering, setIsReordering] = useState(false);
@@ -81,11 +82,11 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
   }, []);
 
   return (
-    <aside className="w-64 bg-white flex flex-col h-full">
+    <aside className="dashboard-sidebar w-64 bg-white flex flex-col h-full">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
+      <div className="dashboard-brand px-5 py-5 border-b border-gray-100 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">문화체육위원회</h1>
+          <h1 className="text-lg font-bold text-gray-900">{spaceName}</h1>
           <p className="text-xs text-gray-400 mt-0.5">내부 업무 관리</p>
         </div>
         {/* 모바일 닫기 버튼 */}
@@ -97,13 +98,13 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+      <nav className="dashboard-navigation flex-1 overflow-y-auto px-3 py-4 space-y-1">
         <div className="mt-4">
           <Link
             href="/dashboard/integrated"
             onClick={onClose}
             className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-              pathname === "/dashboard/integrated" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
+              pathname === "/dashboard/integrated" ? "bg-white font-semibold text-indigo-600 border-r-2 border-indigo-600" : "text-gray-600 hover:bg-gray-100"
             }`}
           >
             <LayoutGrid size={16} />
@@ -113,7 +114,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
             <Link
               href="/dashboard/admin"
               onClick={onClose}
-              className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/admin" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"}`}
+              className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/admin" ? "bg-white font-semibold text-indigo-600 border-r-2 border-indigo-600" : "text-gray-600 hover:bg-gray-100"}`}
             >
               <ShieldCheck size={16} />
               시스템 관리자
@@ -123,7 +124,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
             <Link
               href="/dashboard/space-management"
               onClick={onClose}
-              className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/space-management" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"}`}
+              className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/space-management" ? "bg-white font-semibold text-indigo-600 border-r-2 border-indigo-600" : "text-gray-600 hover:bg-gray-100"}`}
             >
               <Users size={16} />
               공간 관리
@@ -160,7 +161,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
               <div key={p.id}>
                 <div
                   className={`group flex items-center rounded-lg transition-colors ${
-                    isActive ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-600 hover:bg-gray-100"
+                    isActive ? "bg-white text-indigo-700 font-medium border-r-2 border-indigo-600" : "text-gray-600 hover:bg-gray-100"
                   }`}
                 >
                   <Link
@@ -248,12 +249,12 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
   );
 }
 
-export default function Sidebar({ projects, onNewProject, onEditProject, onMoveProject, open = false, onClose }: SidebarProps) {
+export default function Sidebar({ projects, spaceName, onNewProject, onEditProject, onMoveProject, open = false, onClose }: SidebarProps) {
   return (
     <>
       {/* 데스크탑 사이드바 */}
       <div className="hidden lg:flex border-r border-gray-200 h-screen sticky top-0">
-        <SidebarContent projects={projects} onNewProject={onNewProject} onEditProject={onEditProject} onMoveProject={onMoveProject} />
+        <SidebarContent projects={projects} spaceName={spaceName} onNewProject={onNewProject} onEditProject={onEditProject} onMoveProject={onMoveProject} />
       </div>
 
       {/* 모바일 오버레이 드로어 */}
@@ -265,6 +266,7 @@ export default function Sidebar({ projects, onNewProject, onEditProject, onMoveP
           <div className="absolute left-0 top-0 h-full shadow-xl">
             <SidebarContent
               projects={projects}
+              spaceName={spaceName}
               onNewProject={onNewProject}
               onEditProject={onEditProject}
               onMoveProject={onMoveProject}

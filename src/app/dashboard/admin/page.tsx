@@ -80,28 +80,29 @@ export default function SystemAdminPage() {
     event.preventDefault();
     const email = successorEmail.trim();
     if (!email || !spaceData) return;
-    if (!window.confirm(`${email} 계정으로 Space 관리자를 이전하시겠습니까?`)) return;
+    const spaceAdminLabel = `${spaceData.space.name} 관리자`;
+    if (!window.confirm(`${email} 계정으로 ${spaceAdminLabel}를 이전하시겠습니까?`)) return;
     setSavingSpaceAdmin(true);
     setError(null);
     setMessage(null);
     try {
       const response = await apiFetch("/api/space-administration", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }, { showGlobalError: false });
       const payload = await response.json();
-      if (!response.ok) throw new Error(payload?.error?.message ?? "Space 관리자 변경에 실패했습니다.");
-      setMessage(`${userLabel(payload.currentAdmin)} 계정으로 Space 관리자를 변경했습니다.`);
+      if (!response.ok) throw new Error(payload?.error?.message ?? `${spaceAdminLabel} 변경에 실패했습니다.`);
+      setMessage(`${userLabel(payload.currentAdmin)} 계정으로 ${spaceAdminLabel}를 변경했습니다.`);
       setSuccessorEmail("");
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Space 관리자 변경에 실패했습니다.");
+      setError(cause instanceof Error ? cause.message : `${spaceAdminLabel} 변경에 실패했습니다.`);
     } finally {
       setSavingSpaceAdmin(false);
     }
   };
 
   return (
-    <main className="h-auto min-h-full overflow-visible bg-gray-50 px-4 py-6 pb-24 md:px-8 md:py-8 lg:h-full lg:overflow-y-auto lg:pb-8">
+    <main className="system-admin-page h-auto min-h-full overflow-visible bg-gray-50 px-4 py-6 pb-24 md:px-8 md:py-8 lg:h-full lg:overflow-y-auto lg:pb-8">
       <div className="mx-auto max-w-7xl">
-        <header className="border-b border-gray-200 pb-6"><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-indigo-600">ADMINISTRATION</p><h1 className="text-2xl font-bold text-gray-900">관리자</h1><p className="mt-2 text-sm text-gray-500">시스템 관리자와 Space 관리 권한을 한 곳에서 관리합니다.</p></header>
+        <header className="border-b border-gray-200 pb-6"><p className="mb-1 text-xs font-semibold uppercase tracking-wide text-gray-500">{spaceData?.space.name ?? "시스템"} · ADMINISTRATION</p><h1 className="text-2xl font-bold text-gray-900">관리자 권한 설정</h1><p className="mt-2 text-sm text-gray-500">시스템과 소속 공간의 관리자 권한을 관리합니다.</p></header>
         {error && <div className="border-b border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
         {message && <div className="border-b border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div>}
         {loading ? <div className="flex items-center justify-center py-24 text-sm text-gray-400"><LoaderCircle size={18} className="mr-2 animate-spin" />관리자 정보를 불러오는 중...</div> : <div className="divide-y divide-gray-200">

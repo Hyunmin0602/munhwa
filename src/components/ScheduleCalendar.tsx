@@ -2,7 +2,7 @@
 import { useState, useEffect, type FormEvent } from "react";
 import dayjs from "dayjs";
 import "dayjs/locale/ko";
-import { ChevronLeft, ChevronRight, Plus, X, Clock, CalendarDays, Trash2, Tags, PencilLine, Trash } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Clock, CalendarDays, Trash2, Tags, PencilLine, Trash, AlignLeft, List } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
@@ -47,7 +47,20 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   const [labelError, setLabelError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedDay, setSelectedDay] = useState<dayjs.Dayjs | null>(null);
+  const [rightPanelMode, setRightPanelMode] = useState<"detailed" | "compact">("detailed");
+  const [rightPanelPage, setRightPanelPage] = useState(0);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; date: dayjs.Dayjs } | null>(null);
+
+  useEffect(() => {
+    const clearSelectionOutsideCalendar = (event: PointerEvent) => {
+      if (event.target instanceof Element && event.target.closest("[data-calendar-surface]")) return;
+      setSelectedDay(null);
+      setRightPanelPage(0);
+      setContextMenu(null);
+    };
+    document.addEventListener("pointerdown", clearSelectionOutsideCalendar);
+    return () => document.removeEventListener("pointerdown", clearSelectionOutsideCalendar);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -257,10 +270,14 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   const getEventTime = (event: Event) => event.allDay ? "종일" : `${dayjs(event.startDate).format("HH:mm")}–${dayjs(event.endDate).format("HH:mm")}`;
 
   const selectedEvents = selectedDay ? getEventsForDay(selectedDay) : [];
-  const upcomingEvents = events
-    .filter((e) => dayjs(e.startDate).isAfter(dayjs().subtract(1, "day")))
-    .sort((a, b) => dayjs(a.startDate).diff(dayjs(b.startDate)))
-    .slice(0, 8);
+  const monthEvents = events
+    .filter((event) => !dayjs(event.endDate).isBefore(current.startOf("month"), "day") && !dayjs(event.startDate).isAfter(current.endOf("month"), "day"))
+    .sort((a, b) => dayjs(a.startDate).diff(dayjs(b.startDate)));
+  const rightPanelEvents = selectedDay ? selectedEvents : monthEvents;
+  const rightPanelPageSize = 4;
+  const rightPanelPageCount = Math.ceil(rightPanelEvents.length / rightPanelPageSize);
+  const safeRightPanelPage = Math.min(rightPanelPage, Math.max(0, rightPanelPageCount - 1));
+  const visibleRightPanelEvents = rightPanelEvents.slice(safeRightPanelPage * rightPanelPageSize, (safeRightPanelPage + 1) * rightPanelPageSize);
   const mobileDay = selectedDay ?? dayjs();
   const mobileWeekStart = mobileDay.startOf("week");
   const mobileWeekEnd = mobileWeekStart.add(6, "day").endOf("day");
@@ -270,11 +287,12 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   const selectMobileDay = (day: dayjs.Dayjs) => {
     setSelectedDay(day);
     setCurrent(day);
+    setRightPanelPage(0);
   };
 
   return (
     <div className="h-full" onClick={() => setContextMenu(null)}>
-      <div className="flex h-full flex-col md:hidden">
+      <div data-calendar-surface className="flex h-full flex-col md:hidden">
         {error && <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700"><span>{error}</span><button type="button" onClick={() => setReloadKey((current) => current + 1)} className="font-semibold underline">다시 시도</button></div>}
         <div className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
           <button type="button" onClick={() => selectMobileDay(mobileDay.subtract(1, "week"))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="이전 주"><ChevronLeft size={18} /></button>
@@ -332,12 +350,12 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
       <div className="hidden h-full gap-5 md:flex">
       {error && <div className="absolute left-4 right-4 top-3 z-10 flex items-center justify-between gap-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700"><span>{error}</span><button type="button" onClick={() => setReloadKey((current) => current + 1)} className="font-semibold underline">다시 시도</button></div>}
       {/* Calendar */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div data-calendar-surface className="flex-1 flex flex-col min-w-0">
         {/* Header */}
         <div className="flex items-center justify-between mb-4 flex-shrink-0 gap-3">
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setCurrent((c) => c.subtract(1, "month"))}
+              onClick={() => { setCurrent((c) => c.subtract(1, "month")); setSelectedDay(null); setRightPanelPage(0); }}
               className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <ChevronLeft size={16} />
@@ -346,13 +364,13 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
               {current.format("YYYY년 M월")}
             </h2>
             <button
-              onClick={() => setCurrent((c) => c.add(1, "month"))}
+              onClick={() => { setCurrent((c) => c.add(1, "month")); setSelectedDay(null); setRightPanelPage(0); }}
               className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
             >
               <ChevronRight size={16} />
             </button>
             <button
-              onClick={() => setCurrent(dayjs())}
+              onClick={() => { setCurrent(dayjs()); setSelectedDay(null); setRightPanelPage(0); }}
               className="ml-1 px-2.5 py-1 text-xs font-medium rounded-lg border border-gray-200 hover:bg-gray-50 text-gray-600 transition-colors"
             >
               오늘
@@ -362,6 +380,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
             <button
               onClick={() => openModal(selectedDay ?? dayjs())}
               className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 text-white rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors"
+              aria-label="일정 추가"
             >
               <Plus size={14} />
             </button>
@@ -399,8 +418,8 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
               return (
                 <div
                   key={idx}
-                  onClick={() => day && setSelectedDay(day)}
-                  onContextMenu={(event) => { if (!day) return; event.preventDefault(); setSelectedDay(day); setContextMenu({ x: event.clientX, y: event.clientY, date: day }); }}
+                  onClick={() => { if (day) { setSelectedDay(day); setRightPanelPage(0); } }}
+                  onContextMenu={(event) => { if (!day) return; event.preventDefault(); setSelectedDay(day); setRightPanelPage(0); setContextMenu({ x: event.clientX, y: event.clientY, date: day }); }}
                   className={`group flex min-w-0 flex-col items-start justify-start overflow-hidden border-r border-b border-gray-100 p-1.5 cursor-pointer transition-colors
                     ${!day ? "bg-gray-50/50" : isSelected ? "bg-indigo-50" : "hover:bg-gray-50"}
                     ${idx % 7 === 6 ? "border-r-0" : ""}
@@ -446,12 +465,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                   marginTop: `${32 + segment.laneIndex * 26}px`,
                 }}
               >
-                {segment.isContinuation ? null : (
-                  <>
-                    <span className="min-w-0 truncate">{segment.event.title}</span>
-                    <span className="shrink-0 text-[9px] opacity-90">{getEventTime(segment.event)}</span>
-                  </>
-                )}
+                <span className="min-w-0 flex-1 truncate text-left text-[11px]">{segment.event.title}</span>
               </button>
             ))}
           </div>
@@ -459,91 +473,87 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
       </div>
 
       {/* Right panel - 데스크탑에서만 표시 */}
-      <div className="hidden lg:flex w-64 flex-shrink-0 flex-col gap-4">
-        {/* Selected day events */}
-        {selectedDay && (
-          <div className="bg-white rounded-2xl border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-bold text-gray-800">
-                {selectedDay.format("M월 D일")} <span className="text-gray-400 font-normal">{selectedDay.format("ddd")}</span>
+      <div className="hidden w-64 min-h-0 flex-shrink-0 flex-col lg:flex">
+        <section className="flex min-h-0 flex-1 flex-col rounded-2xl border border-gray-200 bg-white p-4">
+          <div className="mb-3 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <h3 className="truncate text-sm font-bold text-gray-900">
+                {selectedDay ? selectedDay.format("M월 D일 일정") : current.format("M월 일정")}
               </h3>
+              <p className="mt-0.5 text-[11px] text-gray-400">{rightPanelEvents.length}개</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-1.5 self-start">
+              <div className="flex rounded-md bg-gray-100 p-0.5" role="group" aria-label="일정 정보 표시 방식">
+                <button
+                  type="button"
+                  aria-pressed={rightPanelMode === "detailed"}
+                  onClick={() => { setRightPanelMode("detailed"); setRightPanelPage(0); }}
+                  className={`flex h-7 w-7 items-center justify-center rounded ${rightPanelMode === "detailed" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+                  title="설명형"
+                  aria-label="설명형"
+                ><AlignLeft size={13} /></button>
+                <button
+                  type="button"
+                  aria-pressed={rightPanelMode === "compact"}
+                  onClick={() => { setRightPanelMode("compact"); setRightPanelPage(0); }}
+                  className={`flex h-7 w-7 items-center justify-center rounded ${rightPanelMode === "compact" ? "bg-white text-indigo-600 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+                  title="간략형"
+                  aria-label="간략형"
+                ><List size={13} /></button>
+              </div>
               <button
-                onClick={() => openModal(selectedDay)}
-                aria-label={`${selectedDay.format("M월 D일")} 일정 추가`}
-                className="w-6 h-6 flex items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-colors"
+                type="button"
+                onClick={() => openModal(selectedDay ?? current)}
+                aria-label="일정 추가"
+                className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 transition-colors hover:bg-indigo-100"
               >
-                <Plus size={12} />
+                <Plus size={14} />
               </button>
             </div>
-            {selectedEvents.length === 0 ? (
-              <button
-                onClick={() => openModal(selectedDay)}
-                className="w-full py-4 text-xs text-gray-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl border-2 border-dashed border-gray-200 hover:border-indigo-200 transition-all"
-              >
-                + 일정 추가
-              </button>
-            ) : (
-              <div className="space-y-2">
-                {selectedEvents.map((ev) => (
-                  <div key={ev.id} onClick={() => openEditModal(ev)} className="flex w-full cursor-pointer items-start gap-2 rounded-lg px-1 py-1 text-left group hover:bg-gray-50">
-                    <div className="w-2 h-2 rounded-full mt-1.5 flex-shrink-0" style={{ backgroundColor: getEventColor(ev) }} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-gray-800 truncate">{ev.title}</p>
-                      <p className="text-xs text-gray-400">
-                        {dayjs(ev.startDate).format("HH:mm")} – {dayjs(ev.endDate).format("HH:mm")}
-                      </p>
-                      <p className="text-[10px] text-gray-400">{getEventLabel(ev)}</p>
-                    </div>
-                    <button
-                      onClick={(event) => { event.stopPropagation(); deleteEvent(ev.id); }}
-                      className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-rose-400 transition-all"
-                      type="button"
-                    >
-                      <X size={12} />
-                    </button>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
-        )}
 
-        {/* Upcoming events */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-4 flex-1 overflow-y-auto">
-          <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-            <CalendarDays size={14} className="text-indigo-500" />
-            예정 일정
-          </h3>
-          {upcomingEvents.length === 0 ? (
-            <p className="text-xs text-gray-400 text-center py-4">예정된 일정이 없습니다</p>
-          ) : (
-            <div className="space-y-2.5">
-              {upcomingEvents.map((ev) => (
-                <div key={ev.id} onClick={() => openEditModal(ev)} className="flex w-full cursor-pointer items-start gap-2.5 rounded-lg px-1 py-1 text-left group hover:bg-gray-50">
-                  <div
-                    className="w-1 rounded-full flex-shrink-0 self-stretch"
-                    style={{ backgroundColor: getEventColor(ev), minHeight: "28px" }}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium text-gray-800 truncate">{ev.title}</p>
-                    <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
-                      <Clock size={9} />
-                      {dayjs(ev.startDate).format("M/D HH:mm")}
-                    </p>
-                    <p className="text-[10px] text-gray-400">{getEventLabel(ev)}</p>
-                  </div>
-                  <button
-                    onClick={(event) => { event.stopPropagation(); deleteEvent(ev.id); }}
-                    className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-rose-400 transition-all"
-                    type="button"
-                  >
-                    <X size={11} />
-                  </button>
+
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+            {rightPanelEvents.length === 0 ? (
+              <p className="rounded-lg bg-gray-50 px-3 py-8 text-center text-xs text-gray-500">
+                {selectedDay ? "등록된 일정이 없습니다." : "이번 달 등록된 일정이 없습니다."}
+              </p>
+            ) : visibleRightPanelEvents.map((event) => (
+              <div key={event.id} onClick={() => openEditModal(event)} className="group flex cursor-pointer items-start gap-2 rounded-lg border border-gray-100 p-2.5 text-left transition-colors hover:bg-gray-50">
+                <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-gray-900">{event.title}</p>
+                  <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-gray-500">
+                    <Clock size={10} className="shrink-0" />
+                    {dayjs(event.startDate).format("M/D")} · {getEventTime(event)}
+                  </p>
+                  {rightPanelMode === "detailed" && (
+                    <>
+                      {event.description && <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-500">{event.description}</p>}
+                      <p className="mt-1 truncate text-[10px] text-gray-400">{getEventLabel(event)}</p>
+                    </>
+                  )}
                 </div>
-              ))}
+                <button
+                  type="button"
+                  onClick={(clickEvent) => { clickEvent.stopPropagation(); deleteEvent(event.id); }}
+                  aria-label={`${event.title} 삭제`}
+                  className="shrink-0 text-gray-300 opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+          </div>
+
+          {rightPanelPageCount > 1 && (
+            <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3">
+              <button type="button" onClick={() => setRightPanelPage((page) => Math.max(0, page - 1))} disabled={rightPanelPage === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">이전</button>
+              <span className="text-[11px] text-gray-400">{safeRightPanelPage + 1} / {rightPanelPageCount}</span>
+              <button type="button" onClick={() => setRightPanelPage((page) => Math.min(rightPanelPageCount - 1, page + 1))} disabled={safeRightPanelPage >= rightPanelPageCount - 1} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-gray-200 px-3 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50">다음</button>
             </div>
           )}
-        </div>
+        </section>
       </div>
 
       </div>
@@ -563,7 +573,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                   required
                   value={form.title}
                   onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 focus:bg-white transition-colors"
+                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 transition-colors placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                   placeholder="일정 제목"
                 />
               </div>
@@ -574,7 +584,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                     type="datetime-local"
                     value={form.startDate}
                     onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
-                    className="min-w-0 w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 focus:bg-white transition-colors"
+                    className="min-w-0 w-full rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                   />
                 </div>
                 <div>
@@ -583,7 +593,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                     type="datetime-local"
                     value={form.endDate}
                     onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
-                    className="min-w-0 w-full px-3 py-2 border border-gray-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 focus:bg-white transition-colors"
+                    className="min-w-0 w-full rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                   />
                 </div>
               </div>
@@ -592,7 +602,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                 <select
                   value={form.labelId}
                   onChange={(e) => setForm((f) => ({ ...f, labelId: e.target.value }))}
-                  className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-colors focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
                 >
                   <option value="">라벨 없음</option>
                   {labels.map((label) => (
@@ -607,7 +617,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                   rows={2}
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-                  className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-gray-50 focus:bg-white transition-colors"
+                  className="w-full resize-y rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 transition-colors placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                   placeholder="선택 사항"
                 />
               </div>
@@ -640,15 +650,15 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-gray-600">이름</label>
-                <input value={labelForm.name} onChange={(event) => setLabelForm((current) => ({ ...current, name: event.target.value }))} className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" placeholder="예: 회의, 홍보, 긴급" />
+                <input value={labelForm.name} onChange={(event) => setLabelForm((current) => ({ ...current, name: event.target.value }))} className="w-full rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" placeholder="예: 회의, 홍보, 긴급" />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-gray-600">설명</label>
-                <textarea value={labelForm.description} onChange={(event) => setLabelForm((current) => ({ ...current, description: event.target.value }))} className="min-h-20 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" placeholder="라벨 설명" />
+                <textarea value={labelForm.description} onChange={(event) => setLabelForm((current) => ({ ...current, description: event.target.value }))} className="min-h-20 w-full resize-y rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 outline-none transition-colors placeholder:text-gray-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100" placeholder="라벨 설명" />
               </div>
               <div>
                 <label className="mb-1.5 block text-xs font-semibold text-gray-600">색상</label>
-                <input type="color" value={labelForm.color} onChange={(event) => setLabelForm((current) => ({ ...current, color: event.target.value }))} className="h-10 w-full rounded-xl border border-gray-200 bg-white p-1" />
+                <input type="color" value={labelForm.color} onChange={(event) => setLabelForm((current) => ({ ...current, color: event.target.value }))} className="h-10 w-full rounded-md border border-gray-200 bg-white p-1" />
               </div>
               {labelError && <p className="text-xs font-medium text-rose-600">{labelError}</p>}
               <div className="flex gap-2">

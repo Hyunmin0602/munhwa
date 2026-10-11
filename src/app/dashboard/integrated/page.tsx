@@ -19,19 +19,22 @@ export default function IntegratedPage() {
 
   return (
     <div className="flex h-auto min-h-full flex-col bg-gray-50 md:h-full">
-      <nav className="flex flex-shrink-0 gap-1 border-b border-gray-200 bg-white px-4 pt-3 md:px-6" aria-label="통합 업무 유형">
+      <nav className="sticky top-0 z-10 flex flex-shrink-0 gap-1 border-b border-gray-200 bg-white px-4 pt-3 backdrop-blur md:px-6" role="tablist" aria-label="통합 업무 유형">
         {tabs.map(({ id, label, Icon }) => (
           <button
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`inline-flex items-center gap-2 rounded-t-xl px-4 py-3 text-sm font-semibold ${tab === id ? "bg-indigo-50 text-indigo-700" : "text-gray-500 hover:bg-gray-50"}`}
+            role="tab"
+            aria-selected={tab === id}
+            aria-controls="integrated-tabpanel"
+            className={`inline-flex items-center gap-2 border-b-2 border-transparent px-4 py-3 text-sm font-semibold transition-colors ${tab === id ? "text-indigo-600" : "text-gray-500 hover:bg-gray-50 hover:text-gray-900"}`}
           >
             <Icon size={16} />{label}
           </button>
         ))}
       </nav>
-      <main className="min-h-0 flex-1 overflow-visible">
+      <main id="integrated-tabpanel" role="tabpanel" tabIndex={0} className="min-h-0 flex-1 overflow-visible focus-visible:outline-none">
         {tab === "kanban" && <IntegratedKanban />}
         {tab === "calendar" && <IntegratedCalendar />}
         {tab === "archive" && <IntegratedArchive />}

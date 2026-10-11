@@ -21,6 +21,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { data: session, status } = useSession();
   const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
+  const [spaceName, setSpaceName] = useState("문화체육위원회");
   const [projectsError, setProjectsError] = useState<string | null>(null);
   const [projectsRequestNonce, setProjectsRequestNonce] = useState(0);
   const [showModal, setShowModal] = useState(false);
@@ -33,6 +34,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const currentProject = currentProjectId ? projects.find((p) => p.id === currentProjectId) : null;
 
   useEffect(() => {
+    const openNewProjectModal = () => setShowModal(true);
+    window.addEventListener("open-new-project-modal", openNewProjectModal);
+    return () => window.removeEventListener("open-new-project-modal", openNewProjectModal);
+  }, []);
+
+  useEffect(() => {
     if (status === "unauthenticated") {
       showToast("세션이 만료되어 로그인 화면으로 이동합니다.");
       router.push("/login");
@@ -43,10 +50,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (status === "authenticated") {
       (async () => {
         try {
-          const res = await apiFetch("/api/projects");
+          const [res, spaceRes] = await Promise.all([
+            apiFetch("/api/projects"),
+            apiFetch("/api/space-context", undefined, { showGlobalError: false }).catch(() => null),
+          ]);
           if (!res.ok) throw new Error("Project list request failed");
-          const data = await res.json();
+          const [data, spaceData] = await Promise.all([res.json(), spaceRes?.ok ? spaceRes.json() : Promise.resolve(null)]);
           setProjects(Array.isArray(data?.items) ? data.items : []);
+          if (typeof spaceData?.space?.name === "string" && spaceData.space.name.trim()) setSpaceName(spaceData.space.name);
           setProjectsError(null);
         } catch {
           setProjectsError("사업 목록을 불러오지 못했습니다.");
@@ -71,7 +82,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (status === "loading") {
     return (
-      <div className="flex min-h-screen flex-col overflow-visible bg-gray-50 lg:h-screen lg:flex-row lg:overflow-hidden">
+      <div className="dashboard-shell flex min-h-screen flex-col overflow-visible bg-gray-50 lg:h-screen lg:flex-row lg:overflow-hidden">
         {/* Sidebar skeleton */}
         <div className="w-56 flex-shrink-0 bg-white border-r border-gray-100 flex flex-col p-4 gap-3">
           <Skeleton className="h-8 w-32 mb-2 rounded-xl" />
@@ -157,9 +168,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   return (
-    <div className="flex min-h-screen flex-col overflow-visible bg-gray-50 lg:h-screen lg:flex-row lg:overflow-hidden">
+    <div className="dashboard-shell flex min-h-screen flex-col overflow-visible bg-gray-50 lg:h-screen lg:flex-row lg:overflow-hidden">
       <Sidebar
         projects={projects}
+        spaceName={spaceName}
         onNewProject={() => setShowModal(true)}
         onEditProject={setEditingProject}
         onMoveProject={handleMoveProject}
@@ -174,7 +186,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       )}
       <main className="flex min-w-0 flex-1 touch-pan-y flex-col overflow-visible overflow-x-hidden pb-[5.25rem] lg:min-h-0 lg:overflow-hidden lg:pb-0">
         {/* 모바일 상단바 */}
-        <div className="lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
+        <div className="dashboard-mobile-header lg:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-gray-100 flex-shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
             className="flex h-10 w-10 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-800"
@@ -184,7 +196,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <Menu size={20} />
           </button>
           <h1 className="text-base font-bold text-gray-900">
-            {currentProject ? currentProject.name : "문화체육위원회"}
+            {currentProject ? currentProject.name : spaceName}
           </h1>
           {!currentProject && (
             <button
