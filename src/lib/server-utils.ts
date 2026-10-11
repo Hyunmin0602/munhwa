@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
+import { withDbReadRetry } from "@/lib/db-retry";
 
 export const DEFAULT_SPACE_ID = "culture-sports";
 
@@ -19,23 +20,56 @@ export async function canViewAllProjects(userId: string) {
 export async function assertProjectMember(userId: string, projectId: string) {
   if (await assertAdmin(userId)) return true;
 
-  const project = await prisma.project.findUnique({
+  const project = await withDbReadRetry(() => prisma.project.findUnique({
     where: { id: projectId },
-    select: { ownerId: true, space: { select: { id: true, adminUserId: true } } },
-  });
+    select: {
+      ownerId: true,
+      isArchived: true,
+      accessScope: true,
+      space: { select: { id: true, adminUserId: true } },
+    },
+  }));
+  if (!project) return false;
   if (project?.ownerId === userId) return true;
   if (project?.space?.adminUserId === userId) return true;
   if (project?.space?.id && await assertSpaceManager(userId, project.space.id)) return true;
 
-  const member = await prisma.projectMember.findUnique({
+  const member = await withDbReadRetry(() => prisma.projectMember.findUnique({
     where: { userId_projectId: { userId, projectId } },
     select: { id: true },
-  });
-  return !!member;
+  }));
+  if (member) return true;
+
+  const spaceId = project.space?.id;
+  if (project.isArchived && project.accessScope === "SPACE" && spaceId) {
+    const spaceMember = await withDbReadRetry(() => prisma.spaceMember.findUnique({
+      where: { spaceId_userId: { spaceId, userId } },
+      select: { id: true },
+    }));
+    return !!spaceMember;
+  }
+  return false;
 }
 
 export async function assertProjectAccess(userId: string, projectId: string) {
   return assertProjectMember(userId, projectId);
+}
+
+export async function assertProjectEditor(userId: string, projectId: string) {
+  const project = await withDbReadRetry(() => prisma.project.findUnique({
+    where: { id: projectId },
+    select: { ownerId: true, isArchived: true, space: { select: { id: true, adminUserId: true } } },
+  }));
+  if (!project || project.isArchived) return false;
+  if (await assertAdmin(userId)) return true;
+  if (project.ownerId === userId || project.space?.adminUserId === userId) return true;
+  if (project.space?.id && await assertSpaceManager(userId, project.space.id)) return true;
+
+  const member = await withDbReadRetry(() => prisma.projectMember.findUnique({
+    where: { userId_projectId: { userId, projectId } },
+    select: { role: true },
+  }));
+  return !!member && member.role !== "viewer";
 }
 
 export async function assertProjectOwner(userId: string, projectId: string) {

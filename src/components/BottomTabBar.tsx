@@ -4,7 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { LayoutDashboard, FolderKanban, CalendarDays, CheckSquare, ChevronDown } from "lucide-react";
 
-interface Project { id: string; name: string; color: string; }
+interface Project { id: string; name: string; color: string; isArchived?: boolean; accessScope?: "SPACE" | "MEMBERS"; }
 
 export default function BottomTabBar({ projects }: { projects: Project[] }) {
   const pathname = usePathname();
@@ -64,7 +64,7 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
                 >
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
                   <span className={`text-sm flex-1 text-left ${p.id === projectId ? "text-indigo-700 font-medium" : "text-gray-700"}`}>
-                    {p.name}
+                    {p.name}{p.isArchived && <span className="ml-2 bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">기록</span>}
                   </span>
                   {p.id === projectId && (
                     <span className="text-[10px] text-indigo-500 font-medium">현재</span>

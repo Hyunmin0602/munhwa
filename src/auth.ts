@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { checkRateLimit, LOGIN_EMAIL_LIMIT } from "@/lib/rate-limit";
 import { normalizeEmail } from "@/lib/validation";
+import { withDbReadRetry } from "@/lib/db-retry";
 
 declare module "next-auth" {
   interface Session {
@@ -62,14 +63,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     maxAge: 60 * 60 * 24 * 14,
   },
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) token.id = user.id;
+      if (token.id) {
+        const currentUser = await withDbReadRetry(() => prisma.user.findUnique({
+          where: { id: token.id as string },
+          select: { registrationStatus: true },
+        }));
+        token.accountActive = currentUser?.registrationStatus === "APPROVED";
+      }
       return token;
     },
     session({ session, token }) {
-      if (session.user && token.id) {
-        session.user.id = token.id as string;
+      if (!session.user || !token.id || token.accountActive !== true) {
+        return { ...session, user: undefined } as unknown as typeof session;
       }
+      session.user.id = token.id as string;
       return session;
     },
   },

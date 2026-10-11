@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
 import { DEFAULT_SPACE_ID, assertSpaceManager } from "@/lib/server-utils";
 import { readJsonObject } from "@/lib/validation";
+import { createInAppNotification } from "@/lib/notifications";
 import { conflict, forbidden, internalError, notFound, unauthorized, validationError } from "@/lib/api-error";
 
 function getUserId() {
@@ -83,6 +84,9 @@ export async function PATCH(request: NextRequest) {
         return true;
       }));
       if (!changed) return conflict("가입 신청이 이미 처리되었습니다.");
+      if (registrationAction === "approve") {
+        await createInAppNotification({ recipientId: userId, actorId: access.userId, category: "approval", title: "가입 신청이 승인되었습니다.", body: "Space 구성원으로 가입되었습니다.", href: "/dashboard/integrated" });
+      }
       return NextResponse.json({ ok: true, status: registrationAction === "approve" ? "APPROVED" : "REJECTED" });
     }
     const role = data.role === "space_manager" ? "space_manager" : data.role === "member" ? "member" : "";

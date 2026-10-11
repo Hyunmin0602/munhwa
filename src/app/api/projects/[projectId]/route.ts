@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { withDbRetry } from "@/lib/db-retry";
-import { assertProjectAccess, assertProjectOwner, canManageProject } from "@/lib/server-utils";
-import { InputValidationError, optionalText, projectColor, projectStatus, projectTags, readJsonObject, requiredText } from "@/lib/validation";
+import { withDbReadRetry, withDbRetry, withDbWrite } from "@/lib/db-retry";
+import { assertProjectAccess, assertProjectEditor, assertProjectOwner, canManageProject } from "@/lib/server-utils";
+import { InputValidationError, optionalText, projectAccessScope, projectColor, projectStatus, projectTags, readJsonObject, requiredText } from "@/lib/validation";
+import { apiError } from "@/lib/api-error";
 
 type Params = { params: Promise<{ projectId: string }> };
 
@@ -25,7 +26,7 @@ function legacyIntegratedStatus(name: string, order: number) {
 
 // use common assertProjectMember from server-utils
 
-export async function GET(_: NextRequest, { params }: Params) {
+export async function GET(request: NextRequest, { params }: Params) {
   try {
     const { projectId } = await params;
     const session = await auth();
@@ -36,6 +37,14 @@ export async function GET(_: NextRequest, { params }: Params) {
     const userId = session.user.id;
     if (!(await assertProjectAccess(userId, projectId)))
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (request.nextUrl.searchParams.get("view") === "archive-state") {
+      const archiveState = await withDbReadRetry(() => prisma.project.findUnique({
+        where: { id: projectId },
+        select: { isArchived: true, accessScope: true },
+      }));
+      if (!archiveState) return NextResponse.json({ error: "Not found" }, { status: 404 });
+      return NextResponse.json(archiveState);
+    }
     const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
 
     let project;
@@ -84,7 +93,7 @@ export async function GET(_: NextRequest, { params }: Params) {
       };
     }
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json({ ...project, permissions: { canManageColumns } });
+    return NextResponse.json({ ...project, permissions: { canManageColumns, canEdit: await assertProjectEditor(userId, projectId) } });
   } catch (error) {
     logApiError("GET", error);
     return NextResponse.json({ error: "프로젝트 정보를 불러오지 못했습니다." }, { status: 500 });
@@ -112,8 +121,21 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const summary = data.summary === undefined ? undefined : optionalText(data.summary, "요약", 300);
     const status = data.status === undefined ? undefined : projectStatus(data.status);
     const color = data.color === undefined ? undefined : projectColor(data.color);
+    const isArchived = data.isArchived === undefined ? undefined : data.isArchived === true;
+    if (data.isArchived !== undefined && typeof data.isArchived !== "boolean") throw new InputValidationError("기록용 여부가 올바르지 않습니다.");
+    const existingArchiveState = await withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { isArchived: true } }));
+    if (!existingArchiveState) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (existingArchiveState.isArchived && isArchived !== false) {
+      const blockedFields = ["description", "category", "tags", "summary", "status", "color"];
+      if (blockedFields.some((field) => data[field] !== undefined)) {
+        return apiError("CONFLICT", "기록용 사업의 내용은 수정할 수 없습니다. 먼저 진행 사업으로 복원해주세요.", 409);
+      }
+    }
+    const nextIsArchived = isArchived ?? existingArchiveState.isArchived;
+    const accessScope = data.accessScope === undefined ? undefined : projectAccessScope(data.accessScope);
+    if (accessScope !== undefined && !nextIsArchived) throw new InputValidationError("기록용 사업에서만 열람 범위를 설정할 수 있습니다.");
 
-    const project = await withDbRetry(() =>
+    const project = await withDbWrite(() =>
       prisma.project.update({
         where: { id: projectId },
         data: {
@@ -124,9 +146,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           ...(summary !== undefined ? { summary } : {}),
           ...(status !== undefined ? { status } : {}),
           ...(color !== undefined ? { color } : {}),
+          ...(isArchived !== undefined ? { isArchived } : {}),
+          ...(accessScope !== undefined ? { accessScope } : {}),
         },
-      }),
-      { operation: `project:update:${projectId}` }
+      })
     );
     return NextResponse.json(project);
   } catch (error) {
@@ -150,7 +173,10 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     if (!canDelete)
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    await withDbRetry(() => prisma.project.delete({ where: { id: projectId } }), { operation: `project:delete:${projectId}` });
+    const existing = await withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { isArchived: true } }));
+    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (existing.isArchived) return apiError("CONFLICT", "기록용 사업은 삭제할 수 없습니다. 먼저 진행 사업으로 복원해주세요.", 409);
+    await withDbWrite(() => prisma.project.delete({ where: { id: projectId } }));
     return NextResponse.json({ ok: true });
   } catch (error) {
     logApiError("DELETE", error);

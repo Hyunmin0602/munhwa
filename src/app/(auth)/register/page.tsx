@@ -39,6 +39,10 @@ export default function RegisterPage() {
       setError("비밀번호가 일치하지 않습니다.");
       return;
     }
+    if (!email.trim().toLowerCase().endsWith(".com")) {
+      setError("이메일 주소는 .com으로 끝나야 합니다.");
+      return;
+    }
     if (password.length < 12) {
       setError("비밀번호는 12자 이상이어야 합니다.");
       return;

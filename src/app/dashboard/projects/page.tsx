@@ -12,6 +12,8 @@ interface Project {
   name: string;
   description: string | null;
   color: string;
+  isArchived: boolean;
+  accessScope: "SPACE" | "MEMBERS";
   members: { user: { name: string | null } }[];
   createdAt: string;
 }
@@ -105,7 +107,7 @@ export default function ProjectsPage() {
                   <Link key={project.id} href={`/dashboard/projects/${project.id}/kanban`} className="flex min-h-[76px] items-center gap-3 px-3 py-3 transition-colors hover:bg-gray-50 active:bg-indigo-50">
                     <span className="h-10 w-1 shrink-0 rounded-full" style={{ backgroundColor: project.color }} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold text-gray-900">{project.name}</span>
+                      <span className="flex items-center gap-2"><span className="block truncate text-sm font-semibold text-gray-900">{project.name}</span>{project.isArchived && <span className="shrink-0 bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">기록</span>}</span>
                       {project.description && <span className="mt-0.5 block truncate text-xs text-gray-500">{project.description}</span>}
                       <span className="mt-1 flex items-center gap-1 text-[11px] text-gray-400"><Users size={11} />{project.members.length}명 참여<span className="px-0.5 text-gray-300">·</span>{dayjs(project.createdAt).format("YYYY.MM.DD")}</span>
                     </span>
@@ -124,7 +126,7 @@ export default function ProjectsPage() {
                 <div className="h-1.5 w-full" style={{ backgroundColor: project.color }} />
                 <div className="p-5">
                   <h2 className="truncate font-bold text-gray-900 group-hover:text-indigo-700">
-                    {project.name}
+                    {project.name}{project.isArchived && <span className="ml-2 bg-slate-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-slate-600">기록</span>}
                   </h2>
                   {project.description && (
                     <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-gray-400">

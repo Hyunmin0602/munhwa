@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import dayjs from "dayjs";
+import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Plus, X, Tags, PencilLine, Trash, Clock, AlignLeft, List } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import ModalFrame from "@/components/ui/ModalFrame";
@@ -15,6 +16,7 @@ type CalendarEvent = {
   projectId: string | null;
   project: Project | null;
   label: Label | null;
+  labelId?: string | null;
   scope: Scope;
   type: Kind;
   title: string;
@@ -23,6 +25,7 @@ type CalendarEvent = {
   endDate: string;
   allDay: boolean;
   color: string;
+  sourceTaskId?: string;
 };
 type Form = {
   projectId: string;
@@ -58,11 +61,12 @@ const getEventScopeLabel = (scope: Scope, projectID:string | null, projects:Proj
   return foundProject ?`${foundProject.name}` : "사업별" ;
 };
 
-const getEventColor = (event: CalendarEvent) => event.label?.color ?? (event.scope === "PROJECT" ? event.project?.color ?? event.color : event.color);
+const getEventColor = (event: CalendarEvent) => event.scope === "PROJECT" ? event.project?.color ?? event.color : event.label?.color ?? event.color;
 const getEventLabel = (event: CalendarEvent) => event.label?.name ?? "라벨 없음";
 const getEventTime = (event: CalendarEvent) => event.allDay ? "종일" : `${dayjs(event.startDate).format("HH:mm")}–${dayjs(event.endDate).format("HH:mm")}`;
 
 export default function IntegratedCalendar() {
+  const router = useRouter();
   const [projects, setProjects] = useState<Project[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
   const [events, setEvents] = useState<CalendarEvent[]>([]);
@@ -104,6 +108,27 @@ export default function IntegratedCalendar() {
       .catch(() => setError("통합 일정을 불러오지 못했습니다."));
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+    const refreshEvents = async () => {
+      const response = await apiFetch("/api/events");
+      if (!response.ok) throw new Error("일정 조회 실패");
+      const payload = await response.json();
+      if (!cancelled) setEvents(Array.isArray(payload) ? payload : []);
+    };
+    const handleVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshEvents().catch(() => { if (!cancelled) setError("통합 일정을 새로 불러오지 못했습니다."); });
+    };
+    window.addEventListener("focus", handleVisible);
+    document.addEventListener("visibilitychange", handleVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handleVisible);
+      document.removeEventListener("visibilitychange", handleVisible);
+    };
+  }, []);
+
   const getDayEvents = (date: dayjs.Dayjs) =>
     events.filter((event) => {
       const day = date.startOf("day");
@@ -134,6 +159,10 @@ export default function IntegratedCalendar() {
   };
 
   const openEditModal = (event: CalendarEvent) => {
+    if (event.sourceTaskId) {
+      router.push(`/dashboard/projects/${event.projectId}/kanban`);
+      return;
+    }
     setEditingEventId(event.id);
     setEditingEventColor(event.color);
     setForm({
@@ -142,10 +171,10 @@ export default function IntegratedCalendar() {
       type: event.type,
       title: event.title,
       description: event.description ?? "",
-      startDate: dayjs(event.startDate).format("YYYY-MM-DDTHH:mm"),
-      endDate: dayjs(event.endDate).format("YYYY-MM-DDTHH:mm"),
+      startDate: dayjs(event.startDate).format(event.allDay ? "YYYY-MM-DD" : "YYYY-MM-DDTHH:mm"),
+      endDate: dayjs(event.endDate).format(event.allDay ? "YYYY-MM-DD" : "YYYY-MM-DDTHH:mm"),
       allDay: event.allDay,
-      labelId: event.label?.id ?? "",
+      labelId: event.label?.id ?? event.labelId ?? "",
     });
   };
 
@@ -208,6 +237,8 @@ export default function IntegratedCalendar() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          startDate: new Date(form.allDay ? `${form.startDate}T00:00` : form.startDate).toISOString(),
+          endDate: new Date(form.allDay ? `${form.endDate}T00:00` : form.endDate).toISOString(),
           title: form.title.trim(),
           projectId: form.scope === "PROJECT" ? form.projectId : null,
           labelId: form.labelId || null,
@@ -311,7 +342,7 @@ export default function IntegratedCalendar() {
                   <p className="mt-0.5 flex items-center gap-1 truncate text-[11px] text-gray-500"><Clock size={10} className="shrink-0" />{dayjs(event.startDate).format("M/D")} · {getEventTime(event)}</p>
                   {rightPanelMode === "detailed" && <><p className="mt-0.5 truncate text-[10px] text-gray-400">{getEventScopeLabel(event.scope, event.projectId, projects)} · {getEventLabel(event)}</p>{event.description && <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-gray-500">{event.description}</p>}</>}
                 </div>
-                <button type="button" onClick={(clickEvent) => { clickEvent.stopPropagation(); void remove(event); }} aria-label={`${event.title} 삭제`} className="shrink-0 text-gray-300 opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100"><X size={12} /></button>
+                {!event.sourceTaskId && <button type="button" onClick={(clickEvent) => { clickEvent.stopPropagation(); void remove(event); }} aria-label={`${event.title} 삭제`} className="shrink-0 text-gray-300 opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100"><X size={12} /></button>}
               </div>
             ))}
           </div>
@@ -635,9 +666,17 @@ function EventFormModal({ form, projects, labels, saving, onChange, onSubmit, on
         </label>
         <input required placeholder="일정 제목" value={form.title} onChange={(event) => onChange({ title: event.target.value })} className="w-full rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
         <div className="grid grid-cols-2 gap-2">
-          <input required type="datetime-local" value={form.startDate} onChange={(event) => onChange({ startDate: event.target.value })} className="min-w-0 w-full rounded-md border border-gray-200 bg-white px-2.5 py-2.5 text-xs text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
-          <input required type="datetime-local" value={form.endDate} onChange={(event) => onChange({ endDate: event.target.value })} className="min-w-0 w-full rounded-md border border-gray-200 bg-white px-2.5 py-2.5 text-xs text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
+          <label className="text-xs font-semibold text-gray-600">{form.allDay ? "시작 날짜" : "시작"}<input required type={form.allDay ? "date" : "datetime-local"} value={form.startDate} onChange={(event) => onChange({ startDate: event.target.value })} className="mt-1 min-w-0 w-full rounded-md border border-gray-200 bg-white px-2.5 py-2.5 text-xs text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100" /></label>
+          <label className="text-xs font-semibold text-gray-600">{form.allDay ? "종료 날짜" : "종료"}<input required type={form.allDay ? "date" : "datetime-local"} value={form.endDate} onChange={(event) => onChange({ endDate: event.target.value })} className="mt-1 min-w-0 w-full rounded-md border border-gray-200 bg-white px-2.5 py-2.5 text-xs text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100" /></label>
         </div>
+        <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-700"><input type="checkbox" checked={form.allDay} onChange={(event) => {
+          const allDay = event.target.checked;
+          onChange({
+            allDay,
+            startDate: allDay ? form.startDate.slice(0, 10) : `${form.startDate.slice(0, 10)}T09:00`,
+            endDate: allDay ? form.endDate.slice(0, 10) : `${form.endDate.slice(0, 10)}T10:00`,
+          });
+        }} className="h-4 w-4 accent-indigo-600" />종일 일정 (시간 선택 안 함)</label>
         <textarea placeholder="설명 (선택)" value={form.description} onChange={(event) => onChange({ description: event.target.value })} className="min-h-20 w-full resize-y rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100" />
         <button type="submit" disabled={saving} className="w-full rounded-xl bg-indigo-600 py-2 text-sm font-semibold text-white">
           {saving ? "저장 중..." : "저장"}

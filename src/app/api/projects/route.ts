@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const userId = session.user.id;
     const canViewAll = await assertAdmin(userId);
     const canViewSpace = !canViewAll && await assertSpaceManager(userId);
+    const spaceMemberships = canViewAll || canViewSpace
+      ? []
+      : await withDbReadRetry(() => prisma.spaceMember.findMany({ where: { userId }, select: { spaceId: true } }));
+    const spaceIds = spaceMemberships.map((membership) => membership.spaceId);
     const rawLimit = request.nextUrl.searchParams.get("limit");
     const requestedLimit = rawLimit ? Number(rawLimit) : 30;
     const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 30, 1), 50);
@@ -32,7 +36,13 @@ export async function GET(request: NextRequest) {
             ? {}
             : canViewSpace
               ? { spaceId: DEFAULT_SPACE_ID }
-              : { OR: [{ members: { some: { userId } } }, { ownerId: userId }] },
+              : {
+                  OR: [
+                    { members: { some: { userId } } },
+                    { ownerId: userId },
+                    ...(spaceIds.length ? [{ isArchived: true, accessScope: "SPACE", spaceId: { in: spaceIds } }] : []),
+                  ],
+                },
           select: {
             id: true,
             name: true,
@@ -44,6 +54,8 @@ export async function GET(request: NextRequest) {
             color: true,
             order: true,
             sharingMode: true,
+            isArchived: true,
+            accessScope: true,
             createdAt: true,
             updatedAt: true,
             members: { select: { user: { select: { id: true, name: true, image: true } } } },

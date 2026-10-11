@@ -14,11 +14,12 @@ export default async function PublicArchivePage({
     () =>
       prisma.archivePost.findUnique({
         where: { shareToken: slug },
+        include: { project: { select: { isArchived: true, accessScope: true } } },
       }),
     { operation: `public-archive:get:${slug}` }
   );
 
-  if (!post || post.visibility !== "EXTERNAL" || !post.shareEnabled) notFound();
+  if (!post || post.visibility !== "EXTERNAL" || !post.shareEnabled || (post.project.isArchived && post.project.accessScope === "MEMBERS")) notFound();
 
   return (
     <div className="min-h-screen bg-white">

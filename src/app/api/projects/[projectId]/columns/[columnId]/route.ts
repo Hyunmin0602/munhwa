@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withDbRetry } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
-import { assertProjectAccess, assertProjectOwner, canManageProject } from "@/lib/server-utils";
+import { assertProjectAccess, assertProjectEditor, assertProjectOwner, canManageProject } from "@/lib/server-utils";
 import { booleanValue, InputValidationError, integratedKanbanStatus, readJsonObject } from "@/lib/validation";
 
 function logApiError(action: string, error: unknown) {
@@ -32,6 +32,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const userId = session.user.id;
 
     if (!(await assertProjectAccess(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!(await assertProjectEditor(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
     if (!canManageColumns) return NextResponse.json({ error: "사업 관리자 또는 공간 관리자만 칸반 열을 수정할 수 있습니다." }, { status: 403 });
 
@@ -89,6 +90,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     const session = await auth();
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
+    if (!(await assertProjectEditor(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
     if (!canManageColumns) return NextResponse.json({ error: "사업 관리자 또는 공간 관리자만 칸반 열을 삭제할 수 있습니다." }, { status: 403 });

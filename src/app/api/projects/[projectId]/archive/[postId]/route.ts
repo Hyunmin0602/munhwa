@@ -8,8 +8,9 @@ import { del } from "@vercel/blob";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
 import { normalizeArchiveVisibility } from "@/lib/archive-visibility";
 import { partitionArchiveImageUrls } from "@/lib/archive-images";
-import { assertProjectMember, recordActivity } from "@/lib/server-utils";
+import { assertProjectEditor, assertProjectMember, recordActivity } from "@/lib/server-utils";
 import { apiError, forbidden, internalError, notFound, unauthorized } from "@/lib/api-error";
+import { createInAppNotification } from "@/lib/notifications";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId/archive/:postId] ${action} failed`, error);
@@ -50,7 +51,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!session?.user?.id) return unauthorized();
     const userId = session.user.id;
 
-    if (!(await assertProjectMember(userId, projectId))) return forbidden();
+    if (!(await assertProjectEditor(userId, projectId))) return forbidden();
 
     const existing = await withDbReadRetry(() => prisma.archivePost.findFirst({
       where: { id: postId, projectId },
@@ -96,6 +97,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       })
     );
     await recordActivity({ actorId: userId, projectId, type: "문서", action: "수정", entityType: "ARCHIVE_POST", entityId: post.id, title: post.title, beforeData: { title: existing.title, content: existing.content, kind: existing.kind, visibility: existing.visibility }, afterData: { title: post.title, content: post.content, kind: post.kind, visibility: post.visibility } });
+    if (post.kind === "MEETING" && post.visibility !== "PRIVATE" && (existing.kind !== "MEETING" || existing.visibility === "PRIVATE")) {
+      const members = await withDbReadRetry(() => prisma.projectMember.findMany({ where: { projectId, userId: { not: userId } }, select: { userId: true } }));
+      const project = await withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { name: true, ownerId: true } }));
+      if (project) {
+        const recipients = [...new Set([...members.map((member) => member.userId), project.ownerId].filter((id): id is string => !!id && id !== userId))];
+        await Promise.all(recipients.map((recipientId) => createInAppNotification({ recipientId, actorId: userId, category: "meeting", title: "회의록이 공유되었습니다.", body: `${project.name} · ${post.title}`, href: `/dashboard/projects/${projectId}/archive/${post.id}` })));
+      }
+    }
     return NextResponse.json(post);
   } catch (error) {
     logApiError("PATCH", error);
@@ -110,7 +119,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     if (!session?.user?.id) return unauthorized();
     const userId = session.user.id;
 
-    if (!(await assertProjectMember(userId, projectId))) return forbidden();
+    if (!(await assertProjectEditor(userId, projectId))) return forbidden();
 
     const existing = await withDbReadRetry(() => prisma.archivePost.findFirst({ where: { id: postId, projectId } }));
     if (!existing) return notFound("문서를 찾을 수 없습니다.");

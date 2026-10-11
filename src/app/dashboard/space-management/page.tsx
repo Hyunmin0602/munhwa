@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
@@ -11,7 +11,7 @@ type User = { id: string; name: string | null; email: string; role?: string };
 type Member = { id: string; role: string; joinedAt: string; user: User & { cohort: { id: string; name: string } | null; projects: Array<{ role: string; project: { id: string; name: string } }> } };
 type RegistrationRequest = { id: string; name: string | null; email: string; createdAt: string; cohort: { name: string } | null };
 type ProjectMember = { id: string; role: string; user: User };
-type Project = { id: string; name: string; description: string | null; status: string; updatedAt: string; owner: User | null; members: ProjectMember[]; _count: { members: number; archivePosts: number; events: number; columns: number } };
+type Project = { id: string; name: string; description: string | null; status: string; isArchived: boolean; accessScope: "SPACE" | "MEMBERS"; updatedAt: string; owner: User | null; members: ProjectMember[]; _count: { members: number; archivePosts: number; events: number; columns: number } };
 type UserSearchResult = { id: string; name: string | null; email: string };
 type Activity = { id: string; type: string; action: string; title: string; timestamp: string; beforeData?: string | null; afterData?: string | null; project: { id: string; name: string }; actor: User };
 
@@ -34,6 +34,8 @@ export default function SpaceManagementPage() {
   const [logType, setLogType] = useState("");
   const [logQuery, setLogQuery] = useState("");
   const [query, setQuery] = useState("");
+  const [memberSearchQuery, setMemberSearchQuery] = useState("");
+  const memberRequestId = useRef(0);
   const [memberAddProject, setMemberAddProject] = useState<Project | null>(null);
   const [memberAddQuery, setMemberAddQuery] = useState("");
   const [memberAddResults, setMemberAddResults] = useState<UserSearchResult[]>([]);
@@ -56,13 +58,15 @@ export default function SpaceManagementPage() {
   }, []);
 
   const loadMembers = useCallback(async () => {
-    const url = query.trim() ? `/api/space-management/members?query=${encodeURIComponent(query.trim())}` : "/api/space-management/members";
+    const requestId = ++memberRequestId.current;
+    const url = memberSearchQuery.trim() ? `/api/space-management/members?query=${encodeURIComponent(memberSearchQuery.trim())}` : "/api/space-management/members";
     const response = await apiFetch(url, undefined, { showGlobalError: false });
     if (!response.ok) throw new Error(await errorMessage(response, "구성원 목록을 불러오지 못했습니다."));
     const payload = await response.json();
+    if (requestId !== memberRequestId.current) return;
     setMembers(Array.isArray(payload.items) ? payload.items : []);
     setPendingRegistrations(Array.isArray(payload.pendingRegistrations) ? payload.pendingRegistrations : []);
-  }, [query]);
+  }, [memberSearchQuery]);
 
   const loadProjects = useCallback(async () => {
     const response = await apiFetch("/api/space-management/projects", undefined, { showGlobalError: false });
@@ -113,6 +117,11 @@ export default function SpaceManagementPage() {
     const timer = window.setTimeout(() => { void load(); }, 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setMemberSearchQuery(query), 250);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   const run = async (key: string, action: () => Promise<void>) => {
     setWorking(key); setError(null); setNotice(null);
@@ -166,6 +175,27 @@ export default function SpaceManagementPage() {
     const response = await apiFetch(`/api/projects/${project.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: name.trim() }) }, { showGlobalError: false });
     if (!response.ok) throw new Error(await errorMessage(response, "사업을 변경하지 못했습니다."));
     await loadProjects(); setNotice("사업 이름을 변경했습니다.");
+  });
+
+  const toggleProjectArchive = (project: Project) => run(`archive-${project.id}`, async () => {
+    const isArchived = !project.isArchived;
+    const response = await apiFetch(`/api/projects/${project.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isArchived }),
+    }, { showGlobalError: false });
+    if (!response.ok) throw new Error(await errorMessage(response, "사업 기록 설정을 변경하지 못했습니다."));
+    await loadProjects(); setNotice(isArchived ? "사업을 기록용으로 보관했습니다." : "사업을 진행 중으로 복원했습니다.");
+  });
+
+  const updateProjectAccessScope = (project: Project, accessScope: "SPACE" | "MEMBERS") => run(`scope-${project.id}`, async () => {
+    const response = await apiFetch(`/api/projects/${project.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessScope }),
+    }, { showGlobalError: false });
+    if (!response.ok) throw new Error(await errorMessage(response, "사업 열람 범위를 변경하지 못했습니다."));
+    await loadProjects(); setNotice(accessScope === "SPACE" ? "Space 구성원 전체가 열람할 수 있습니다." : "지정된 사업 구성원만 열람할 수 있습니다.");
   });
 
   const openProjectMemberModal = (project: Project) => {
@@ -234,7 +264,7 @@ export default function SpaceManagementPage() {
     <div className="mt-5 flex flex-col gap-5">
       <nav className="space-management-tabs flex gap-1 overflow-x-auto border-b border-slate-200" aria-label="공간 설정 메뉴">{tabs.map(([value, text]) => <button key={value} type="button" aria-pressed={tab === value} onClick={() => setTab(value)} className={`whitespace-nowrap border-b-2 border-transparent px-4 py-3 text-sm font-semibold ${tab === value ? "text-indigo-600" : "text-slate-500 hover:bg-slate-100 hover:text-slate-800"}`}>{text}</button>)}</nav>
       <section className="min-w-0">{error && <div className="mb-4 border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}{notice && <div className="mb-4 border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{notice}</div>}
-        {loading ? <div className="border border-slate-200 bg-white px-4 py-16 text-center text-sm text-slate-400">불러오는 중...</div> : <>
+        {loading && !(tab === "members" && members.length > 0) ? <div className="border border-slate-200 bg-white px-4 py-16 text-center text-sm text-slate-400">불러오는 중...</div> : <>
           {tab === "department" && <div className="space-y-4"><section className="border border-slate-200 bg-white"><div className="border-b border-slate-200 px-4 py-3"><h2 className="text-sm font-bold text-slate-900">부서 기본 설정</h2><p className="mt-1 text-xs text-slate-500">좌측 상단 부서명과 회원가입 기수에 반영됩니다.</p></div><div className="flex flex-col gap-2 px-4 py-3 sm:flex-row"><input value={nameDraft} onChange={(event) => setNameDraft(event.target.value)} className="min-w-0 flex-1 border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500" /><button type="button" onClick={() => void saveSpaceName()} disabled={working === "space-name"} className="border border-indigo-600 bg-indigo-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">저장</button></div></section><section className="border border-slate-200 bg-white"><div className="flex items-center justify-between border-b border-slate-200 px-4 py-3"><div><h2 className="text-sm font-bold text-slate-900">기수 설정</h2><p className="mt-1 text-xs text-slate-500">회원가입 화면에는 활성 기수만 표시됩니다.</p></div><button type="button" onClick={() => void addCohort()} className="border border-slate-300 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">기수 추가</button></div><div className="divide-y divide-slate-100">{cohorts.map((cohort) => <div key={cohort.id} className="grid gap-2 px-4 py-2.5 sm:grid-cols-[minmax(0,1fr)_6rem_5rem] sm:items-center"><span className="text-sm text-slate-800">{cohort.name}</span><span className="text-xs text-slate-400">가입자 {cohort._count.users}명</span><button type="button" onClick={() => void toggleCohort(cohort)} disabled={working === `cohort-${cohort.id}`} className={`px-2 py-1 text-xs font-semibold ${cohort.isActive ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{cohort.isActive ? "활성" : "비활성"}</button></div>)}{cohorts.length === 0 && <p className="px-4 py-8 text-center text-sm text-slate-400">등록된 기수가 없습니다.</p>}</div></section></div>}
           {tab === "members" && <div className="space-y-4">
             <section className="border border-amber-200 bg-white">
@@ -243,7 +273,7 @@ export default function SpaceManagementPage() {
             </section>
             <section className="border border-slate-200 bg-white"><div className="flex items-center gap-3 border-b border-slate-200 px-3 py-2"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="이름 또는 이메일 검색" className="min-w-0 flex-1 bg-transparent text-sm outline-none" /><span className="text-xs tabular-nums text-slate-400">{members.length}명</span></div><div className="overflow-x-auto"><div className="grid min-w-[48rem] grid-cols-[minmax(15rem,1fr)_8rem_10rem_12rem] bg-slate-50 px-4 py-2 text-[11px] font-semibold text-slate-400"><span>기본 정보</span><span>기수</span><span>역할</span><span>참여 사업</span></div>{members.map((member) => <div key={member.id} className="grid min-w-[48rem] grid-cols-[minmax(15rem,1fr)_8rem_10rem_12rem] items-center border-t border-slate-100 px-4 py-2.5"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{displayName(member.user)}</p><p className="truncate text-xs text-slate-500">{member.user.email}</p></div><span className="truncate text-xs text-slate-500">{member.user.cohort?.name ?? "미지정"}</span><select value={member.role === "space_manager" ? "space_manager" : "member"} onChange={(event) => void updateRole(member, event.target.value as "member" | "space_manager")} disabled={working === `member-${member.user.id}`} className="mr-3 rounded border border-slate-200 px-2 py-1.5 text-xs"><option value="member">멤버</option><option value="space_manager">관리자</option></select><span className="truncate text-xs text-slate-600">{member.user.projects.length ? member.user.projects.map((item) => item.project.name).join(", ") : "참여 사업 없음"}</span></div>)}</div></section>
           </div>}
-          {tab === "projects" && <section className="space-y-3">{projects.map((project) => <article key={project.id} className="border border-slate-200 bg-white"><div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3"><div className="min-w-0"><h2 className="truncate text-sm font-bold text-slate-900">{project.name}</h2><p className="mt-1 text-xs text-slate-500">관리자 {displayName(project.owner)} · 구성원 {project._count.members}명 · 문서 {project._count.archivePosts}개 · 일정 {project._count.events}개</p></div><div className="flex gap-1"><button type="button" onClick={() => void renameProject(project)} className="border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600">변경</button><button type="button" onClick={() => void deleteProject(project)} disabled={working === `delete-${project.id}`} className="border border-rose-200 px-2.5 py-1.5 text-xs text-rose-600">삭제</button></div></div><div className="flex flex-wrap items-center gap-2 px-4 py-2.5"><span className="text-xs font-semibold text-slate-500">사업 구성원</span>{project.members.map((member) => <span key={member.id} className="inline-flex items-center gap-1 border border-slate-200 px-2 py-1 text-xs text-slate-600">{displayName(member.user)}<button type="button" onClick={() => void removeProjectMember(project, member)} className="text-rose-500" aria-label={`${displayName(member.user)} 제거`}>×</button></span>)}<button type="button" onClick={() => openProjectMemberModal(project)} className="border border-dashed border-indigo-300 px-2 py-1 text-xs font-semibold text-indigo-600">+ 인원 추가</button></div></article>)}{projects.length === 0 && <div className="border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-400">등록된 사업이 없습니다.</div>}</section>}
+          {tab === "projects" && <section className="space-y-3">{projects.map((project) => <article key={project.id} className="border border-slate-200 bg-white"><div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3"><div className="min-w-0"><div className="flex items-center gap-2"><h2 className="truncate text-sm font-bold text-slate-900">{project.name}</h2>{project.isArchived && <span className="shrink-0 bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">기록용</span>}</div><p className="mt-1 text-xs text-slate-500">관리자 {displayName(project.owner)} · 구성원 {project._count.members}명 · 문서 {project._count.archivePosts}개 · 일정 {project._count.events}개</p></div><div className="flex flex-wrap gap-1"><button type="button" onClick={() => void toggleProjectArchive(project)} disabled={working === `archive-${project.id}`} className="border border-indigo-200 px-2.5 py-1.5 text-xs font-semibold text-indigo-700">{project.isArchived ? "진행 사업으로 복원" : "기록용으로 보관"}</button><button type="button" onClick={() => void renameProject(project)} className="border border-slate-200 px-2.5 py-1.5 text-xs text-slate-600">이름 변경</button><button type="button" onClick={() => void deleteProject(project)} disabled={project.isArchived || working === `delete-${project.id}`} className="border border-rose-200 px-2.5 py-1.5 text-xs text-rose-600 disabled:opacity-40">삭제</button></div></div>{project.isArchived && <div className="flex flex-wrap items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-2.5"><label className="text-xs font-semibold text-slate-600" htmlFor={`project-access-${project.id}`}>열람 범위</label><select id={`project-access-${project.id}`} value={project.accessScope} onChange={(event) => void updateProjectAccessScope(project, event.target.value as "SPACE" | "MEMBERS")} disabled={working === `scope-${project.id}`} className="border border-slate-200 bg-white px-2 py-1.5 text-xs"><option value="SPACE">Space 구성원 전체</option><option value="MEMBERS">지정된 사업 구성원만</option></select><span className="text-xs text-slate-500">기록용 사업은 내용을 수정할 수 없습니다.</span></div>}<div className="flex flex-wrap items-center gap-2 px-4 py-2.5"><span className="text-xs font-semibold text-slate-500">사업 구성원</span>{project.members.map((member) => <span key={member.id} className="inline-flex items-center gap-1 border border-slate-200 px-2 py-1 text-xs text-slate-600">{displayName(member.user)}<button type="button" onClick={() => void removeProjectMember(project, member)} className="text-rose-500" aria-label={`${displayName(member.user)} 제거`}>×</button></span>)}<button type="button" onClick={() => openProjectMemberModal(project)} className="border border-dashed border-indigo-300 px-2 py-1 text-xs font-semibold text-indigo-600">+ 인원 추가</button></div></article>)}{projects.length === 0 && <div className="border border-slate-200 bg-white px-4 py-12 text-center text-sm text-slate-400">등록된 사업이 없습니다.</div>}</section>}
           {tab === "logs" && <section className="border border-slate-200 bg-white"><div className="flex flex-wrap gap-2 border-b border-slate-200 p-3"><input value={logQuery} onChange={(event) => setLogQuery(event.target.value)} placeholder="항목, 사업, 실행자 검색" className="min-w-48 flex-1 border border-slate-200 px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500" /><select value={logType} onChange={(event) => setLogType(event.target.value)} className="border border-slate-200 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-indigo-500"><option value="">전체 유형</option><option value="일정">일정</option><option value="칸반">칸반</option><option value="문서">문서</option></select><span className="self-center text-xs tabular-nums text-slate-400">{logs.length}건</span></div><div className="grid grid-cols-[5rem_4rem_minmax(0,1fr)_8rem_9rem] bg-slate-50 px-4 py-2 text-[11px] font-semibold text-slate-400"><span>유형</span><span>동작</span><span>항목</span><span>사업</span><span>실행자</span></div><div className="divide-y divide-slate-100">{logs.map((log) => <div key={log.id} className="grid grid-cols-[5rem_4rem_minmax(0,1fr)_8rem_9rem] items-center px-4 py-2.5 text-xs"><span className="font-semibold text-slate-600">{log.type}</span><span className="text-slate-500">{log.action}</span><span className="truncate text-slate-800">{log.title}</span><span className="truncate text-slate-500">{log.project.name}</span><span className="truncate text-slate-500">{displayName(log.actor)}</span></div>)}{logs.length === 0 && <p className="px-4 py-12 text-center text-sm text-slate-400">조건에 맞는 활동 로그가 없습니다.</p>}</div>{logNextCursor && <div className="border-t border-slate-100 p-3 text-center"><button type="button" onClick={() => void loadMoreLogs()} disabled={loadingMoreLogs} className="border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-50">{loadingMoreLogs ? "불러오는 중..." : "더 보기"}</button></div>}</section>}
         </>}
       </section>

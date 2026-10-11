@@ -20,7 +20,7 @@ export const proxy = auth(async (req) => {
 
   if (!req.nextUrl.pathname.startsWith("/dashboard")) return NextResponse.next();
 
-  if (!req.auth?.user) {
+  if (!req.auth?.user?.id) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = "/login";
     loginUrl.searchParams.set("callbackUrl", req.nextUrl.pathname);

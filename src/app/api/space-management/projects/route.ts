@@ -18,6 +18,8 @@ export async function GET() {
         name: true,
         description: true,
         status: true,
+        isArchived: true,
+        accessScope: true,
         updatedAt: true,
         owner: { select: { id: true, name: true, email: true } },
         members: { orderBy: { joinedAt: "asc" }, select: { id: true, role: true, user: { select: { id: true, name: true, email: true } } } },

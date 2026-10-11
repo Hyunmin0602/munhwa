@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { assertProjectMember, recordActivity } from "@/lib/server-utils";
+import { assertProjectEditor, assertProjectMember, recordActivity } from "@/lib/server-utils";
 
 type Params = { params: Promise<{ projectId: string }> };
 
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
-  if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await assertProjectEditor(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const { title } = await req.json();
   if (!title) return NextResponse.json({ error: "title required" }, { status: 400 });

@@ -18,6 +18,8 @@ import {
   ListOrdered,
   ShieldCheck,
   Users,
+  UserRound,
+  Bell,
 } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 
@@ -26,6 +28,8 @@ interface Project {
   name: string;
   description: string | null;
   color: string;
+  isArchived?: boolean;
+  accessScope?: "SPACE" | "MEMBERS";
 }
 
 interface SidebarProps {
@@ -45,6 +49,7 @@ function SidebarContent({ projects, spaceName, onNewProject, onEditProject, onMo
   const [projectQuery, setProjectQuery] = useState("");
   const [isSpaceAdmin, setIsSpaceAdmin] = useState(false);
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const visibleProjects = projects.filter((project) => !projectQuery.trim() || project.name.toLowerCase().includes(projectQuery.trim().toLowerCase()));
 
   useEffect(() => {
@@ -57,6 +62,22 @@ function SidebarContent({ projects, spaceName, onNewProject, onEditProject, onMo
         if (!cancelled) setIsSpaceAdmin(false);
       });
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const response = await apiFetch("/api/notifications?limit=1", undefined, { showGlobalError: false });
+        if (response.ok) {
+          const data = await response.json();
+          if (!cancelled) setUnreadNotifications(Number(data.unreadCount) || 0);
+        }
+      } catch { /* Notification counts are a convenience; navigation stays available offline. */ }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 60_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
 
   useEffect(() => {
@@ -95,6 +116,16 @@ function SidebarContent({ projects, spaceName, onNewProject, onEditProject, onMo
             <X size={18} />
           </button>
         )}
+      </div>
+
+      <div className="border-b border-gray-100 px-3 py-3">
+        <Link href="/dashboard/notifications" onClick={onClose} className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/notifications" ? "bg-indigo-50 font-semibold text-indigo-700" : "text-gray-700 hover:bg-gray-100"}`}>
+          <Bell size={16} />알림함
+          {unreadNotifications > 0 && <span className="ml-auto min-w-5 rounded-full bg-rose-100 px-1.5 py-0.5 text-center text-[10px] font-bold text-rose-700">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>}
+        </Link>
+        <Link href="/dashboard/my-account" onClick={onClose} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/my-account" ? "bg-indigo-50 font-semibold text-indigo-700" : "text-gray-700 hover:bg-gray-100"}`}>
+          <UserRound size={16} />내 정보
+        </Link>
       </div>
 
       {/* Navigation */}
@@ -170,7 +201,7 @@ function SidebarContent({ projects, spaceName, onNewProject, onEditProject, onMo
                     className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-sm"
                   >
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
-                    <span className="truncate flex-1">{p.name}</span>
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5"><span className="truncate">{p.name}</span>{p.isArchived && <span className="shrink-0 bg-slate-100 px-1 py-0.5 text-[9px] font-semibold text-slate-500">기록</span>}</span>
                     {isActive && <ChevronRight size={12} className="flex-shrink-0" />}
                   </Link>
                   <button

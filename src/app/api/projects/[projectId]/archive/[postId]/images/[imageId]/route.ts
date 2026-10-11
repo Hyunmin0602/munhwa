@@ -5,7 +5,7 @@ import { del, get } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { assertProjectMember, canManageProject } from "@/lib/server-utils";
+import { assertProjectEditor, assertProjectMember, canManageProject } from "@/lib/server-utils";
 
 export const runtime = "nodejs";
 
@@ -33,6 +33,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   const { projectId, postId, imageId } = await params;
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await assertProjectEditor(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!(await assertProjectMember(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   const [image, canManage] = await withDbRetry(() => Promise.all([

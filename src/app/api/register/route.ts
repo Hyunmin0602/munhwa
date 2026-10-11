@@ -11,6 +11,9 @@ export async function POST(req: NextRequest) {
     const data = await readJsonObject(req);
     const name = requiredText(data.name, "이름", 50);
     const email = normalizeEmail(data.email);
+    if (!email.endsWith(".com")) {
+      return NextResponse.json({ error: "이메일 주소는 .com으로 끝나야 합니다." }, { status: 400 });
+    }
     const plainPassword = password(data.password);
     const cohortId = requiredText(data.cohortId, "기수", 64);
 

@@ -6,7 +6,7 @@ import { put, del } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbRetry } from "@/lib/db-retry";
-import { assertProjectMember, canManageProject } from "@/lib/server-utils";
+import { assertProjectEditor, assertProjectMember, canManageProject } from "@/lib/server-utils";
 import { archiveImageExtension, hasValidArchiveImageSignature, isArchiveImageMimeType, MAX_ARCHIVE_IMAGE_BYTES } from "@/lib/archive-images";
 
 export const runtime = "nodejs";
@@ -40,7 +40,9 @@ export async function GET(_: NextRequest, { params }: Params) {
   const { projectId, postId } = await params;
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await canEditArchiveImage(session.user.id, projectId, postId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await assertProjectMember(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const post = await withDbRetry(() => prisma.archivePost.findFirst({ where: { id: postId, projectId }, select: { id: true } }));
+  if (!post) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const images = await withDbRetry(() => prisma.archiveImage.findMany({
     where: { postId },
@@ -57,6 +59,7 @@ export async function POST(request: NextRequest, { params }: Params) {
   const { projectId, postId } = await params;
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  if (!(await assertProjectEditor(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!(await canEditArchiveImage(session.user.id, projectId, postId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   const formData = await request.formData();
   const file = formData.get("file");

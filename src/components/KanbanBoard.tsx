@@ -52,6 +52,7 @@ interface Column {
 interface Member {
   id: string;
   name: string | null;
+  email?: string;
 }
 
 interface Props {
@@ -380,6 +381,7 @@ export default function KanbanBoard({ projectId }: Props) {
   const [integratedSetupError, setIntegratedSetupError] = useState("");
   const newColRef = useRef<HTMLInputElement>(null);
   const dragSnapshot = useRef<Column[] | null>(null);
+  const notificationTaskOpened = useRef(false);
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -398,6 +400,15 @@ export default function KanbanBoard({ projectId }: Props) {
         if (cancelled) return;
         const loadedColumns = data.columns ?? [];
         setColumns(loadedColumns);
+        if (!notificationTaskOpened.current) {
+          const taskId = new URLSearchParams(window.location.search).get("task");
+          const matchingColumn = taskId ? loadedColumns.find((column: Column) => column.tasks.some((task: Task) => task.id === taskId)) : null;
+          const matchingTask = taskId && matchingColumn?.tasks.find((task: Task) => task.id === taskId);
+          if (matchingTask && matchingColumn) {
+            setSelectedTask({ task: matchingTask, colId: matchingColumn.id });
+            notificationTaskOpened.current = true;
+          }
+        }
         const projectMembers = (data.members ?? []) as Array<{ role: string; user: Member }>;
         setMembers(projectMembers.map((m) => m.user));
         setCanManageColumns(Boolean(data.permissions?.canManageColumns) || projectMembers.some((m) => m.role === "owner" && m.user.id === session?.user?.id));

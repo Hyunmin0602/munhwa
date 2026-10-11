@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { withDbRetry } from "@/lib/db-retry";
+import { withDbReadRetry, withDbRetry } from "@/lib/db-retry";
 import { DEFAULT_SPACE_ID, assertAdmin, assertSpaceManager } from "@/lib/server-utils";
 
 const ITEM_TYPES = ["task", "event", "archive", "meeting"] as const;
@@ -109,6 +109,10 @@ export async function GET(request: NextRequest) {
   const cursor: Cursor = activeType && rawCursor[activeType]
     ? { [activeType]: rawCursor[activeType] }
     : {};
+  const spaceMemberships = canViewAll || canViewSpace
+    ? []
+    : await withDbReadRetry(() => prisma.spaceMember.findMany({ where: { userId }, select: { spaceId: true } }));
+  const spaceIds = spaceMemberships.map((membership) => membership.spaceId);
 
   const projectRecords = await withDbRetry(() =>
     prisma.project.findMany({
@@ -117,7 +121,13 @@ export async function GET(request: NextRequest) {
           ? {}
           : canViewSpace
             ? { spaceId: DEFAULT_SPACE_ID }
-            : { members: { some: { userId } } }),
+            : {
+                OR: [
+                  { members: { some: { userId } } },
+                  { ownerId: userId },
+                  ...(spaceIds.length ? [{ isArchived: true, accessScope: "SPACE", spaceId: { in: spaceIds } }] : []),
+                ],
+              }),
         ...(requestedProjectIds.length ? { id: { in: requestedProjectIds } } : {}),
         ...(status.length ? { status: { in: status } } : {}),
       },
@@ -161,14 +171,14 @@ export async function GET(request: NextRequest) {
         where: {
           projectId: { in: projectIds },
           kind: { not: "MEETING" },
-          ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+          ...(canViewArchiveAll ? {} : { OR: [{ project: { isArchived: true, accessScope: "SPACE" } }, { authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
         },
       }) : 0,
       needsMeetings ? prisma.archivePost.count({
         where: {
           projectId: { in: projectIds },
           kind: "MEETING",
-          ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+          ...(canViewArchiveAll ? {} : { OR: [{ project: { isArchived: true, accessScope: "SPACE" } }, { authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
         },
       }) : 0,
       needsTasks ? prisma.kanbanColumn.findMany({
@@ -219,7 +229,7 @@ export async function GET(request: NextRequest) {
         where: {
           projectId: { in: projectIds },
           kind: { not: "MEETING" },
-          ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+          ...(canViewArchiveAll ? {} : { OR: [{ project: { isArchived: true, accessScope: "SPACE" } }, { authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
         },
         select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -240,7 +250,7 @@ export async function GET(request: NextRequest) {
       prisma.archivePost.findMany({
         where: {
           projectId: { in: projectIds },
-          ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+          ...(canViewArchiveAll ? {} : { OR: [{ project: { isArchived: true, accessScope: "SPACE" } }, { authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
         },
         select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },
         orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
@@ -276,7 +286,7 @@ export async function GET(request: NextRequest) {
             where: {
               projectId: { in: projectIds },
               kind: { not: "MEETING" },
-              ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+              ...(canViewArchiveAll ? {} : { OR: [{ project: { isArchived: true, accessScope: "SPACE" } }, { authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
               ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
             },
             select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },
@@ -291,7 +301,7 @@ export async function GET(request: NextRequest) {
             where: {
               projectId: { in: projectIds },
               kind: "MEETING",
-              ...(canViewArchiveAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
+              ...(canViewArchiveAll ? {} : { OR: [{ project: { isArchived: true, accessScope: "SPACE" } }, { authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
               ...(recentRange ? { updatedAt: { gte: recentRange.start, lte: recentRange.end } } : {}),
             },
             select: { id: true, title: true, kind: true, visibility: true, updatedAt: true, projectId: true, author: { select: { name: true } } },

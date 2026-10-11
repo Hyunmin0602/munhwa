@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect, type FormEvent } from "react";
 import dayjs from "dayjs";
+import { useRouter } from "next/navigation";
 import "dayjs/locale/ko";
-import { ChevronLeft, ChevronRight, Plus, X, Clock, CalendarDays, Trash2, Tags, PencilLine, Trash, AlignLeft, List } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, X, Clock, CalendarDays, Trash2, Tags, PencilLine, Trash, AlignLeft, List, MessageCircle, Send } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
@@ -16,6 +17,9 @@ interface Event {
   endDate: string;
   allDay: boolean;
   color: string;
+  sourceTaskId?: string;
+  project?: { color: string } | null;
+  labelId?: string | null;
   label: { id: string; name: string; description: string | null; color: string } | null;
 }
 
@@ -29,11 +33,24 @@ interface Label {
   createdBy: string | null;
 }
 
+interface EventComment {
+  id: string;
+  content: string;
+  createdAt: string;
+  author: { id: string; name: string | null };
+}
+
 export default function ScheduleCalendar({ projectId }: { projectId: string }) {
+  const router = useRouter();
   const [current, setCurrent] = useState(dayjs());
   const [events, setEvents] = useState<Event[]>([]);
   const [labels, setLabels] = useState<Label[]>([]);
   const [showModal, setShowModal] = useState(false);
+  const [detailEvent, setDetailEvent] = useState<Event | null>(null);
+  const [comments, setComments] = useState<EventComment[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentSaving, setCommentSaving] = useState(false);
   const [showLabelModal, setShowLabelModal] = useState(false);
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [editingEventColor, setEditingEventColor] = useState<string | null>(null);
@@ -64,6 +81,12 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     let cancelled = false;
+    const refreshEvents = async () => {
+      const response = await apiFetch(`/api/projects/${projectId}/events`);
+      if (!response.ok) throw new Error("일정 조회 실패");
+      const eventData = await response.json();
+      if (!cancelled) setEvents(Array.isArray(eventData) ? eventData : []);
+    };
     (async () => {
       setError(null);
       try {
@@ -82,7 +105,17 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
         if (!cancelled) setError("일정을 불러오지 못했습니다.");
       }
     })();
-    return () => { cancelled = true; };
+    const handleVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshEvents().catch(() => { if (!cancelled) setError("일정을 새로 불러오지 못했습니다."); });
+    };
+    window.addEventListener("focus", handleVisible);
+    document.addEventListener("visibilitychange", handleVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", handleVisible);
+      document.removeEventListener("visibilitychange", handleVisible);
+    };
   }, [projectId, reloadKey]);
 
   const startDay = current.startOf("month").day();
@@ -170,17 +203,67 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
   };
 
   const openEditModal = (event: Event) => {
+    if (event.sourceTaskId) {
+      router.push(`/dashboard/projects/${projectId}/kanban`);
+      return;
+    }
     setEditingEventId(event.id);
     setEditingEventColor(event.color);
     setForm({
       title: event.title,
       description: event.description ?? "",
-      startDate: dayjs(event.startDate).format("YYYY-MM-DDTHH:mm"),
-      endDate: dayjs(event.endDate).format("YYYY-MM-DDTHH:mm"),
+      startDate: dayjs(event.startDate).format(event.allDay ? "YYYY-MM-DD" : "YYYY-MM-DDTHH:mm"),
+      endDate: dayjs(event.endDate).format(event.allDay ? "YYYY-MM-DD" : "YYYY-MM-DDTHH:mm"),
       allDay: event.allDay,
-      labelId: event.label?.id ?? "",
+      labelId: event.label?.id ?? event.labelId ?? "",
     });
     setShowModal(true);
+  };
+
+  const openEventDetail = async (event: Event) => {
+    setDetailEvent(event);
+    setComments([]);
+    setCommentText("");
+    setCommentsLoading(true);
+    try {
+      const response = await apiFetch(event.sourceTaskId
+        ? `/api/projects/${projectId}/tasks/${event.sourceTaskId}`
+        : `/api/projects/${projectId}/events/${event.id}/comments`);
+      if (!response.ok) throw new Error("코멘트를 불러오지 못했습니다.");
+      const payload = await response.json();
+      setComments(event.sourceTaskId ? payload.comments ?? [] : payload);
+    } catch {
+      setError("일정 코멘트를 불러오지 못했습니다.");
+    } finally {
+      setCommentsLoading(false);
+    }
+  };
+
+  const submitComment = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!detailEvent || !commentText.trim()) return;
+    setCommentSaving(true);
+    try {
+      const isTask = Boolean(detailEvent.sourceTaskId);
+      const response = await apiFetch(isTask
+        ? `/api/projects/${projectId}/tasks/${detailEvent.sourceTaskId}`
+        : `/api/projects/${projectId}/events/${detailEvent.id}/comments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(isTask ? { commentContent: commentText } : { content: commentText }),
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null);
+        throw new Error(payload?.error?.message ?? "코멘트를 저장하지 못했습니다.");
+      }
+      const savedComment = await response.json() as EventComment;
+      setComments((current) => [...current, savedComment]);
+      setCommentText("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "코멘트를 저장하지 못했습니다.");
+    } finally {
+      setCommentSaving(false);
+    }
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -195,17 +278,22 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           ...form,
+          startDate: new Date(form.allDay ? `${form.startDate}T00:00` : form.startDate).toISOString(),
+          endDate: new Date(form.allDay ? `${form.endDate}T00:00` : form.endDate).toISOString(),
           ...(editingEventId ? { color: editingEventColor ?? undefined } : {}),
           labelId: form.labelId || null,
         }),
         }
       );
-      if (!res.ok) throw new Error("일정 저장 실패");
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        throw new Error(payload?.error?.message ?? payload?.error ?? "일정 저장 실패");
+      }
       const ev = await res.json();
       setEvents((prev) => editingEventId ? prev.map((item) => item.id === ev.id ? ev : item) : [...prev, ev]);
       resetEventForm();
-    } catch {
-      setError("일정을 저장하지 못했습니다. 입력 내용을 확인한 뒤 다시 시도해주세요.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "일정을 저장하지 못했습니다. 입력 내용을 확인한 뒤 다시 시도해주세요.");
     } finally { setSaving(false); }
   };
 
@@ -265,7 +353,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
     }
   };
 
-  const getEventColor = (event: Event) => event.label?.color ?? event.color;
+  const getEventColor = (event: Event) => event.label?.color ?? event.project?.color ?? event.color;
   const getEventLabel = (event: Event) => event.label?.name ?? "라벨 없음";
   const getEventTime = (event: Event) => event.allDay ? "종일" : `${dayjs(event.startDate).format("HH:mm")}–${dayjs(event.endDate).format("HH:mm")}`;
 
@@ -331,7 +419,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                   <div className="mt-1 h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
                   <button
                     type="button"
-                    onClick={() => openEditModal(event)}
+                    onClick={() => void openEventDetail(event)}
                     className="min-w-0 flex-1 text-left"
                   >
                     <p className="truncate text-sm font-semibold text-gray-800">{event.title}</p>
@@ -339,7 +427,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                     {event.description && <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-gray-500">{event.description}</p>}
                     <p className="mt-1 text-[10px] text-gray-400">{getEventLabel(event)}</p>
                   </button>
-                  <button type="button" onClick={() => deleteEvent(event.id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500" aria-label={`${event.title} 삭제`}><Trash2 size={15} /></button>
+                  {!event.sourceTaskId && <button type="button" onClick={() => deleteEvent(event.id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500" aria-label={`${event.title} 삭제`}><Trash2 size={15} /></button>}
                 </div>
               ))}
             </div>
@@ -454,7 +542,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
               <button
                 key={`${segment.event.id}-${segment.weekIndex}-${segment.startCol}-${segment.endCol}`}
                 type="button"
-                onClick={(event) => { event.stopPropagation(); openEditModal(segment.event); }}
+                onClick={(event) => { event.stopPropagation(); void openEventDetail(segment.event); }}
                 title={`${segment.event.title} · ${getEventTime(segment.event)}`}
                 aria-label={`${segment.event.title}, ${getEventTime(segment.event)}`}
                 className="pointer-events-auto z-10 mx-1 flex h-6 min-w-0 items-center gap-1 overflow-hidden rounded-lg px-1.5 text-[10px] font-semibold leading-none text-white shadow-sm ring-1 ring-white/35"
@@ -519,7 +607,7 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                 {selectedDay ? "등록된 일정이 없습니다." : "이번 달 등록된 일정이 없습니다."}
               </p>
             ) : visibleRightPanelEvents.map((event) => (
-              <div key={event.id} onClick={() => openEditModal(event)} className="group flex cursor-pointer items-start gap-2 rounded-lg border border-gray-100 p-2.5 text-left transition-colors hover:bg-gray-50">
+              <div key={event.id} onClick={() => void openEventDetail(event)} className="group flex cursor-pointer items-start gap-2 rounded-lg border border-gray-100 p-2.5 text-left transition-colors hover:bg-gray-50">
                 <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold text-gray-900">{event.title}</p>
@@ -534,14 +622,14 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                     </>
                   )}
                 </div>
-                <button
+                {!event.sourceTaskId && <button
                   type="button"
                   onClick={(clickEvent) => { clickEvent.stopPropagation(); deleteEvent(event.id); }}
                   aria-label={`${event.title} 삭제`}
                   className="shrink-0 text-gray-300 opacity-0 transition-opacity hover:text-rose-500 group-hover:opacity-100"
                 >
                   <X size={12} />
-                </button>
+                </button>}
               </div>
             ))}
           </div>
@@ -557,6 +645,47 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
       </div>
 
       </div>
+
+      {detailEvent && (
+        <ModalFrame title={`${detailEvent.title} 일정 상세`} onClose={() => setDetailEvent(null)} className="max-w-xl p-5 sm:p-6">
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold text-indigo-600">{detailEvent.sourceTaskId ? "칸반 카드 · 마감일" : "사업 일정"} · {dayjs(detailEvent.startDate).format("YYYY년 M월 D일 (ddd)")} · {getEventTime(detailEvent)}</p>
+              <h2 className="mt-1 break-words text-lg font-bold text-slate-900">{detailEvent.title}</h2>
+              {detailEvent.description && <p className="mt-3 whitespace-pre-wrap text-sm leading-6 text-slate-600">{detailEvent.description}</p>}
+            </div>
+            <div className="flex shrink-0 items-center gap-1">
+              <button type="button" onClick={() => { setDetailEvent(null); openEditModal(detailEvent); }} className="rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50">{detailEvent.sourceTaskId ? "칸반에서 열기" : "수정"}</button>
+              <ModalCloseButton label="일정 상세 닫기" onClick={() => setDetailEvent(null)} />
+            </div>
+          </div>
+          <section className="mt-6 border-t border-slate-100 pt-4">
+            <div className="mb-3 flex items-center gap-2">
+              <MessageCircle size={16} className="text-indigo-600" />
+              <h3 className="text-sm font-bold text-slate-900">진행 코멘트</h3>
+              <span className="text-xs text-slate-400">{comments.length}</span>
+            </div>
+            <p className="mb-3 text-xs text-slate-500">고민, 장애물, 결정 사항이나 다음 행동을 기록해보세요.</p>
+            <div className="max-h-64 space-y-3 overflow-y-auto rounded-xl bg-slate-50 p-3">
+              {commentsLoading ? <p className="py-5 text-center text-xs text-slate-400">코멘트를 불러오는 중...</p>
+                : comments.length === 0 ? <p className="py-5 text-center text-xs text-slate-400">아직 코멘트가 없습니다.</p>
+                : comments.map((comment) => (
+                  <article key={comment.id} className="rounded-lg border border-slate-100 bg-white p-3">
+                    <div className="mb-1.5 flex items-center justify-between gap-3">
+                      <span className="text-xs font-semibold text-slate-700">{comment.author.name || "이름 없음"}</span>
+                      <time className="shrink-0 text-[10px] text-slate-400">{dayjs(comment.createdAt).format("M월 D일 HH:mm")}</time>
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-sm leading-5 text-slate-700">{comment.content}</p>
+                  </article>
+                ))}
+            </div>
+            <form onSubmit={submitComment} className="mt-3 flex items-end gap-2">
+              <textarea value={commentText} onChange={(event) => setCommentText(event.target.value)} maxLength={2000} rows={2} placeholder="일정 진행 상황이나 생각을 남겨주세요" className="min-h-11 flex-1 resize-y rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-indigo-500" />
+              <button type="submit" disabled={commentSaving || !commentText.trim()} className="inline-flex h-10 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"><Send size={13} />등록</button>
+            </form>
+          </section>
+        </ModalFrame>
+      )}
 
       {/* Add event modal */}
       {showModal && (
@@ -579,24 +708,40 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">시작</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">{form.allDay ? "시작 날짜" : "시작"}</label>
                   <input
-                    type="datetime-local"
+                    type={form.allDay ? "date" : "datetime-local"}
+                    required
                     value={form.startDate}
                     onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))}
                     className="min-w-0 w-full rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">종료</label>
+                  <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">{form.allDay ? "종료 날짜" : "종료"}</label>
                   <input
-                    type="datetime-local"
+                    type={form.allDay ? "date" : "datetime-local"}
+                    required
                     value={form.endDate}
                     onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))}
                     className="min-w-0 w-full rounded-md border border-gray-200 bg-white px-2.5 py-2 text-xs text-gray-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100"
                   />
                 </div>
               </div>
+              <label className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2.5 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={form.allDay}
+                  onChange={(e) => setForm((f) => {
+                    const allDay = e.target.checked;
+                    const startDate = allDay ? f.startDate.slice(0, 10) : `${f.startDate.slice(0, 10)}T09:00`;
+                    const endDate = allDay ? f.endDate.slice(0, 10) : `${f.endDate.slice(0, 10)}T10:00`;
+                    return { ...f, allDay, startDate, endDate };
+                  })}
+                  className="h-4 w-4 accent-indigo-600"
+                />
+                종일 일정 (시간 선택 안 함)
+              </label>
               <div>
                 <label className="block text-xs font-semibold text-gray-600 mb-1.5 uppercase tracking-wide">라벨</label>
                 <select

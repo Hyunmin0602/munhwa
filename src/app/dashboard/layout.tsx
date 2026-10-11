@@ -15,6 +15,8 @@ interface Project {
   name: string;
   description: string | null;
   color: string;
+  isArchived?: boolean;
+  accessScope?: "SPACE" | "MEMBERS";
 }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
