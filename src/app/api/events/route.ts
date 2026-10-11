@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { DEFAULT_SPACE_ID, assertAdmin, assertProjectEditor, assertSpaceManager } from "@/lib/server-utils";
+import { DEFAULT_SPACE_ID, assertAdmin, assertProjectEditor, assertSpaceManager, recordActivity } from "@/lib/server-utils";
+import { eventActivityInputs } from "@/lib/activity-log";
 import { eventAllDay, eventDates, eventScope, eventType, InputValidationError, optionalText, projectColor, readJsonObject, requiredText } from "@/lib/validation";
 
 async function accessibleSpaceIds(userId: string) {
@@ -96,6 +97,7 @@ export async function POST(req: NextRequest) {
     }
 
     const event = await withDbWrite(() => prisma.event.create({ data: { title, description, startDate: start, endDate: end, allDay, color: label?.color ?? selectedProjectColor ?? color, labelId: label?.id ?? null, type, scope, spaceId, projectId, creatorId: userId }, include: { project: { select: { id: true, name: true, color: true } }, label: { select: { id: true, name: true, description: true, color: true } } } }));
+    for (const activity of eventActivityInputs(userId, null, event)) await recordActivity(activity);
     return NextResponse.json(event, { status: 201 });
   } catch (error) {
     if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });

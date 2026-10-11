@@ -38,8 +38,8 @@ export async function GET(request: Request, { params }: Params) {
             select: {
               admin: { select: { id: true, name: true, email: true } },
               members: {
-                where: { role: { in: ["manager", "space_manager"] } },
-                select: { user: { select: { id: true, name: true, email: true } } },
+                where: { user: { registrationStatus: "APPROVED" } },
+                select: { role: true, user: { select: { id: true, name: true, email: true } } },
               },
             },
           },
@@ -50,16 +50,16 @@ export async function GET(request: Request, { params }: Params) {
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
     const projectMembers = project.members;
     const memberIds = new Set(projectMembers.map((member) => member.user.id));
-    const assignableMembers = [...projectMembers];
-    for (const { user } of project.space?.members ?? []) {
+    const assignableMembers = projectMembers.map((member) => ({ ...member, mentionable: true }));
+    for (const { role, user } of project.space?.members ?? []) {
       if (!memberIds.has(user.id)) {
-        assignableMembers.push({ role: "space_manager", user });
+        assignableMembers.push({ role, user, mentionable: false });
         memberIds.add(user.id);
       }
     }
     for (const user of [project.owner, project.space?.admin]) {
       if (user && !memberIds.has(user.id)) {
-        assignableMembers.push({ role: "manager", user });
+        assignableMembers.push({ role: "manager", user, mentionable: user.id === project.owner?.id });
         memberIds.add(user.id);
       }
     }

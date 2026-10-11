@@ -462,9 +462,9 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const response = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`, { method: "POST", body: formData });
+      const response = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`, { method: "POST", body: formData }, { showGlobalError: false });
+      if (!response.ok) throw new Error(await getModalRequestErrorMessage(response, "이미지 업로드"));
       const image = await response.json();
-      if (!response.ok) throw new Error(image.error ?? "이미지 업로드에 실패했습니다.");
       setImages((current) => [image, ...current]);
       if (onUploaded) onUploaded(image);
       else if (textarea) {
@@ -493,9 +493,8 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const deleteImage = async (image: ArchiveImage) => {
     if (!confirm("첨부 이미지를 삭제하시겠습니까? 본문에 삽입된 이미지는 별도로 제거해야 합니다.")) return;
     try {
-      const response = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images/${image.id}`, { method: "DELETE" });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "이미지 삭제에 실패했습니다.");
+      const response = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images/${image.id}`, { method: "DELETE" }, { showGlobalError: false });
+      if (!response.ok) throw new Error(await getModalRequestErrorMessage(response, "이미지 삭제"));
       setImages((current) => current.filter((item) => item.id !== image.id));
     } catch (error) {
       alert(error instanceof Error ? error.message : "이미지 삭제에 실패했습니다.");
@@ -576,7 +575,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-white">
+    <div className="flex min-h-0 h-full flex-1 flex-col bg-white">
       {/* ── Top Bar ── */}
       <div className="flex flex-wrap items-center justify-between gap-y-2 px-3 py-3 md:flex-nowrap md:px-5 border-b border-gray-100 flex-shrink-0 bg-white z-10">
         {/* Left */}
@@ -906,6 +905,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">편집</span>
               </div>
             )}
+            <div className="flex-1 min-h-0 flex flex-col h-full relative bg-white">
             <textarea
               ref={textareaRef}
               value={content}
@@ -919,6 +919,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
               className={`flex-1 p-4 md:p-6 text-sm text-gray-800 leading-relaxed resize-none outline-none font-mono bg-white placeholder-gray-300 ${draggingImages ? "bg-indigo-50 ring-2 ring-inset ring-indigo-300" : ""}`}
               placeholder={`# 문서 제목\n\n내용을 마크다운으로 작성하세요...\n\n**굵게**, _기울임_, \`코드\`, [링크](url)\n\n- 목록 항목\n- [ ] 체크리스트\n\n> 인용문`}
             />
+            </div>
           </div>
         )}
 

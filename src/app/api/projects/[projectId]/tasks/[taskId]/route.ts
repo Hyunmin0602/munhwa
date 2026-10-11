@@ -39,7 +39,7 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (!session?.user?.id) return unauthorized();
     const userId = session.user.id;
     if (!(await assertProjectEditor(userId, projectId))) return forbidden();
-    const task = await withDbReadRetry(() => prisma.task.findFirst({ where: { id: taskId, column: { projectId } }, select: { id: true } }));
+    const task = await withDbReadRetry(() => prisma.task.findFirst({ where: { id: taskId, column: { projectId } }, select: { id: true, title: true } }));
     if (!task) return notFound("칸반 카드를 찾을 수 없습니다.");
     const data = await readJsonObject(req);
     const content = requiredText(data.commentContent, "코멘트", 2_000);
@@ -51,17 +51,15 @@ export async function POST(req: NextRequest, { params }: Params) {
     const [project, projectMembers] = await Promise.all([
       withDbReadRetry(() => prisma.project.findUnique({
         where: { id: projectId },
-        select: { name: true, ownerId: true, space: { select: { adminUserId: true, members: { where: { role: { in: ["manager", "space_manager"] } }, select: { userId: true } } } } },
+        select: { name: true, ownerId: true },
       })),
       mentionIds.length ? withDbReadRetry(() => prisma.projectMember.findMany({ where: { projectId, userId: { in: mentionIds } }, select: { userId: true } })) : Promise.resolve([]),
     ]);
     const mentionableIds = new Set([
       ...projectMembers.map((member) => member.userId),
-      ...(project?.space?.members.map((member) => member.userId) ?? []),
       project?.ownerId,
-      project?.space?.adminUserId,
     ].filter((id): id is string => typeof id === "string"));
-    if (!project || mentionIds.some((id) => !mentionableIds.has(id))) return apiError("VALIDATION_ERROR", "사업 구성원만 멘션할 수 있습니다.", 400);
+    if (!project || mentionIds.some((id) => !mentionableIds.has(id))) return apiError("VALIDATION_ERROR", "해당 사업 구성원만 멘션할 수 있습니다.", 400);
     const comment = await withDbWrite(() => prisma.taskComment.create({
         data: { taskId, authorId: userId, content },
         select: { id: true, content: true, createdAt: true, updatedAt: true, author: { select: { id: true, name: true } } },
@@ -83,6 +81,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         console.error("[task-comment] mention notifications failed after comment was saved", notificationError);
       }
     }
+    await recordActivity({ actorId: userId, projectId, type: "칸반", action: "댓글 작성", entityType: "TASK_COMMENT", entityId: comment.id, title: task.title, afterData: { taskId, mentionUserIds: mentionIds } });
     return NextResponse.json(comment, { status: 201 });
   } catch (error) {
     if (error instanceof InputValidationError) return apiError("VALIDATION_ERROR", error.message, 400);
@@ -118,10 +117,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (data.assigneeId) {
       const [assigneeMember, project] = await Promise.all([
         withDbReadRetry(() => prisma.projectMember.findUnique({ where: { userId_projectId: { userId: data.assigneeId, projectId } } })),
-        withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { spaceId: true } })),
+        withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { spaceId: true, space: { select: { members: { where: { userId: data.assigneeId, user: { registrationStatus: "APPROVED" } }, select: { id: true } } } } } })),
       ]);
       const isSpaceManager = project?.spaceId ? await assertSpaceManager(data.assigneeId, project.spaceId) : false;
-      if (!assigneeMember && !isSpaceManager) return NextResponse.json({ error: "Assignee is not a project member" }, { status: 400 });
+      if (!assigneeMember && !project?.space?.members.length && !isSpaceManager) return NextResponse.json({ error: "Assignee is not a project member" }, { status: 400 });
     }
 
     const dueDateValue = data.dueDate === null || data.dueDate === ""

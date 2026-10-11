@@ -202,7 +202,7 @@ function SidebarContent({ projects, spaceName, onNewProject, onEditProject, onMo
                   >
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
                     <span className="flex min-w-0 flex-1 items-center gap-1.5"><span className="truncate">{p.name}</span>{p.isArchived && <span className="shrink-0 bg-slate-100 px-1 py-0.5 text-[9px] font-semibold text-slate-500">기록</span>}</span>
-                    {isActive && <ChevronRight size={12} className="flex-shrink-0" />}
+                    <ChevronRight size={12} className={`flex-shrink-0 transition-transform duration-200 motion-reduce:transition-none ${isActive ? "rotate-90" : "rotate-0"}`} />
                   </Link>
                   <button
                     type="button"
@@ -229,8 +229,13 @@ function SidebarContent({ projects, spaceName, onNewProject, onEditProject, onMo
                     </button>
                   </div>}
                 </div>
-                {isActive && (
-                  <div className="ml-6 mt-0.5 space-y-0.5">
+                <div
+                  inert={!isActive}
+                  aria-hidden={!isActive}
+                  className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${isActive ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                  <div className="ml-6 pt-0.5 space-y-0.5">
                     {[
                       { href: `${base}/kanban`, label: "칸반", Icon: FolderKanban },
                       { href: `${base}/schedule`, label: "일정", Icon: CalendarDays },
@@ -249,7 +254,8 @@ function SidebarContent({ projects, spaceName, onNewProject, onEditProject, onMo
                       </Link>
                     ))}
                   </div>
-                )}
+                  </div>
+                </div>
               </div>
             );
           })}

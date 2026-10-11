@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { DEFAULT_SPACE_ID, assertSpaceManager } from "@/lib/server-utils";
+import { DEFAULT_SPACE_ID, assertSpaceManager, recordActivity } from "@/lib/server-utils";
 import { readJsonObject } from "@/lib/validation";
 import { createInAppNotification } from "@/lib/notifications";
 import { conflict, forbidden, internalError, notFound, unauthorized, validationError } from "@/lib/api-error";
@@ -24,14 +24,32 @@ export async function GET(request: NextRequest) {
 
   try {
     const query = request.nextUrl.searchParams.get("query")?.trim() ?? "";
+    const cohortId = request.nextUrl.searchParams.get("cohortId")?.trim() ?? "";
+    const requestedLimit = Number(request.nextUrl.searchParams.get("limit"));
+    const limit = Math.min(Math.max(Number.isFinite(requestedLimit) && requestedLimit > 0 ? requestedLimit : 30, 1), 50);
+    const encodedCursor = request.nextUrl.searchParams.get("cursor");
+    let cursor: { joinedAt: Date; id: string } | null = null;
+    if (encodedCursor) {
+      try {
+        const [timestamp, id] = Buffer.from(encodedCursor, "base64url").toString("utf8").split("|");
+        const joinedAt = new Date(timestamp);
+        if (!id || Number.isNaN(joinedAt.getTime())) throw new Error("invalid cursor");
+        cursor = { joinedAt, id };
+      } catch {
+        return validationError("구성원 페이지 값이 올바르지 않습니다.");
+      }
+    }
+    const cohortFilter = cohortId === "unassigned" ? { user: { cohortId: null } } : cohortId ? { user: { cohortId } } : {};
     const [members, pendingRegistrations] = await Promise.all([
       withDbReadRetry(() => prisma.spaceMember.findMany({
         where: {
           spaceId: DEFAULT_SPACE_ID,
-          ...(query ? { user: { OR: [{ name: { contains: query } }, { email: { contains: query } }] } } : {}),
+          ...cohortFilter,
+          ...(query ? { user: { ...("user" in cohortFilter ? cohortFilter.user : {}), OR: [{ name: { contains: query } }, { email: { contains: query } }] } } : {}),
+          ...(cursor ? { OR: [{ joinedAt: { gt: cursor.joinedAt } }, { joinedAt: cursor.joinedAt, id: { gt: cursor.id } }] } : {}),
         },
-        orderBy: [{ role: "asc" }, { joinedAt: "asc" }],
-        take: 100,
+        orderBy: [{ joinedAt: "asc" }, { id: "asc" }],
+        take: limit + 1,
         select: {
           id: true,
           role: true,
@@ -42,6 +60,7 @@ export async function GET(request: NextRequest) {
       withDbReadRetry(() => prisma.user.findMany({
         where: {
           registrationStatus: "PENDING",
+          ...(cohortId === "unassigned" ? { cohortId: null } : cohortId ? { cohortId } : {}),
           ...(query ? { OR: [{ name: { contains: query } }, { email: { contains: query } }] } : {}),
         },
         orderBy: { createdAt: "asc" },
@@ -49,7 +68,11 @@ export async function GET(request: NextRequest) {
         select: { id: true, name: true, email: true, createdAt: true, cohort: { select: { name: true } } },
       }), { operation: "space-management:registrations:list" }),
     ]);
-    return NextResponse.json({ items: members, pendingRegistrations });
+    const hasMore = members.length > limit;
+    const items = members.slice(0, limit);
+    const last = items.at(-1);
+    const nextCursor = hasMore && last ? Buffer.from(`${last.joinedAt.toISOString()}|${last.id}`).toString("base64url") : null;
+    return NextResponse.json({ items, pendingRegistrations, nextCursor });
   } catch (error) {
     console.error("[api/space-management/members] GET failed", error);
     return internalError("Space 구성원 목록을 불러오지 못했습니다.");
@@ -66,7 +89,7 @@ export async function PATCH(request: NextRequest) {
     const registrationAction = data.registrationAction;
     if (registrationAction === "approve" || registrationAction === "reject") {
       if (!userId) return validationError("가입 신청자가 필요합니다.");
-      const pendingUser = await withDbReadRetry(() => prisma.user.findFirst({ where: { id: userId, registrationStatus: "PENDING" }, select: { id: true } }), { operation: "space-management:registration:check" });
+      const pendingUser = await withDbReadRetry(() => prisma.user.findFirst({ where: { id: userId, registrationStatus: "PENDING" }, select: { id: true, name: true } }), { operation: "space-management:registration:check" });
       if (!pendingUser) return notFound("대기 중인 가입 신청을 찾을 수 없습니다.");
 
       const changed = await withDbWrite(() => prisma.$transaction(async (tx) => {
@@ -84,6 +107,7 @@ export async function PATCH(request: NextRequest) {
         return true;
       }));
       if (!changed) return conflict("가입 신청이 이미 처리되었습니다.");
+      await recordActivity({ actorId: access.userId, spaceId: DEFAULT_SPACE_ID, type: "구성원", action: registrationAction === "approve" ? "가입 승인" : "가입 반려", entityType: "USER", entityId: userId, title: pendingUser.name ?? userId, beforeData: { registrationStatus: "PENDING" }, afterData: { registrationStatus: registrationAction === "approve" ? "APPROVED" : "REJECTED" } });
       if (registrationAction === "approve") {
         await createInAppNotification({ recipientId: userId, actorId: access.userId, category: "approval", title: "가입 신청이 승인되었습니다.", body: "Space 구성원으로 가입되었습니다.", href: "/dashboard/integrated" });
       }
@@ -96,12 +120,14 @@ export async function PATCH(request: NextRequest) {
     const targetUser = await withDbReadRetry(() => prisma.user.findUnique({ where: { id: userId }, select: { id: true } }));
     if (!targetUser) return notFound("해당 사용자를 찾을 수 없습니다.");
 
+    const previousMember = await withDbReadRetry(() => prisma.spaceMember.findUnique({ where: { spaceId_userId: { spaceId: DEFAULT_SPACE_ID, userId } }, select: { role: true } }));
     const member = await withDbWrite(() => prisma.spaceMember.upsert({
       where: { spaceId_userId: { spaceId: DEFAULT_SPACE_ID, userId } },
       update: { role },
       create: { spaceId: DEFAULT_SPACE_ID, userId, role },
       select: { id: true, role: true, joinedAt: true, user: { select: { id: true, name: true, email: true, role: true, cohort: { select: { id: true, name: true } }, projects: { where: { project: { spaceId: DEFAULT_SPACE_ID } }, select: { role: true, project: { select: { id: true, name: true } } } } } } },
     }));
+    await recordActivity({ actorId: access.userId, spaceId: DEFAULT_SPACE_ID, type: "구성원", action: previousMember ? "역할 변경" : "추가", entityType: "SPACE_MEMBER", entityId: member.id, title: member.user.name ?? "부서 구성원", beforeData: previousMember ? { userId, role: previousMember.role } : null, afterData: { userId, role: member.role } });
     return NextResponse.json(member);
   } catch (error) {
     console.error("[api/space-management/members] PATCH failed", error);
@@ -121,7 +147,8 @@ export async function DELETE(request: NextRequest) {
 
     const space = await prisma.space.findUnique({ where: { id: DEFAULT_SPACE_ID }, select: { adminUserId: true } });
     if (space?.adminUserId === userId) return validationError("현재 Space 관리자는 제거할 수 없습니다.");
-    await withDbWrite(() => prisma.spaceMember.delete({ where: { spaceId_userId: { spaceId: DEFAULT_SPACE_ID, userId } } }));
+    const member = await withDbWrite(() => prisma.spaceMember.delete({ where: { spaceId_userId: { spaceId: DEFAULT_SPACE_ID, userId } }, select: { id: true, role: true, user: { select: { name: true } } } }));
+    await recordActivity({ actorId: access.userId, spaceId: DEFAULT_SPACE_ID, type: "구성원", action: "제거", entityType: "SPACE_MEMBER", entityId: member.id, title: member.user.name ?? userId, beforeData: { userId, role: member.role } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     if (error instanceof Error && error.message.includes("Record to delete does not exist")) return notFound("Space 구성원을 찾을 수 없습니다.");

@@ -5,7 +5,7 @@ import dayjs from "dayjs";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, ChevronRight, Plus, X, Tags, PencilLine, Trash, Clock, AlignLeft, List } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
-import ModalFrame from "@/components/ui/ModalFrame";
+import ModalFrame, { ModalCloseActionButton } from "@/components/ui/ModalFrame";
 
 type Project = { id: string; name: string; color: string };
 type Label = { id: string; name: string; description: string | null; color: string };
@@ -295,29 +295,33 @@ export default function IntegratedCalendar() {
       {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm text-rose-600">{error}</p>}
       <div className="grid min-h-0 flex-none gap-4 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_288px]">
         <div data-calendar-surface className="hidden min-h-0 md:block">
-          <MonthCalendar
-            month={month}
-            selected={selected}
-            getDayEvents={getDayEvents}
-            onMonthChange={changeMonth}
-            onSelect={selectDate}
-            onClearSelection={() => { setHasSelectedDate(false); setRightPanelPage(0); }}
-            onCreate={openCreate}
-            onEventClick={openEditModal}
-            onToday={goToToday}
-          />
+          <div key={month.format("YYYY-MM")} className="calendar-content-enter h-full">
+            <MonthCalendar
+              month={month}
+              selected={selected}
+              getDayEvents={getDayEvents}
+              onMonthChange={changeMonth}
+              onSelect={selectDate}
+              onClearSelection={() => { setHasSelectedDate(false); setRightPanelPage(0); }}
+              onCreate={openCreate}
+              onEventClick={openEditModal}
+              onToday={goToToday}
+            />
+          </div>
         </div>
         <div data-calendar-surface className="md:hidden">
-          <MobileDayCalendar
-            month={month}
-            selected={selected}
-            getDayEvents={getDayEvents}
-            onMonthChange={changeMonth}
-            onSelect={selectDate}
-            onToday={goToToday}
-            onLabelManage={() => openLabelModal()}
-            onEventClick={openEditModal}
-          />
+          <div key={selected.startOf("week").format("YYYY-MM-DD")} className="calendar-content-enter">
+            <MobileDayCalendar
+              month={month}
+              selected={selected}
+              getDayEvents={getDayEvents}
+              onMonthChange={changeMonth}
+              onSelect={selectDate}
+              onToday={goToToday}
+              onLabelManage={() => openLabelModal()}
+              onEventClick={openEditModal}
+            />
+          </div>
         </div>
         <section className="hidden min-h-0 flex-col rounded-2xl border border-gray-200 bg-white p-4 lg:flex">
           <div className="mb-3 flex items-center justify-between gap-2">
@@ -333,7 +337,7 @@ export default function IntegratedCalendar() {
               <button type="button" onClick={() => openCreate(hasSelectedDate ? selected : month)} aria-label="일정 추가" className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 transition-colors hover:bg-indigo-100"><Plus size={14} /></button>
             </div>
           </div>
-          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto">
+          <div key={hasSelectedDate ? `day-${selected.format("YYYY-MM-DD")}` : `month-${month.format("YYYY-MM")}`} className="calendar-content-enter min-h-0 flex-1 space-y-2 overflow-y-auto">
             {rightPanelEvents.length === 0 ? <p className="rounded-lg bg-gray-50 px-3 py-8 text-center text-xs text-gray-500">{hasSelectedDate ? "등록된 일정이 없습니다." : "이번 달 등록된 일정이 없습니다."}</p> : visibleRightPanelEvents.map((event) => (
               <div key={event.id} onClick={() => openEditModal(event)} className="group flex cursor-pointer items-start gap-2 rounded-lg border border-gray-100 p-2.5 text-left transition-colors hover:bg-gray-50">
                 <span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
@@ -383,7 +387,7 @@ export default function IntegratedCalendar() {
               </div>
               {labelError && <p className="text-xs font-medium text-rose-600">{labelError}</p>}
               <div className="flex gap-2">
-                <button type="button" onClick={() => setShowLabelModal(false)} className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">닫기</button>
+                <ModalCloseActionButton onClick={() => setShowLabelModal(false)} className="flex-1 rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">닫기</ModalCloseActionButton>
                 <button type="submit" disabled={labelSaving} className="flex-1 rounded-xl bg-indigo-600 px-3 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60">{labelSaving ? "저장 중..." : labelForm.id ? "수정" : "추가"}</button>
               </div>
             </form>

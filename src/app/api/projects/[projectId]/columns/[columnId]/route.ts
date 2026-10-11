@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { withDbRetry } from "@/lib/db-retry";
+import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
-import { assertProjectAccess, assertProjectEditor, assertProjectOwner, canManageProject } from "@/lib/server-utils";
+import { assertProjectAccess, assertProjectEditor, assertProjectOwner, canManageProject, recordActivity } from "@/lib/server-utils";
 import { booleanValue, InputValidationError, integratedKanbanStatus, readJsonObject } from "@/lib/validation";
 
 function logApiError(action: string, error: unknown) {
@@ -40,7 +40,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const updatesIntegratedMapping = data.integratedStatus !== undefined || data.isIntegratedPrimary !== undefined;
     if (updatesIntegratedMapping) await ensureIntegratedKanbanColumns();
 
-    const existing = await withDbRetry(() => prisma.kanbanColumn.findFirst({ where: { id: columnId, projectId } }));
+    const existing = await withDbReadRetry(() => prisma.kanbanColumn.findFirst({ where: { id: columnId, projectId } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const updateData: { name?: string; order?: number; integratedStatus?: string | null; isIntegratedPrimary?: boolean } = {};
@@ -67,15 +67,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
     if (Object.keys(updateData).length === 0) return NextResponse.json({ error: "nothing to update" }, { status: 400 });
 
-    const column = await withDbRetry(() => prisma.$transaction(async (tx) => {
+    const { column, demotedColumns } = await withDbWrite(() => prisma.$transaction(async (tx) => {
+      const demotedColumns = updateData.isIntegratedPrimary && updateData.integratedStatus
+        ? await tx.kanbanColumn.findMany({ where: { projectId, integratedStatus: updateData.integratedStatus, id: { not: columnId }, isIntegratedPrimary: true }, select: { id: true } })
+        : [];
       if (updateData.isIntegratedPrimary && updateData.integratedStatus) {
         await tx.kanbanColumn.updateMany({
           where: { projectId, integratedStatus: updateData.integratedStatus, id: { not: columnId } },
           data: { isIntegratedPrimary: false },
         });
       }
-      return tx.kanbanColumn.update({ where: { id: columnId }, data: updateData });
+      const column = await tx.kanbanColumn.update({ where: { id: columnId }, data: updateData });
+      return { column, demotedColumns };
     }));
+    await recordActivity({ actorId: userId, projectId, type: "칸반", action: "열 수정", entityType: "KANBAN_COLUMN", entityId: columnId, title: column.name, metadata: { demotedPrimaryColumnIds: demotedColumns.map((item) => item.id) }, beforeData: { name: existing.name, order: existing.order, integratedStatus: existing.integratedStatus, isIntegratedPrimary: existing.isIntegratedPrimary }, afterData: { name: column.name, order: column.order, integratedStatus: column.integratedStatus, isIntegratedPrimary: column.isIntegratedPrimary } });
     return NextResponse.json(column);
   } catch (error) {
     if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -95,11 +100,13 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     const canManageColumns = (await assertProjectOwner(userId, projectId)) || (await canManageProject(userId, projectId));
     if (!canManageColumns) return NextResponse.json({ error: "사업 관리자 또는 공간 관리자만 칸반 열을 삭제할 수 있습니다." }, { status: 403 });
 
-    const existing = await withDbRetry(() => prisma.kanbanColumn.findFirst({ where: { id: columnId, projectId } }));
+    const existing = await withDbReadRetry(() => prisma.kanbanColumn.findFirst({ where: { id: columnId, projectId } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (existing.integratedStatus) return NextResponse.json({ error: "진행 전, 진행 중, 진행 완료 열은 삭제할 수 없습니다." }, { status: 400 });
 
-    await withDbRetry(() => prisma.kanbanColumn.delete({ where: { id: columnId } }));
+    const taskCount = await withDbReadRetry(() => prisma.task.count({ where: { columnId } }));
+    await withDbWrite(() => prisma.kanbanColumn.delete({ where: { id: columnId } }));
+    await recordActivity({ actorId: userId, projectId, type: "칸반", action: "열 삭제", entityType: "KANBAN_COLUMN", entityId: columnId, title: existing.name, beforeData: { name: existing.name, order: existing.order, integratedStatus: existing.integratedStatus, isIntegratedPrimary: existing.isIntegratedPrimary }, metadata: { deletedTaskCount: taskCount } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     logApiError("DELETE", error);

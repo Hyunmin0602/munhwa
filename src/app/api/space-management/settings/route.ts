@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { DEFAULT_SPACE_ID, assertSpaceManager } from "@/lib/server-utils";
+import { DEFAULT_SPACE_ID, assertSpaceManager, recordActivity } from "@/lib/server-utils";
 import { forbidden, internalError, unauthorized, validationError } from "@/lib/api-error";
 
 async function requireManager() {
@@ -34,7 +34,9 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json();
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name || name.length > 100) return validationError("부서 이름을 올바르게 입력해주세요.");
+    const previous = await withDbReadRetry(() => prisma.space.findUnique({ where: { id: DEFAULT_SPACE_ID }, select: { name: true } }));
     const space = await withDbWrite(() => prisma.space.update({ where: { id: DEFAULT_SPACE_ID }, data: { name }, select: { id: true, name: true, slug: true } }));
+    await recordActivity({ actorId: access.userId, spaceId: DEFAULT_SPACE_ID, type: "부서", action: "수정", entityType: "SPACE", entityId: space.id, title: space.name, beforeData: previous, afterData: { name: space.name } });
     return NextResponse.json(space);
   } catch (error) {
     console.error("[api/space-management/settings] PATCH failed", error);
@@ -50,6 +52,7 @@ export async function POST(request: NextRequest) {
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name || name.length > 100) return validationError("기수 이름을 올바르게 입력해주세요.");
     const cohort = await withDbWrite(() => prisma.cohort.create({ data: { name, order: Number.isInteger(body.order) ? body.order : 0 }, include: { _count: { select: { users: true } } } }));
+    await recordActivity({ actorId: access.userId, spaceId: DEFAULT_SPACE_ID, type: "기수", action: "생성", entityType: "COHORT", entityId: cohort.id, title: cohort.name, afterData: { name: cohort.name, order: cohort.order, isActive: cohort.isActive } });
     return NextResponse.json(cohort, { status: 201 });
   } catch (error) {
     console.error("[api/space-management/settings] POST failed", error);

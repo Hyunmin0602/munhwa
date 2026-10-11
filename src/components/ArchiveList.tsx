@@ -31,6 +31,7 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [cursorHistory, setCursorHistory] = useState<string[]>([]);
   const [currentCursor, setCurrentCursor] = useState<string | null>(null);
+  const [kindFilter, setKindFilter] = useState<"all" | "DOCUMENT" | "MEETING">("all");
   const router = useRouter();
   const previousProjectId = useRef(projectId);
 
@@ -50,10 +51,12 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
       setLoading(true);
       try {
         const query = new URLSearchParams({ limit: "10" });
+        if (kindFilter !== "all") query.set("kind", kindFilter);
         if (currentCursor) query.set("cursor", currentCursor);
         const res = await apiFetch(`/api/projects/${projectId}/archive?${query.toString()}`);
         if (!res.ok) throw new Error("Archive list request failed");
         const data = await res.json();
+        if (cancelled) return;
         setPosts(Array.isArray(data?.items) ? data.items : []);
         setNextCursor(typeof data?.nextCursor === "string" ? data.nextCursor : null);
         setError(null);
@@ -64,7 +67,7 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
       }
     })();
     return () => { cancelled = true; };
-  }, [projectId, reloadKey, currentCursor]);
+  }, [projectId, reloadKey, currentCursor, kindFilter]);
 
   const goNextPage = () => {
     if (!nextCursor || loadingPage) return;
@@ -159,6 +162,32 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
         </button>
       </div>
 
+      <div className="mb-4 flex flex-shrink-0 gap-1 self-start rounded-lg bg-gray-100 p-1" role="group" aria-label="문서 유형 필터">
+        {[
+          { value: "all" as const, label: "전체" },
+          { value: "DOCUMENT" as const, label: "일반 문서" },
+          { value: "MEETING" as const, label: "회의록" },
+        ].map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={kindFilter === option.value}
+            onClick={() => {
+              if (kindFilter === option.value) return;
+              setKindFilter(option.value);
+              setCurrentCursor(null);
+              setCursorHistory([]);
+              setNextCursor(null);
+              setPosts([]);
+              setLoading(true);
+            }}
+            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${kindFilter === option.value ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
       {error ? (
         <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
           <p className="text-sm font-medium text-rose-600">{error}</p>
@@ -191,7 +220,7 @@ export default function ArchiveList({ projectId }: { projectId: string }) {
       ) : posts.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center text-center">
           <div className="w-16 h-16 rounded-2xl bg-gray-100 mb-4" />
-          <p className="text-gray-500 font-medium mb-1">아직 문서가 없습니다</p>
+          <p className="text-gray-500 font-medium mb-1">{kindFilter === "all" ? "아직 문서가 없습니다" : kindFilter === "MEETING" ? "회의록이 없습니다" : "일반 문서가 없습니다"}</p>
           <p className="text-gray-400 text-sm">오른쪽 상단의 <span className="text-indigo-500 font-medium">새 문서</span> 버튼으로 시작하세요</p>
         </div>
       ) : (

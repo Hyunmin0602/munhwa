@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { Trash2, Calendar, User, Flag, AlignLeft, MessageCircle, Send, ArrowLeft, Pencil } from "lucide-react";
 import { apiFetch, getModalExceptionMessage, getModalRequestErrorMessage } from "@/lib/client-fetch";
 import { ModalErrorAlert } from "@/components/ui/ModalErrorAlert";
-import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
+import ModalFrame, { ModalCloseActionButton, ModalCloseButton } from "@/components/ui/ModalFrame";
 
 interface Task {
   id: string;
@@ -20,6 +20,7 @@ interface Member {
   id: string;
   name: string | null;
   email?: string;
+  mentionable?: boolean;
 }
 
 interface TaskComment {
@@ -65,7 +66,7 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
   const titleRef = useRef<HTMLInputElement>(null);
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const mentionMatches = mentionQuery
-    ? members.filter((member) => !selectedMentions.some((mention) => mention.id === member.id) && `${member.name || ""} ${member.email || ""}`.toLocaleLowerCase().includes(mentionQuery.query.toLocaleLowerCase()))
+    ? members.filter((member) => member.mentionable !== false && !selectedMentions.some((mention) => mention.id === member.id) && `${member.name || ""} ${member.email || ""}`.toLocaleLowerCase().includes(mentionQuery.query.toLocaleLowerCase()))
     : [];
 
   useEffect(() => {
@@ -181,26 +182,23 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
     if (await onDelete()) onClose();
   };
 
-  // close on backdrop click
-  const handleBackdrop = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) {
-      if (dirty) save().then((saved) => { if (saved) onClose(); });
-      else onClose();
-    }
+  // ModalFrame already filters clicks to the backdrop before invoking this callback.
+  const closeAfterBackdropClick = async () => {
+    if (dirty) { const saved = await save(); if (saved) onClose(); }
+    else onClose();
   };
 
   // Cmd+Enter saves
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); save(); }
-      if (e.key === "Escape") { if (dirty) save().then((saved) => { if (saved) onClose(); }); else onClose(); }
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [dirty, onClose, save]);
+  }, [save]);
 
   return (
-    <ModalFrame title="카드 상세" onClose={onClose} onEscape={() => { if (dirty) void save().then((saved) => { if (saved) onClose(); }); else onClose(); }} onBackdropMouseDown={handleBackdrop} className="max-w-5xl flex flex-col overflow-hidden">
+    <ModalFrame title="카드 상세" onClose={onClose} onEscape={async () => { if (dirty) { const saved = await save(); if (saved) onClose(); } else onClose(); }} onBackdropMouseDown={() => closeAfterBackdropClick()} className="max-w-5xl flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">카드 상세</span>
@@ -345,13 +343,13 @@ export default function TaskDetailModal({ task, projectId, members, onClose, onU
           <span className="text-xs text-gray-400">
             {dirty ? "저장되지 않은 변경사항" : "변경사항 없음"}
           </span>
-          <button
+          <ModalCloseActionButton
             onClick={saveAndClose}
             disabled={saving}
             className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-xl shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
           >
             {saving ? "저장 중..." : "저장 및 닫기"}
-          </button>
+          </ModalCloseActionButton>
         </div>
     </ModalFrame>
   );

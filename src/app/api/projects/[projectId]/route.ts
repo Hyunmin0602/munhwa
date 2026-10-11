@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbRetry, withDbWrite } from "@/lib/db-retry";
-import { assertProjectAccess, assertProjectEditor, assertProjectOwner, canManageProject } from "@/lib/server-utils";
+import { assertProjectAccess, assertProjectEditor, assertProjectOwner, canManageProject, recordActivity } from "@/lib/server-utils";
 import { InputValidationError, optionalText, projectAccessScope, projectColor, projectStatus, projectTags, readJsonObject, requiredText } from "@/lib/validation";
 import { apiError } from "@/lib/api-error";
 
@@ -123,7 +123,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const color = data.color === undefined ? undefined : projectColor(data.color);
     const isArchived = data.isArchived === undefined ? undefined : data.isArchived === true;
     if (data.isArchived !== undefined && typeof data.isArchived !== "boolean") throw new InputValidationError("기록용 여부가 올바르지 않습니다.");
-    const existingArchiveState = await withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { isArchived: true } }));
+    const existingArchiveState = await withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { spaceId: true, name: true, description: true, category: true, tags: true, summary: true, status: true, color: true, isArchived: true, accessScope: true } }));
     if (!existingArchiveState) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (existingArchiveState.isArchived && isArchived !== false) {
       const blockedFields = ["description", "category", "tags", "summary", "status", "color"];
@@ -151,6 +151,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         },
       })
     );
+    await recordActivity({ actorId: userId, spaceId: project.spaceId, projectId, type: "사업", action: "수정", entityType: "PROJECT", entityId: projectId, title: project.name, beforeData: existingArchiveState, afterData: { name: project.name, description: project.description, category: project.category, tags: project.tags, summary: project.summary, status: project.status, color: project.color, isArchived: project.isArchived, accessScope: project.accessScope } });
     return NextResponse.json(project);
   } catch (error) {
     if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -173,10 +174,11 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     if (!canDelete)
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const existing = await withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { isArchived: true } }));
+    const existing = await withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { spaceId: true, name: true, isArchived: true, ownerId: true, accessScope: true } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (existing.isArchived) return apiError("CONFLICT", "기록용 사업은 삭제할 수 없습니다. 먼저 진행 사업으로 복원해주세요.", 409);
     await withDbWrite(() => prisma.project.delete({ where: { id: projectId } }));
+    await recordActivity({ actorId: userId, spaceId: existing.spaceId, type: "사업", action: "삭제", entityType: "PROJECT", entityId: projectId, title: existing.name, beforeData: existing });
     return NextResponse.json({ ok: true });
   } catch (error) {
     logApiError("DELETE", error);

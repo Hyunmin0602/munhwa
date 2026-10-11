@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { withDbRetry } from "@/lib/db-retry";
+import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
-import { assertProjectAccess, assertProjectEditor, assertProjectOwner, canManageProject } from "@/lib/server-utils";
+import { assertProjectAccess, assertProjectEditor, assertProjectOwner, canManageProject, recordActivity } from "@/lib/server-utils";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId/columns] ${action} failed`, error);
@@ -24,8 +24,9 @@ export async function POST(req: NextRequest, { params }: Params) {
     const { name } = await req.json();
     if (!name?.trim()) return NextResponse.json({ error: "name required" }, { status: 400 });
 
-    const count = await withDbRetry(() => prisma.kanbanColumn.count({ where: { projectId } }));
-    const column = await withDbRetry(() => prisma.kanbanColumn.create({ data: { name: name.trim(), projectId, order: count } }));
+    const count = await withDbReadRetry(() => prisma.kanbanColumn.count({ where: { projectId } }));
+    const column = await withDbWrite(() => prisma.kanbanColumn.create({ data: { name: name.trim(), projectId, order: count } }));
+    await recordActivity({ actorId: userId, projectId, type: "칸반", action: "열 생성", entityType: "KANBAN_COLUMN", entityId: column.id, title: column.name, afterData: { name: column.name, order: column.order, integratedStatus: column.integratedStatus, isIntegratedPrimary: column.isIntegratedPrimary } });
     return NextResponse.json({ ...column, tasks: [] }, { status: 201 });
   } catch (error) {
     logApiError("POST", error);

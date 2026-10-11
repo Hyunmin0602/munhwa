@@ -4,8 +4,8 @@ import path from "node:path";
 import { del, get } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { withDbRetry } from "@/lib/db-retry";
-import { assertProjectEditor, assertProjectMember, canManageProject } from "@/lib/server-utils";
+import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
+import { assertProjectEditor, assertProjectMember, canManageProject, recordActivity } from "@/lib/server-utils";
 
 export const runtime = "nodejs";
 
@@ -16,7 +16,7 @@ export async function GET(request: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!(await assertProjectMember(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const image = await withDbRetry(() => prisma.archiveImage.findFirst({ where: { id: imageId, postId, post: { projectId } }, select: { storageKey: true, url: true, mimeType: true } }));
+  const image = await withDbReadRetry(() => prisma.archiveImage.findFirst({ where: { id: imageId, postId, post: { projectId } }, select: { storageKey: true, url: true, mimeType: true } }));
   if (!image) return NextResponse.json({ error: "Not found" }, { status: 404 });
   if (image.url.startsWith("/uploads/")) return NextResponse.redirect(new URL(image.url, request.url));
   try {
@@ -36,10 +36,10 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   if (!(await assertProjectEditor(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   if (!(await assertProjectMember(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-  const [image, canManage] = await withDbRetry(() => Promise.all([
+  const [image, canManage] = await withDbReadRetry(() => Promise.all([
     prisma.archiveImage.findFirst({
       where: { id: imageId, postId, post: { projectId } },
-      select: { id: true, url: true, uploaderId: true, post: { select: { collaborators: { select: { userId: true } } } } },
+      select: { id: true, url: true, uploaderId: true, mimeType: true, byteSize: true, post: { select: { collaborators: { select: { userId: true } } } } },
     }),
     canManageProject(session.user.id, projectId),
   ]));
@@ -51,7 +51,8 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   try {
     if (process.env.BLOB_READ_WRITE_TOKEN) await del(image.url);
     else await unlink(path.join(process.cwd(), "public", image.url.replace(/^\//, ""))).catch(() => {});
-    await withDbRetry(() => prisma.archiveImage.delete({ where: { id: image.id } }));
+    await withDbWrite(() => prisma.archiveImage.delete({ where: { id: image.id } }));
+    await recordActivity({ actorId: session.user.id, projectId, type: "문서", action: "이미지 삭제", entityType: "ARCHIVE_IMAGE", entityId: image.id, title: "아카이브 이미지 삭제", beforeData: { postId, mimeType: image.mimeType, byteSize: image.byteSize } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[archive-images] delete failed", error);

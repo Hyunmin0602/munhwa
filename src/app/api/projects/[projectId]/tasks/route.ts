@@ -51,10 +51,10 @@ export async function POST(req: NextRequest, { params }: Params) {
     if (assigneeId) {
       const [assigneeMember, project] = await Promise.all([
         withDbReadRetry(() => prisma.projectMember.findUnique({ where: { userId_projectId: { userId: assigneeId, projectId } } })),
-        withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { spaceId: true } })),
+        withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { spaceId: true, space: { select: { members: { where: { userId: assigneeId, user: { registrationStatus: "APPROVED" } }, select: { id: true } } } } } })),
       ]);
       const isSpaceManager = project?.spaceId ? await assertSpaceManager(assigneeId, project.spaceId) : false;
-      if (!assigneeMember && !isSpaceManager) return NextResponse.json({ error: "Assignee is not a project member" }, { status: 400 });
+      if (!assigneeMember && !project?.space?.members.length && !isSpaceManager) return NextResponse.json({ error: "Assignee is not a project member" }, { status: 400 });
     }
 
     const count = await withDbReadRetry(() => prisma.task.count({ where: { columnId } }));

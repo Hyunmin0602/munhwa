@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { assertAdmin, assertProjectEditor, assertSpaceManager } from "@/lib/server-utils";
+import { assertAdmin, assertProjectEditor, assertSpaceManager, recordActivity } from "@/lib/server-utils";
+import { eventActivityInputs } from "@/lib/activity-log";
 import { eventAllDay, eventDates, eventScope, eventType, InputValidationError, optionalText, projectColor, readJsonObject, requiredText } from "@/lib/validation";
 
 type Params = { params: Promise<{ eventId: string }> };
@@ -74,6 +75,7 @@ export async function PATCH(req: Request, { params }: Params) {
       },
       include: { project: { select: { id: true, name: true, color: true } }, label: { select: { id: true, name: true, description: true, color: true } } },
     }));
+    for (const activity of eventActivityInputs(userId, existing, event)) await recordActivity(activity);
     return NextResponse.json(event);
   } catch (error) {
     if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -87,12 +89,13 @@ export async function DELETE(_: Request, { params }: Params) {
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
   const { eventId } = await params;
-  const event = await withDbReadRetry(() => prisma.event.findUnique({ where: { id: eventId }, select: { creatorId: true, scope: true, spaceId: true, projectId: true } }));
+  const event = await withDbReadRetry(() => prisma.event.findUnique({ where: { id: eventId }, select: { id: true, creatorId: true, scope: true, spaceId: true, projectId: true, title: true, description: true, startDate: true, endDate: true, allDay: true, color: true, type: true, labelId: true } }));
   if (!event) return NextResponse.json({ error: "Not found" }, { status: 404 });
   const canManage = event.projectId
     ? await assertProjectEditor(userId, event.projectId)
     : event.creatorId === userId || await assertAdmin(userId) || await assertSpaceManager(userId, event.spaceId ?? undefined);
   if (!canManage) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   await withDbWrite(() => prisma.event.delete({ where: { id: eventId } }));
+  for (const activity of eventActivityInputs(userId, event, null)) await recordActivity(activity);
   return NextResponse.json({ ok: true });
 }

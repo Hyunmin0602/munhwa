@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
+import { recordActivity } from "@/lib/server-utils";
 
 const errorResponse = (code: string, message: string, status: number) =>
   NextResponse.json({ error: { code, message } }, { status });
@@ -28,6 +29,9 @@ export async function DELETE() {
     where: { id: userId },
     select: {
       role: true,
+      registrationStatus: true,
+      spaceMemberships: { select: { spaceId: true } },
+      projects: { select: { project: { select: { spaceId: true } } } },
       administeredSpaces: { select: { id: true, name: true } },
       administeredSpace: { select: { id: true } },
       ownedProjects: { select: { id: true, name: true } },
@@ -43,5 +47,9 @@ export async function DELETE() {
     prisma.archivePostCollaborator.deleteMany({ where: { userId } }),
     prisma.user.update({ where: { id: userId }, data: { registrationStatus: "WITHDRAWN", password: null } }),
   ]));
+  const spaceIds = new Set([...user.spaceMemberships.map((member) => member.spaceId), ...user.projects.map((member) => member.project.spaceId)]);
+  for (const spaceId of spaceIds) {
+    if (spaceId) await recordActivity({ actorId: userId, spaceId, type: "구성원", action: "탈퇴", entityType: "USER", entityId: userId, title: "계정 탈퇴", beforeData: { registrationStatus: user.registrationStatus }, afterData: { registrationStatus: "WITHDRAWN" } });
+  }
   return NextResponse.json({ ok: true });
 }

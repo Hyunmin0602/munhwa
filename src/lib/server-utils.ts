@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { withDbReadRetry } from "@/lib/db-retry";
+import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
+import { createActivityRecorder } from "@/lib/activity-log";
 
 export const DEFAULT_SPACE_ID = "culture-sports";
 
@@ -165,41 +166,11 @@ export async function findUserByEmail(email: string) {
   return prisma.user.findUnique({ where: { email } });
 }
 
-export async function recordActivity(input: {
-  actorId: string;
-  projectId?: string | null;
-  type: string;
-  action: string;
-  entityType: string;
-  entityId: string;
-  title?: string | null;
-  metadata?: Record<string, unknown>;
-  beforeData?: Record<string, unknown> | null;
-  afterData?: Record<string, unknown> | null;
-}) {
-  try {
-    let spaceId: string | null = null;
-    if (input.projectId) {
-      const project = await prisma.project.findUnique({ where: { id: input.projectId }, select: { spaceId: true } });
-      spaceId = project?.spaceId ?? null;
-    }
-    if (!spaceId) return;
-    await prisma.activityLog.create({
-      data: {
-        spaceId,
-        actorId: input.actorId,
-        projectId: input.projectId ?? null,
-        type: input.type,
-        action: input.action,
-        entityType: input.entityType,
-        entityId: input.entityId,
-        title: input.title ?? null,
-        metadata: input.metadata ? JSON.stringify(input.metadata) : null,
-        beforeData: input.beforeData ? JSON.stringify(input.beforeData) : null,
-        afterData: input.afterData ? JSON.stringify(input.afterData) : null,
-      },
-    });
-  } catch (error) {
-    console.error("[activity-log] failed", error);
-  }
-}
+export const recordActivity = createActivityRecorder({
+  findProjectSpace: async (projectId) => {
+    const project = await withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { spaceId: true } }));
+    return project?.spaceId ?? null;
+  },
+  save: (data) => withDbWrite(() => prisma.activityLog.create({ data })),
+  onError: (error) => console.error("[activity-log] failed", error),
+});

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { DEFAULT_SPACE_ID, assertAdmin, assertSpaceManager, canManageCultureSportsContent } from "@/lib/server-utils";
+import { DEFAULT_SPACE_ID, assertAdmin, assertSpaceManager, canManageCultureSportsContent, recordActivity } from "@/lib/server-utils";
 import { InputValidationError, optionalText, projectColor, projectStatus, projectTags, readJsonObject, requiredText } from "@/lib/validation";
 import { internalError, unauthorized, validationError } from "@/lib/api-error";
 
@@ -129,6 +129,7 @@ export async function POST(req: NextRequest) {
       });
       return createdProject;
     }));
+    await recordActivity({ actorId: userId, spaceId: project.spaceId, projectId: project.id, type: "사업", action: "생성", entityType: "PROJECT", entityId: project.id, title: project.name, afterData: { name: project.name, status: project.status, ownerId: project.ownerId, isArchived: project.isArchived, accessScope: project.accessScope } });
     return NextResponse.json(project, { status: 201 });
   } catch (error) {
     if (error instanceof InputValidationError) return validationError(error.message);

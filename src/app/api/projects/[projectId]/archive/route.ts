@@ -18,9 +18,13 @@ export async function GET(request: NextRequest, { params }: Params) {
   const requestedLimit = limitParam === null ? 10 : Number(limitParam);
   const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 10, 1), 10);
   const cursor = request.nextUrl.searchParams.get("cursor");
+  const kind = request.nextUrl.searchParams.get("kind");
+  if (kind !== null && kind !== "DOCUMENT" && kind !== "MEETING") {
+    return NextResponse.json({ error: { code: "VALIDATION_ERROR", message: "문서 유형이 올바르지 않습니다." } }, { status: 400 });
+  }
   const posts = await withDbReadRetry(() =>
     prisma.archivePost.findMany({
-      where: { projectId },
+      where: { projectId, ...(kind ? { kind } : {}) },
       select: {
         id: true,
         title: true,

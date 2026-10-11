@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Bell, CheckCheck, Settings2 } from "lucide-react";
 import dayjs from "dayjs";
-import { apiFetch } from "@/lib/client-fetch";
+import { apiFetch, getModalExceptionMessage, getModalRequestErrorMessage, showToast } from "@/lib/client-fetch";
 import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
 type NotificationItem = { id: string; type: string; title: string; body: string; href: string; readAt: string | null; createdAt: string };
@@ -26,6 +26,9 @@ export default function NotificationsPage() {
   const [saving, setSaving] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [error, setError] = useState("");
+  const [reading, setReading] = useState(false);
+  const pendingReadIds = useRef(new Set<string>());
+  const allReadPending = useRef(false);
 
   const load = useCallback(async (cursor?: string, append = false) => {
     setLoading(true);
@@ -63,22 +66,54 @@ export default function NotificationsPage() {
   };
 
   const markRead = async (notification: NotificationItem) => {
-    if (notification.readAt) return;
-    setItems((current) => current.map((item) => item.id === notification.id ? { ...item, readAt: new Date().toISOString() } : item));
-    setUnreadCount((current) => Math.max(0, current - 1));
-    void apiFetch("/api/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notificationId: notification.id }) }, { showGlobalError: false });
+    if (notification.readAt || allReadPending.current || pendingReadIds.current.has(notification.id)) return;
+    pendingReadIds.current.add(notification.id);
+    setReading(true);
+    setError("");
+    try {
+      const response = await apiFetch("/api/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ notificationId: notification.id }) }, { showGlobalError: false });
+      if (!response.ok) {
+        const message = await getModalRequestErrorMessage(response, "알림 읽음 처리");
+        setError(message);
+        showToast(message);
+        return;
+      }
+      setItems((current) => current.map((item) => item.id === notification.id ? { ...item, readAt: new Date().toISOString() } : item));
+      setUnreadCount((current) => Math.max(0, current - 1));
+    } catch (cause) {
+      const message = getModalExceptionMessage(cause, "알림 읽음 처리");
+      setError(message);
+      showToast(message);
+    } finally {
+      pendingReadIds.current.delete(notification.id);
+      setReading(pendingReadIds.current.size > 0 || allReadPending.current);
+    }
   };
 
   const markAllRead = async () => {
-    setItems((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
-    setUnreadCount(0);
-    const response = await apiFetch("/api/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ markAllRead: true }) }, { showGlobalError: false });
-    if (!response.ok) void load();
+    if (loading || allReadPending.current || pendingReadIds.current.size > 0) return;
+    allReadPending.current = true;
+    setReading(true);
+    setError("");
+    try {
+      const response = await apiFetch("/api/notifications", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ markAllRead: true }) }, { showGlobalError: false });
+      if (!response.ok) {
+        setError(await getModalRequestErrorMessage(response, "알림 읽음 처리"));
+        return;
+      }
+      setItems((current) => current.map((item) => ({ ...item, readAt: item.readAt ?? new Date().toISOString() })));
+      setUnreadCount(0);
+    } catch (cause) {
+      setError(getModalExceptionMessage(cause, "알림 읽음 처리"));
+    } finally {
+      allReadPending.current = false;
+      setReading(false);
+    }
   };
 
   return <main className="min-h-full bg-gray-50 px-4 py-6 md:px-8">
     <div className="mx-auto max-w-3xl">
-      <header className="mb-5 flex items-center justify-between gap-3"><div><p className="text-xs text-gray-400">내 활동</p><h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-gray-900"><Bell size={21} className="text-indigo-600" />알림함</h1></div><div className="flex items-center gap-2"><button type="button" onClick={() => setSettingsOpen(true)} aria-label="알림 설정" className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50"><Settings2 size={15} /><span className="hidden sm:inline">알림 설정</span></button>{unreadCount > 0 && <button type="button" onClick={() => void markAllRead()} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50"><CheckCheck size={15} />모두 읽음</button>}</div></header>
+      <header className="mb-5 flex items-center justify-between gap-3"><div><p className="text-xs text-gray-400">내 활동</p><h1 className="mt-1 flex items-center gap-2 text-2xl font-bold text-gray-900"><Bell size={21} className="text-indigo-600" />알림함</h1></div><div className="flex items-center gap-2"><button type="button" onClick={() => setSettingsOpen(true)} aria-label="알림 설정" className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50"><Settings2 size={15} /><span className="hidden sm:inline">알림 설정</span></button>{unreadCount > 0 && <button type="button" disabled={reading || loading} onClick={() => void markAllRead()} className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"><CheckCheck size={15} />모두 읽음</button>}</div></header>
       {error && <p role="alert" className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</p>}
       <section className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         {loading && items.length === 0 ? <p className="px-4 py-12 text-center text-sm text-gray-400">알림을 불러오는 중...</p> : items.length === 0 ? <div className="px-4 py-14 text-center"><Bell size={24} className="mx-auto mb-3 text-gray-300" /><p className="text-sm font-medium text-gray-600">새 알림이 없습니다</p><p className="mt-1 text-xs text-gray-400">멘션 알림이 이곳에 표시됩니다.</p></div> : <div className="divide-y divide-gray-100">{items.map((item) => <Link key={item.id} href={item.href} onClick={() => void markRead(item)} className={`block px-4 py-4 transition-colors hover:bg-gray-50 ${item.readAt ? "" : "bg-indigo-50/50"}`}><div className="flex gap-3"><span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${item.readAt ? "bg-transparent" : "bg-indigo-600"}`} /><span className="min-w-0 flex-1"><span className="flex flex-wrap items-center justify-between gap-2"><span className="text-sm font-semibold text-gray-900">{item.title}</span><time className="text-[11px] text-gray-400">{dayjs(item.createdAt).format("YYYY.MM.DD HH:mm")}</time></span><span className="mt-1 block text-sm text-gray-600">{item.body}</span></span></div></Link>)}</div>}
