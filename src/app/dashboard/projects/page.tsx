@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
-import { FolderKanban, Users } from "lucide-react";
+import { ChevronRight, FolderKanban, Search, Users, X } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -21,6 +21,10 @@ export default function ProjectsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [query, setQuery] = useState("");
+  const filteredProjects = projects.filter((project) =>
+    project.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -45,7 +49,10 @@ export default function ProjectsPage() {
     <div className="flex h-full flex-col">
       <header className="border-b border-gray-100 bg-white px-4 py-4 md:px-8 md:py-6">
         <p className="mb-1 text-xs text-gray-400">참여 중인 사업</p>
-        <h1 className="text-xl font-bold text-gray-900 md:text-2xl">사업</h1>
+        <div className="flex items-end justify-between gap-3">
+          <h1 className="text-xl font-bold text-gray-900 md:text-2xl">사업</h1>
+          {!loading && !error && projects.length > 0 && <span className="text-xs text-gray-400">{projects.length}개</span>}
+        </div>
       </header>
 
       <main className="flex-1 overflow-visible px-4 py-4 md:px-8 md:py-6 lg:overflow-y-auto">
@@ -73,7 +80,41 @@ export default function ProjectsPage() {
             <p className="font-medium text-gray-600">아직 사업이 없습니다</p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <>
+            <label className="relative mb-3 block md:hidden">
+              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+              <input
+                type="search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="사업명 검색"
+                aria-label="사업명 검색"
+                className="h-11 w-full rounded-xl border border-gray-200 bg-white pl-9 pr-10 text-sm text-gray-800 outline-none placeholder:text-gray-400 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              />
+              {query && <button type="button" onClick={() => setQuery("")} aria-label="검색어 지우기" className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100"><X size={15} /></button>}
+            </label>
+            {filteredProjects.length === 0 ? (
+              <div className="flex min-h-48 flex-col items-center justify-center text-center md:hidden">
+                <p className="text-sm font-medium text-gray-600">검색 결과가 없습니다</p>
+                <p className="mt-1 text-xs text-gray-400">다른 사업명을 입력하거나 검색어를 지워주세요.</p>
+                <button type="button" onClick={() => setQuery("")} className="mt-3 rounded-lg px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-indigo-50">검색어 지우기</button>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100 overflow-hidden rounded-xl border border-gray-200 bg-white md:hidden">
+                {filteredProjects.map((project) => (
+                  <Link key={project.id} href={`/dashboard/projects/${project.id}/kanban`} className="flex min-h-[76px] items-center gap-3 px-3 py-3 transition-colors hover:bg-gray-50 active:bg-indigo-50">
+                    <span className="h-10 w-1 shrink-0 rounded-full" style={{ backgroundColor: project.color }} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-gray-900">{project.name}</span>
+                      {project.description && <span className="mt-0.5 block truncate text-xs text-gray-500">{project.description}</span>}
+                      <span className="mt-1 flex items-center gap-1 text-[11px] text-gray-400"><Users size={11} />{project.members.length}명 참여<span className="px-0.5 text-gray-300">·</span>{dayjs(project.createdAt).format("YYYY.MM.DD")}</span>
+                    </span>
+                    <ChevronRight size={17} className="shrink-0 text-gray-300" />
+                  </Link>
+                ))}
+              </div>
+            )}
+            <div className="hidden grid-cols-1 gap-4 md:grid md:grid-cols-2 xl:grid-cols-3">
             {projects.map((project) => (
               <Link
                 key={project.id}
@@ -99,7 +140,8 @@ export default function ProjectsPage() {
                 </div>
               </Link>
             ))}
-          </div>
+            </div>
+          </>
         )}
       </main>
     </div>

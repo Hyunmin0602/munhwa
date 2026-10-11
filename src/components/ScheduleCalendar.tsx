@@ -262,7 +262,11 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
     .sort((a, b) => dayjs(a.startDate).diff(dayjs(b.startDate)))
     .slice(0, 8);
   const mobileDay = selectedDay ?? dayjs();
-  const mobileEvents = getEventsForDay(mobileDay);
+  const mobileWeekStart = mobileDay.startOf("week");
+  const mobileWeekEnd = mobileWeekStart.add(6, "day").endOf("day");
+  const mobileWeekEvents = events
+    .filter((event) => !dayjs(event.endDate).isBefore(mobileWeekStart, "day") && !dayjs(event.startDate).isAfter(mobileWeekEnd, "day"))
+    .sort((a, b) => dayjs(a.startDate).diff(dayjs(b.startDate)));
   const selectMobileDay = (day: dayjs.Dayjs) => {
     setSelectedDay(day);
     setCurrent(day);
@@ -273,31 +277,38 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
       <div className="flex h-full flex-col md:hidden">
         {error && <div className="mx-4 mt-3 flex items-center justify-between gap-3 rounded-lg bg-rose-50 px-3 py-2 text-xs text-rose-700"><span>{error}</span><button type="button" onClick={() => setReloadKey((current) => current + 1)} className="font-semibold underline">다시 시도</button></div>}
         <div className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3">
-          <button type="button" onClick={() => selectMobileDay(mobileDay.subtract(1, "day"))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="이전 날짜"><ChevronLeft size={18} /></button>
+          <button type="button" onClick={() => selectMobileDay(mobileDay.subtract(1, "week"))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="이전 주"><ChevronLeft size={18} /></button>
           <button type="button" onClick={() => selectMobileDay(dayjs())} className="text-center">
-            <p className="text-sm font-bold text-gray-900">{mobileDay.format("M월 D일")}</p>
-            <p className="text-xs text-gray-400">{mobileDay.format("dddd")}</p>
+            <p className="text-sm font-bold text-gray-900">{mobileWeekStart.format("YYYY년 M월 D일")} – {mobileWeekEnd.format("M월 D일")}</p>
+            <p className="text-xs text-gray-400">주간 일정 · 오늘로 이동</p>
           </button>
-          <button type="button" onClick={() => selectMobileDay(mobileDay.add(1, "day"))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="다음 날짜"><ChevronRight size={18} /></button>
+          <button type="button" onClick={() => selectMobileDay(mobileDay.add(1, "week"))} className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-600 hover:bg-gray-100" aria-label="다음 주"><ChevronRight size={18} /></button>
+        </div>
+        <div className="grid grid-cols-7 gap-1 border-b border-gray-100 bg-white px-3 py-2">
+          {Array.from({ length: 7 }, (_, index) => mobileWeekStart.add(index, "day")).map((day) => (
+            <button key={day.format("YYYY-MM-DD")} type="button" onClick={() => selectMobileDay(day)} className={`rounded-lg py-1.5 text-center ${mobileDay.isSame(day, "day") ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}>
+              <span className="block text-[10px]">{"일월화수목금토"[day.day()]}</span><span className="block text-xs font-semibold">{day.date()}</span>
+            </button>
+          ))}
         </div>
         <div className="flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
             <CalendarDays size={16} className="text-indigo-600" />
-            <span className="text-sm font-semibold text-gray-800">선택한 날짜의 일정</span>
-            <span className="text-xs text-gray-400">{mobileEvents.length}개</span>
+            <span className="text-sm font-semibold text-gray-800">이번 주 일정</span>
+            <span className="text-xs text-gray-400">{mobileWeekEvents.length}개</span>
           </div>
           <button type="button" onClick={() => openModal(mobileDay)} className="flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-sm font-medium text-white hover:bg-indigo-700">
             <Plus size={15} />일정 추가
           </button>
         </div>
         <div className="flex-1 overflow-y-auto px-4 pb-4">
-          {mobileEvents.length === 0 ? (
+          {mobileWeekEvents.length === 0 ? (
             <button type="button" onClick={() => openModal(mobileDay)} className="flex min-h-40 w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-200 text-sm text-gray-400 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600">
-              <Plus size={20} />이 날짜에 일정 추가
+              <Plus size={20} />이번 주 일정 추가
             </button>
           ) : (
             <div className="space-y-2">
-              {mobileEvents.map((event) => (
+              {mobileWeekEvents.map((event) => (
                 <div key={event.id} className="flex items-start gap-3 rounded-lg border border-gray-200 bg-white p-3 shadow-sm">
                   <div className="mt-1 h-9 w-1 shrink-0 rounded-full" style={{ backgroundColor: getEventColor(event) }} />
                   <button
@@ -306,8 +317,8 @@ export default function ScheduleCalendar({ projectId }: { projectId: string }) {
                     className="min-w-0 flex-1 text-left"
                   >
                     <p className="truncate text-sm font-semibold text-gray-800">{event.title}</p>
-                    <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><Clock size={12} />{getEventTime(event)}</p>
-                    {event.description && <p className="mt-2 text-xs leading-relaxed text-gray-400">{event.description}</p>}
+                    <p className="mt-1 flex items-center gap-1 text-xs text-gray-500"><Clock size={12} />{dayjs(event.startDate).format("M/D (ddd)")} · {getEventTime(event)}</p>
+                    {event.description && <p className="mt-2 whitespace-pre-wrap break-words text-xs leading-relaxed text-gray-500">{event.description}</p>}
                     <p className="mt-1 text-[10px] text-gray-400">{getEventLabel(event)}</p>
                   </button>
                   <button type="button" onClick={() => deleteEvent(event.id)} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 hover:bg-rose-50 hover:text-rose-500" aria-label={`${event.title} 삭제`}><Trash2 size={15} /></button>
