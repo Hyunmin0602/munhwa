@@ -14,6 +14,7 @@ model User {
   password      String?
   image         String?
   role          String    @default("member")
+  registrationStatus String @default("APPROVED")
   cohortId      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -40,6 +41,8 @@ model User {
   activityLogs ActivityLog[] @relation("ActivityActor")
   createdEventLabels EventLabel[] @relation("EventLabelCreator")
   archiveCollaborations ArchivePostCollaborator[]
+
+  @@index([registrationStatus, createdAt])
 }
 
 model Space {

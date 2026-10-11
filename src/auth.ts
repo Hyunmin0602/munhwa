@@ -46,6 +46,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           user.password
         );
         if (!isValid) return null;
+        if (user.registrationStatus !== "APPROVED") return null;
 
         return { id: user.id, email: user.email, name: user.name };
       },

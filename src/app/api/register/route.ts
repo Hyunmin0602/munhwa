@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { DEFAULT_SPACE_ID } from "@/lib/server-utils";
 import { checkRateLimit, getClientIp, rateLimitResponse, REGISTRATION_EMAIL_LIMIT, REGISTRATION_IP_LIMIT } from "@/lib/rate-limit";
 import { InputValidationError, normalizeEmail, password, readJsonObject, requiredText } from "@/lib/validation";
+import { conflict } from "@/lib/api-error";
 
 export async function POST(req: NextRequest) {
   try {
@@ -26,26 +26,21 @@ export async function POST(req: NextRequest) {
 
     const existing = await withDbReadRetry(() => prisma.user.findUnique({ where: { email } }), { operation: `auth:check-user:${email}` });
     if (existing) {
-      return NextResponse.json({ ok: true }, { status: 201 });
+      return conflict("이미 사용 중인 이메일입니다. 로그인하거나 관리자에게 문의해주세요.");
     }
 
     const hashed = await bcrypt.hash(plainPassword, 10);
     const user = await withDbWrite(() =>
       prisma.$transaction(async (tx) => {
         const createdUser = await tx.user.create({
-          data: { name, email, password: hashed, cohortId },
-          select: { id: true, name: true, email: true, cohortId: true },
-        });
-        await tx.spaceMember.upsert({
-          where: { spaceId_userId: { spaceId: DEFAULT_SPACE_ID, userId: createdUser.id } },
-          create: { spaceId: DEFAULT_SPACE_ID, userId: createdUser.id, role: "member" },
-          update: {},
+          data: { name, email, password: hashed, cohortId, registrationStatus: "PENDING" },
+          select: { id: true, name: true, email: true, cohortId: true, registrationStatus: true },
         });
         return createdUser;
       })
     );
 
-    return NextResponse.json({ ok: true, user }, { status: 201 });
+    return NextResponse.json({ ok: true, pendingApproval: user.registrationStatus === "PENDING" }, { status: 201 });
   } catch (error) {
     if (error instanceof InputValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });

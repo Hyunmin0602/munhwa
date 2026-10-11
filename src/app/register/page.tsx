@@ -52,7 +52,7 @@ export default function RegisterPage() {
       });
       if (!res.ok) {
         const data = await res.json().catch(() => null);
-        setError(data?.error ?? "오류가 발생했습니다.");
+        setError(data?.error?.message ?? data?.error ?? "오류가 발생했습니다.");
       } else {
         router.push("/login?registered=1");
       }

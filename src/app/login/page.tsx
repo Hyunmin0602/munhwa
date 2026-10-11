@@ -19,7 +19,7 @@ export default function LoginPage() {
 function LoginPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const registeredToast = searchParams.get("registered") === "1" ? "가입이 완료되었습니다! 로그인하세요." : "";
+  const registeredToast = searchParams.get("registered") === "1" ? "가입 신청이 접수되었습니다. Space 관리자의 승인 후 로그인할 수 있습니다." : "";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -40,7 +40,7 @@ function LoginPageInner() {
     const res = await signIn("credentials", { email, password, redirect: false });
     setLoading(false);
     if (res?.error) {
-      setError("이메일 또는 비밀번호가 올바르지 않습니다.");
+      setError("로그인 정보를 확인해주세요. 가입 승인 대기 중이라면 Space 관리자 승인 후 로그인할 수 있습니다.");
     } else {
       router.push("/dashboard/integrated");
     }

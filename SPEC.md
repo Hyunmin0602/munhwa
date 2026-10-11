@@ -1,7 +1,7 @@
 # Munhwa 기술 사양
 
 상태: 운영 기준
-최종 갱신: 2026-09-24
+최종 갱신: 2026-10-11
 
 ## 1. 제품 범위
 
@@ -23,6 +23,7 @@
 
 - 최종 인증·권한 판단은 서버 API와 DB에서 수행한다.
 - 세션에는 사용자 식별자만 신뢰하고 관리자·사업 멤버 상태는 요청 시 조회한다.
+- 신규 계정은 `User.registrationStatus = "PENDING"`으로 생성하며 로그인할 수 없다. 해당 Space의 `SPACE_ADMIN` 승인 후 `APPROVED`로 전환하고 `SpaceMember`에 추가한다. 반려된 대기 계정은 제거해 같은 이메일로 재신청할 수 있다.
 - `User.role = "admin"`은 전체 시스템 관리자(`ADMIN`)로 고정한다.
 - `SPACE_ADMIN`은 전역 User role이 아니라 `Space.adminUserId` 관계에서 파생되는 Space 단위 권한이다.
 - `Project.ownerId`는 사업 관리자 1명의 정본이며, `ProjectMember.role = "owner"`는 이전 기간 호환 필드다.

@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
 import { DEFAULT_SPACE_ID, assertSpaceManager } from "@/lib/server-utils";
 import { readJsonObject } from "@/lib/validation";
-import { forbidden, internalError, notFound, unauthorized, validationError } from "@/lib/api-error";
+import { conflict, forbidden, internalError, notFound, unauthorized, validationError } from "@/lib/api-error";
 
 function getUserId() {
   return auth().then((session) => session?.user?.id ?? null);
@@ -23,8 +23,8 @@ export async function GET(request: NextRequest) {
 
   try {
     const query = request.nextUrl.searchParams.get("query")?.trim() ?? "";
-    const members = await withDbReadRetry(
-      () => prisma.spaceMember.findMany({
+    const [members, pendingRegistrations] = await Promise.all([
+      withDbReadRetry(() => prisma.spaceMember.findMany({
         where: {
           spaceId: DEFAULT_SPACE_ID,
           ...(query ? { user: { OR: [{ name: { contains: query } }, { email: { contains: query } }] } } : {}),
@@ -37,10 +37,18 @@ export async function GET(request: NextRequest) {
           joinedAt: true,
           user: { select: { id: true, name: true, email: true, role: true, cohort: { select: { id: true, name: true } }, projects: { where: { project: { spaceId: DEFAULT_SPACE_ID } }, select: { role: true, project: { select: { id: true, name: true } } } } } },
         },
-      }),
-      { operation: "space-management:members:list" },
-    );
-    return NextResponse.json({ items: members });
+      }), { operation: "space-management:members:list" }),
+      withDbReadRetry(() => prisma.user.findMany({
+        where: {
+          registrationStatus: "PENDING",
+          ...(query ? { OR: [{ name: { contains: query } }, { email: { contains: query } }] } : {}),
+        },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+        select: { id: true, name: true, email: true, createdAt: true, cohort: { select: { name: true } } },
+      }), { operation: "space-management:registrations:list" }),
+    ]);
+    return NextResponse.json({ items: members, pendingRegistrations });
   } catch (error) {
     console.error("[api/space-management/members] GET failed", error);
     return internalError("Space 구성원 목록을 불러오지 못했습니다.");
@@ -54,6 +62,29 @@ export async function PATCH(request: NextRequest) {
   try {
     const data = await readJsonObject(request);
     const userId = typeof data.userId === "string" ? data.userId.trim() : "";
+    const registrationAction = data.registrationAction;
+    if (registrationAction === "approve" || registrationAction === "reject") {
+      if (!userId) return validationError("가입 신청자가 필요합니다.");
+      const pendingUser = await withDbReadRetry(() => prisma.user.findFirst({ where: { id: userId, registrationStatus: "PENDING" }, select: { id: true } }), { operation: "space-management:registration:check" });
+      if (!pendingUser) return notFound("대기 중인 가입 신청을 찾을 수 없습니다.");
+
+      const changed = await withDbWrite(() => prisma.$transaction(async (tx) => {
+        if (registrationAction === "reject") {
+          const result = await tx.user.deleteMany({ where: { id: userId, registrationStatus: "PENDING" } });
+          return result.count === 1;
+        }
+        const result = await tx.user.updateMany({ where: { id: userId, registrationStatus: "PENDING" }, data: { registrationStatus: "APPROVED" } });
+        if (result.count !== 1) return false;
+        await tx.spaceMember.upsert({
+          where: { spaceId_userId: { spaceId: DEFAULT_SPACE_ID, userId } },
+          create: { spaceId: DEFAULT_SPACE_ID, userId, role: "member" },
+          update: {},
+        });
+        return true;
+      }));
+      if (!changed) return conflict("가입 신청이 이미 처리되었습니다.");
+      return NextResponse.json({ ok: true, status: registrationAction === "approve" ? "APPROVED" : "REJECTED" });
+    }
     const role = data.role === "space_manager" ? "space_manager" : data.role === "member" ? "member" : "";
     if (!userId || !role) return validationError("대상 구성원과 올바른 역할이 필요합니다.");
     if (userId === access.userId && role !== "space_manager") return validationError("현재 계정의 관리자 권한은 스스로 회수할 수 없습니다.");
