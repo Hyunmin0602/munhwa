@@ -38,12 +38,21 @@ function LoginPageInner() {
     e.preventDefault();
     setError("");
     setLoading(true);
-    const res = await signIn("credentials", { email, password, redirect: false });
-    setLoading(false);
-    if (res?.error) {
-      setError("로그인 정보를 확인해주세요. 가입 승인 대기 중이라면 Space 관리자 승인 후 로그인할 수 있습니다.");
-    } else {
-      router.push("/dashboard/integrated");
+    try {
+      const res = await signIn("credentials", { email, password, redirect: false });
+      if (res?.status === 429) {
+        setError("로그인 시도가 많아 잠시 제한됐습니다. 10분 후 다시 시도해주세요.");
+      } else if (res?.status === 503) {
+        setError("로그인 보호 서비스가 일시적으로 응답하지 않습니다. 잠시 후 다시 시도해주세요.");
+      } else if (res?.error) {
+        setError("로그인 정보를 확인해주세요. 가입 승인 대기 중이라면 Space 관리자 승인 후 로그인할 수 있습니다.");
+      } else {
+        router.push("/dashboard/integrated");
+      }
+    } catch {
+      setError("로그인 요청을 처리하지 못했습니다. 잠시 후 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
     }
   };
 
