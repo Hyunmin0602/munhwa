@@ -24,7 +24,7 @@ function logParams(filters: Filters, cursor?: string) {
 }
 
 function actorName(log: ActivitySummary) { return log.actor.name?.trim() || log.actor.email; }
-function projectName(log: ActivitySummary) { return log.project?.name ?? (log.entityType === "PROJECT" && log.action === "삭제" ? "삭제된 사업" : "부서"); }
+function projectName(log: ActivitySummary) { return log.project?.name ?? (log.entityType === "PROJECT" && log.action === "삭제" ? "삭제된 사업" : "사업 연결 없음"); }
 
 export default function ActivityLogPanel() {
   const [draft, setDraft] = useState<Filters>(emptyFilters);
