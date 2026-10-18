@@ -25,3 +25,18 @@ export function hasValidArchiveImageSignature(bytes: Uint8Array, mimeType: Archi
     && String.fromCharCode(...bytes.slice(0, 4)) === "RIFF"
     && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP";
 }
+
+export function partitionArchiveImageUrls(urls: string[]) {
+  const localImageUrls: string[] = [];
+  const blobImageUrls: string[] = [];
+
+  for (const url of urls) {
+    if (url.startsWith("/uploads/")) {
+      localImageUrls.push(url);
+    } else if (/^https?:\/\//i.test(url)) {
+      blobImageUrls.push(url);
+    }
+  }
+
+  return { localImageUrls, blobImageUrls };
+}

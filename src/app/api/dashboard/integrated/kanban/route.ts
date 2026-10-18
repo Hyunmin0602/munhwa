@@ -12,8 +12,18 @@ export async function GET() {
   const canViewAll = await assertAdmin(userId);
   const canViewSpace = !canViewAll && await assertSpaceManager(userId, DEFAULT_SPACE_ID);
   try {
+    const spaceMemberships = canViewAll || canViewSpace
+      ? []
+      : await withDbReadRetry(() => prisma.spaceMember.findMany({ where: { userId }, select: { spaceId: true } }));
+    const spaceIds = spaceMemberships.map((membership) => membership.spaceId);
     const projects = await withDbReadRetry(() => prisma.project.findMany({
-      where: canViewAll ? {} : canViewSpace ? { spaceId: DEFAULT_SPACE_ID } : { members: { some: { userId } } },
+      where: canViewAll ? {} : canViewSpace ? { spaceId: DEFAULT_SPACE_ID } : {
+        OR: [
+          { members: { some: { userId } } },
+          { ownerId: userId },
+          ...(spaceIds.length ? [{ isArchived: true, accessScope: "SPACE", spaceId: { in: spaceIds } }] : []),
+        ],
+      },
       orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
       select: {
         id: true,

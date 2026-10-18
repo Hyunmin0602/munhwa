@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { v4 as uuidv4 } from "uuid";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { assertProjectMember, canViewAllArchivePosts, recordActivity } from "@/lib/server-utils";
+import { assertProjectEditor, assertProjectMember, recordActivity } from "@/lib/server-utils";
 
 import { InputValidationError, readJsonObject, requiredText } from "@/lib/validation";
 import { internalError, validationError } from "@/lib/api-error";
@@ -16,17 +16,18 @@ export async function GET(request: NextRequest, { params }: Params) {
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
   if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const canViewAll = await canViewAllArchivePosts(userId, projectId);
 
-  const requestedLimit = Number(request.nextUrl.searchParams.get("limit"));
-  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 30, 1), 50);
+  const limitParam = request.nextUrl.searchParams.get("limit");
+  const requestedLimit = limitParam === null ? 10 : Number(limitParam);
+  const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 10, 1), 10);
   const cursor = request.nextUrl.searchParams.get("cursor");
+  const kind = request.nextUrl.searchParams.get("kind");
+  if (kind !== null && kind !== "DOCUMENT" && kind !== "MEETING") {
+    return NextResponse.json({ error: { code: "VALIDATION_ERROR", message: "문서 유형이 올바르지 않습니다." } }, { status: 400 });
+  }
   const posts = await withDbReadRetry(() =>
     prisma.archivePost.findMany({
-      where: {
-        projectId,
-        ...(canViewAll ? {} : { OR: [{ authorId: userId }, { visibility: { not: "PRIVATE" } }] }),
-      },
+      where: { projectId, ...(kind ? { kind } : {}) },
       select: {
         id: true,
         title: true,
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest, { params }: Params) {
   const session = await auth();
   if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const userId = session.user.id;
-  if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!(await assertProjectEditor(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const data = await readJsonObject(req);

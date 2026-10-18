@@ -2,9 +2,9 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
-import { LayoutDashboard, FolderKanban, CalendarDays, BookOpen, ChevronDown } from "lucide-react";
+import { LayoutDashboard, FolderKanban, CalendarDays, CheckSquare, ChevronDown } from "lucide-react";
 
-interface Project { id: string; name: string; color: string; }
+interface Project { id: string; name: string; color: string; isArchived?: boolean; accessScope?: "SPACE" | "MEMBERS"; }
 
 export default function BottomTabBar({ projects }: { projects: Project[] }) {
   const pathname = usePathname();
@@ -27,12 +27,12 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
         { href: "/dashboard/integrated", label: "통합", Icon: LayoutDashboard, active: pathname === "/dashboard/integrated" },
         { href: `/dashboard/projects/${projectId}/kanban`, label: "칸반", Icon: FolderKanban, active: currentTab === "kanban" },
         { href: `/dashboard/projects/${projectId}/schedule`, label: "일정", Icon: CalendarDays, active: currentTab === "schedule" },
-        { href: `/dashboard/projects/${projectId}/archive`, label: "아카이브", Icon: BookOpen, active: currentTab === "archive" },
+        { href: `/dashboard/projects/${projectId}/archive`, label: "아카이브", Icon: CheckSquare, active: currentTab === "archive" },
       ]
     : [
         { href: "/dashboard/integrated", label: "통합", Icon: LayoutDashboard, active: pathname === "/dashboard/integrated" },
         { href: "/dashboard/projects", label: "사업", Icon: FolderKanban, active: pathname === "/dashboard/projects" },
-        { href: "/dashboard/meetings", label: "회의록", Icon: BookOpen, active: pathname === "/dashboard/meetings" },
+        { href: "/dashboard/meetings", label: "회의록", Icon: CheckSquare, active: pathname === "/dashboard/meetings" },
       ];
 
   return (
@@ -64,7 +64,7 @@ export default function BottomTabBar({ projects }: { projects: Project[] }) {
                 >
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
                   <span className={`text-sm flex-1 text-left ${p.id === projectId ? "text-indigo-700 font-medium" : "text-gray-700"}`}>
-                    {p.name}
+                    {p.name}{p.isArchived && <span className="ml-2 bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-500">기록</span>}
                   </span>
                   {p.id === projectId && (
                     <span className="text-[10px] text-indigo-500 font-medium">현재</span>

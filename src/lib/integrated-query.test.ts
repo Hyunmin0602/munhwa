@@ -22,7 +22,8 @@ test("integrated queries bound rows, enforce access, and paginate without repeat
   try {
     await client.executeMultiple(`
       CREATE TABLE User (id TEXT PRIMARY KEY, name TEXT);
-      CREATE TABLE Project (id TEXT PRIMARY KEY, name TEXT, color TEXT, status TEXT, tags TEXT, spaceId TEXT, updatedAt DATETIME);
+      CREATE TABLE Project (id TEXT PRIMARY KEY, name TEXT, color TEXT, status TEXT, tags TEXT, spaceId TEXT, updatedAt DATETIME, ownerId TEXT, isArchived BOOLEAN DEFAULT 0, accessScope TEXT DEFAULT 'MEMBERS');
+      CREATE TABLE SpaceMember (spaceId TEXT, userId TEXT);
       CREATE TABLE ProjectMember (projectId TEXT, userId TEXT);
       CREATE TABLE KanbanColumn (id TEXT PRIMARY KEY, projectId TEXT);
       CREATE TABLE Task (id TEXT PRIMARY KEY, columnId TEXT, updatedAt DATETIME, dueDate DATETIME, "order" INTEGER DEFAULT 0);
@@ -32,7 +33,7 @@ test("integrated queries bound rows, enforce access, and paginate without repeat
     const inserts: Array<{ sql: string; args: Array<string | number | null> }> = [];
     for (let p = 0; p < 80; p++) {
       const id = `p${p.toString().padStart(2, "0")}`;
-      inserts.push({ sql: 'INSERT INTO Project VALUES (?, ?, ?, ?, ?, ?, ?)', args: [id, `Project ${p}`, "blue", "active", p % 2 ? "art, sports " : "arts,other", p < 60 ? "space" : "other", p] });
+      inserts.push({ sql: 'INSERT INTO Project (id, name, color, status, tags, spaceId, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)', args: [id, `Project ${p}`, "blue", "active", p % 2 ? "art, sports " : "arts,other", p < 60 ? "space" : "other", p] });
       if (p < 70) inserts.push({ sql: 'INSERT INTO ProjectMember VALUES (?, ?)', args: [id, "member"] });
       for (let c = 0; c < 5; c++) {
         const column = `${id}c${c}`;
@@ -86,6 +87,13 @@ test("integrated queries bound rows, enforce access, and paginate without repeat
     // Both epoch and ISO timestamps use the same range and cursor ordering.
     await client.execute("INSERT INTO Event VALUES ('epoch', 'p00', 1000, 1000), ('iso', 'p00', '1970-01-01T00:00:01.000Z', '1970-01-01T00:00:01.000Z')");
     assert.equal((await execute(itemIdsQuery(scope, "event", 30, null, { start: new Date(999), end: new Date(1001) }))).length, 2);
+    await client.execute("INSERT INTO SpaceMember VALUES ('other', 'member')");
+    await client.execute("UPDATE Project SET isArchived = 1, accessScope = 'SPACE' WHERE id = 'p79'");
+    assert.equal((await execute(projectFilterQuery(scope, 30, null, "Project 79"))).length, 1);
+    await client.execute("UPDATE Project SET accessScope = 'MEMBERS' WHERE id = 'p79'");
+    assert.equal((await execute(projectFilterQuery(scope, 30, null, "Project 79"))).length, 0);
+    await client.execute("UPDATE Project SET ownerId = 'member' WHERE id = 'p79'");
+    assert.equal((await execute(projectFilterQuery(scope, 30, null, "Project 79"))).length, 1);
   } finally { await prisma.$disconnect(); client.close(); }
 });
 

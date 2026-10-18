@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { Search, UserPlus } from "lucide-react";
-import { apiFetch } from "@/lib/client-fetch";
+import { apiFetch, getModalRequestErrorMessage } from "@/lib/client-fetch";
 import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
 const COLORS = ["#6366f1", "#ec4899", "#f59e0b", "#10b981", "#3b82f6", "#ef4444", "#8b5cf6"];
@@ -77,7 +77,7 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
     setError("");
 
     try {
-      const res = await fetch(`/api/projects/${project.id}`, {
+      const res = await apiFetch(`/api/projects/${project.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -86,11 +86,10 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
           category: category.trim() || null,
           color,
         }),
-      });
+      }, { showGlobalError: false });
 
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setError(data?.error ?? "수정 실패. 다시 시도해주세요.");
+        setError(await getModalRequestErrorMessage(res, "사업 수정"));
         return;
       }
 
@@ -114,12 +113,12 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
     setError("");
     try {
       const res = await apiFetch(`/api/projects/${project.id}/members?query=${encodeURIComponent(query)}`);
-      const data = await res.json();
       if (!res.ok) {
         setUserResults([]);
-        setError(data?.error ?? "사용자를 검색하지 못했습니다.");
+        setError(await getModalRequestErrorMessage(res, "사용자 검색"));
         return;
       }
+      const data = await res.json();
       setUserResults(Array.isArray(data.users) ? data.users : []);
     } catch {
       setError("사용자를 검색하지 못했습니다.");
@@ -134,8 +133,7 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
     try {
       const res = await apiFetch(`/api/projects/${project.id}/members`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: user.id }) });
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setError(data?.error ?? "초대 실패");
+        setError(await getModalRequestErrorMessage(res, "구성원 추가"));
         return;
       }
       const member = await res.json();
@@ -154,8 +152,7 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
     try {
       const res = await apiFetch(`/api/projects/${project.id}/members/${id}`, { method: "DELETE" });
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setError(data?.error ?? "삭제 실패");
+        setError(await getModalRequestErrorMessage(res, "구성원 삭제"));
         return;
       }
       setMembers((m) => m.filter((x) => x.id !== id));
@@ -171,8 +168,7 @@ export default function ProjectEditModal({ project, onClose, onUpdated, onDelete
     try {
       const res = await apiFetch(`/api/projects/${project.id}`, { method: "DELETE" });
       if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        setError(data?.error ?? "사업 삭제에 실패했습니다.");
+        setError(await getModalRequestErrorMessage(res, "사업 삭제"));
         return;
       }
       onDeleted(project.id);

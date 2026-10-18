@@ -12,12 +12,12 @@ export async function GET(
     () =>
       prisma.archivePost.findUnique({
         where: { shareToken: slug },
-        include: { author: { select: { name: true } }, project: { select: { name: true } } },
+        include: { author: { select: { name: true } }, project: { select: { name: true, isArchived: true, accessScope: true } } },
       }),
     { operation: `public-post:find-by-slug` }
   );
 
-  if (!post || post.visibility !== "EXTERNAL" || !post.shareEnabled) {
+  if (!post || post.visibility !== "EXTERNAL" || !post.shareEnabled || (post.project.isArchived && post.project.accessScope === "MEMBERS")) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   return NextResponse.json(post);

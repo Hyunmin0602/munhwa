@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
-import { DEFAULT_SPACE_ID, assertAdmin, assertSpaceManager, canManageCultureSportsContent } from "@/lib/server-utils";
+import { DEFAULT_SPACE_ID, assertAdmin, assertSpaceManager, canManageCultureSportsContent, recordActivity } from "@/lib/server-utils";
 import { InputValidationError, optionalText, projectColor, projectStatus, projectTags, readJsonObject, requiredText } from "@/lib/validation";
 import { internalError, unauthorized, validationError } from "@/lib/api-error";
 
@@ -21,6 +21,10 @@ export async function GET(request: NextRequest) {
     const userId = session.user.id;
     const canViewAll = await assertAdmin(userId);
     const canViewSpace = !canViewAll && await assertSpaceManager(userId);
+    const spaceMemberships = canViewAll || canViewSpace
+      ? []
+      : await withDbReadRetry(() => prisma.spaceMember.findMany({ where: { userId }, select: { spaceId: true } }));
+    const spaceIds = spaceMemberships.map((membership) => membership.spaceId);
     const rawLimit = request.nextUrl.searchParams.get("limit");
     const requestedLimit = rawLimit ? Number(rawLimit) : 30;
     const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 30, 1), 50);
@@ -32,7 +36,13 @@ export async function GET(request: NextRequest) {
             ? {}
             : canViewSpace
               ? { spaceId: DEFAULT_SPACE_ID }
-              : { members: { some: { userId } } },
+              : {
+                  OR: [
+                    { members: { some: { userId } } },
+                    { ownerId: userId },
+                    ...(spaceIds.length ? [{ isArchived: true, accessScope: "SPACE", spaceId: { in: spaceIds } }] : []),
+                  ],
+                },
           select: {
             id: true,
             name: true,
@@ -44,6 +54,8 @@ export async function GET(request: NextRequest) {
             color: true,
             order: true,
             sharingMode: true,
+            isArchived: true,
+            accessScope: true,
             createdAt: true,
             updatedAt: true,
             members: { select: { user: { select: { id: true, name: true, image: true } } } },
@@ -117,6 +129,7 @@ export async function POST(req: NextRequest) {
       });
       return createdProject;
     }));
+    await recordActivity({ actorId: userId, spaceId: project.spaceId, projectId: project.id, type: "사업", action: "생성", entityType: "PROJECT", entityId: project.id, title: project.name, afterData: { name: project.name, status: project.status, ownerId: project.ownerId, isArchived: project.isArchived, accessScope: project.accessScope } });
     return NextResponse.json(project, { status: 201 });
   } catch (error) {
     if (error instanceof InputValidationError) return validationError(error.message);

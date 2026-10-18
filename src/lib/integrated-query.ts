@@ -33,7 +33,7 @@ function timestamp(column: Prisma.Sql) {
 export function projectScopeSql(scope: IntegratedScope) {
   const access = scope.admin ? Prisma.sql`1 = 1` : scope.spaceManager
     ? Prisma.sql`p."spaceId" = ${scope.spaceId}`
-    : Prisma.sql`EXISTS (SELECT 1 FROM "ProjectMember" m WHERE m."projectId" = p.id AND m."userId" = ${scope.userId})`;
+    : Prisma.sql`(p."ownerId" = ${scope.userId} OR EXISTS (SELECT 1 FROM "ProjectMember" m WHERE m."projectId" = p.id AND m."userId" = ${scope.userId}) OR (p."isArchived" = 1 AND p."accessScope" = 'SPACE' AND EXISTS (SELECT 1 FROM "SpaceMember" sm WHERE sm."spaceId" = p."spaceId" AND sm."userId" = ${scope.userId})))`;
   return Prisma.sql`WITH RECURSIVE permitted_projects AS (
     SELECT p.* FROM "Project" p WHERE ${access}
     ${scope.projectIds.length ? Prisma.sql`AND p.id IN (${Prisma.join(scope.projectIds)})` : Prisma.empty}

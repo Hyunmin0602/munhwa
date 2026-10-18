@@ -52,6 +52,8 @@ interface Column {
 interface Member {
   id: string;
   name: string | null;
+  email?: string;
+  mentionable?: boolean;
 }
 
 interface Props {
@@ -84,12 +86,13 @@ const INTEGRATED_STATUS_OPTIONS = [
 ] as const;
 
 function TaskCard({
-  task, onDelete, onMoveLeft, onMoveRight,
+  task, onDelete, onMoveLeft, onMoveRight, animateIn = false, deleting = false, disableEntrance = false,
   canMoveLeft, canMoveRight, prevColName, nextColName, onClick,
 }: {
   task: Task; onDelete: () => void; onMoveLeft: () => void; onMoveRight: () => void;
   canMoveLeft: boolean; canMoveRight: boolean; prevColName: string; nextColName: string;
   onClick: () => void;
+  animateIn?: boolean; deleting?: boolean; disableEntrance?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging: isSortDragging } = useSortable({ id: task.id, data: { type: "task", task } });
   const style = { transform: CSS.Transform.toString(transform), transition };
@@ -100,7 +103,7 @@ function TaskCard({
   const [swipeDx, setSwipeDx] = useState(0);
   const [swiping, setSwiping] = useState(false);
   const didSwipe = useRef(false);
-  const THRESHOLD = 72;
+  const THRESHOLD = 40;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -150,7 +153,7 @@ function TaskCard({
         role="button"
         tabIndex={0}
         aria-label={`카드 상세 열기: ${task.title}`}
-        className={`bg-white border border-slate-200 shadow-sm group rounded-xl cursor-grab active:cursor-grabbing touch-none ${!isSortDragging ? "hover:-translate-y-0.5 hover:shadow-md hover:border-indigo-200" : ""}`}
+        className={`bg-white border border-slate-200 shadow-sm group rounded-xl cursor-grab active:cursor-grabbing touch-none ${animateIn && !disableEntrance ? "kanban-task-enter" : ""} ${deleting ? "kanban-task-exit" : ""} ${!isSortDragging ? "hover:-translate-y-0.5 hover:shadow-md hover:border-indigo-200" : ""}`}
       >
         <div className="p-3.5">
           <div className="flex items-start gap-2">
@@ -369,6 +372,8 @@ export default function KanbanBoard({ projectId }: Props) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [activeTask, setActiveTask] = useState<Task | null>(null);
+  const [enteringTaskIds, setEnteringTaskIds] = useState<Set<string>>(() => new Set());
+  const [deletingTaskIds, setDeletingTaskIds] = useState<Set<string>>(() => new Set());
   const [addingTo, setAddingTo] = useState<string | null>(null);
   const [selectedTask, setSelectedTask] = useState<{ task: Task; colId: string } | null>(null);
   const [addingColumn, setAddingColumn] = useState(false);
@@ -380,6 +385,16 @@ export default function KanbanBoard({ projectId }: Props) {
   const [integratedSetupError, setIntegratedSetupError] = useState("");
   const newColRef = useRef<HTMLInputElement>(null);
   const dragSnapshot = useRef<Column[] | null>(null);
+  const notificationTaskOpened = useRef(false);
+
+  const animateTaskEntry = (taskId: string) => {
+    setEnteringTaskIds((current) => new Set(current).add(taskId));
+    window.setTimeout(() => setEnteringTaskIds((current) => {
+      const next = new Set(current);
+      next.delete(taskId);
+      return next;
+    }), 200);
+  };
 
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
@@ -398,8 +413,17 @@ export default function KanbanBoard({ projectId }: Props) {
         if (cancelled) return;
         const loadedColumns = data.columns ?? [];
         setColumns(loadedColumns);
-        const projectMembers = (data.members ?? []) as Array<{ role: string; user: Member }>;
-        setMembers(projectMembers.map((m) => m.user));
+        if (!notificationTaskOpened.current) {
+          const taskId = new URLSearchParams(window.location.search).get("task");
+          const matchingColumn = taskId ? loadedColumns.find((column: Column) => column.tasks.some((task: Task) => task.id === taskId)) : null;
+          const matchingTask = taskId && matchingColumn?.tasks.find((task: Task) => task.id === taskId);
+          if (matchingTask && matchingColumn) {
+            setSelectedTask({ task: matchingTask, colId: matchingColumn.id });
+            notificationTaskOpened.current = true;
+          }
+        }
+        const projectMembers = (data.members ?? []) as Array<{ role: string; mentionable: boolean; user: Member }>;
+        setMembers(projectMembers.map((m) => ({ ...m.user, mentionable: m.mentionable })));
         setCanManageColumns(Boolean(data.permissions?.canManageColumns) || projectMembers.some((m) => m.role === "owner" && m.user.id === session?.user?.id));
         if (loadedColumns.length > 0 && !loadedColumns.some((column: Column) => column.integratedStatus)) {
           setIntegratedSetup(Object.fromEntries(loadedColumns.map((column: Column) => [column.id, ""])));
@@ -468,6 +492,7 @@ export default function KanbanBoard({ projectId }: Props) {
     const overColumnId = over.data.current?.type === "column" ? over.data.current.columnId as string : getColumnIdFromDragId(overId);
     const overCol = columns.find((c) => c.tasks.some((t) => t.id === overId)) ?? columns.find((c) => c.id === overColumnId);
     if (!activeCol || !overCol || activeCol.id === overCol.id) return;
+    animateTaskEntry(activeTaskId);
     setColumns((prev) => prev.map((col) => {
       if (col.id === activeCol.id) return { ...col, tasks: col.tasks.filter((t) => t.id !== activeTaskId) };
       if (col.id === overCol.id) { const task = activeCol.tasks.find((t) => t.id === activeTaskId)!; return { ...col, tasks: [...col.tasks, { ...task, columnId: col.id }] }; }
@@ -567,6 +592,7 @@ export default function KanbanBoard({ projectId }: Props) {
       });
       if (res.ok) {
         const task = await res.json();
+        animateTaskEntry(task.id);
         setColumns((prev) => prev.map((c) => c.id === columnId ? { ...c, tasks: [...c.tasks, task] } : c));
         if (openDetails) setSelectedTask({ task, colId: columnId });
         setAddingTo(null);
@@ -585,7 +611,14 @@ export default function KanbanBoard({ projectId }: Props) {
       showToast("카드를 삭제하지 못했습니다. 다시 시도해주세요.");
       return false;
     }
+    setDeletingTaskIds((current) => new Set(current).add(taskId));
+    await new Promise((resolve) => window.setTimeout(resolve, 150));
     setColumns((prev) => prev.map((c) => c.id === columnId ? { ...c, tasks: c.tasks.filter((t) => t.id !== taskId) } : c));
+    setDeletingTaskIds((current) => {
+      const next = new Set(current);
+      next.delete(taskId);
+      return next;
+    });
     if (selectedTask?.task.id === taskId) setSelectedTask(null);
     return true;
   };
@@ -599,6 +632,7 @@ export default function KanbanBoard({ projectId }: Props) {
     const task = columns.flatMap((c) => c.tasks).find((t) => t.id === taskId);
     if (!task) return;
     const previousColumns = columns.map((column) => ({ ...column, tasks: [...column.tasks] }));
+    animateTaskEntry(taskId);
     setColumns((prev) => prev.map((col) => {
       if (col.id === fromColId) return { ...col, tasks: col.tasks.filter((t) => t.id !== taskId) };
       if (col.id === toCol.id) return { ...col, tasks: [...col.tasks, { ...task, columnId: toCol.id }] };
@@ -724,7 +758,7 @@ export default function KanbanBoard({ projectId }: Props) {
                     onClick={(e) => { if (e.target === e.currentTarget && addingTo !== column.id) setAddingTo(column.id); }}>
                     <SortableContext items={visibleTasks.map((task) => task.id)} strategy={verticalListSortingStrategy}>
                       {visibleTasks.map((task) => (
-                        <TaskCard key={task.id} task={task}
+                        <TaskCard key={task.id} task={task} animateIn={enteringTaskIds.has(task.id)} deleting={deletingTaskIds.has(task.id)}
                           canMoveLeft={!!prevCol} canMoveRight={!!nextCol}
                           prevColName={prevCol?.name ?? ""} nextColName={nextCol?.name ?? ""}
                           onDelete={() => deleteTask(task.id, column.id)}
@@ -784,15 +818,15 @@ export default function KanbanBoard({ projectId }: Props) {
         <DragOverlay>
           {activeTask && (
             <div className="rotate-1 opacity-95 w-[300px]">
-              <TaskCard task={activeTask} onDelete={() => {}} onMoveLeft={() => {}} onMoveRight={() => {}} canMoveLeft={false} canMoveRight={false} prevColName="" nextColName="" onClick={() => {}} />
+              <TaskCard task={activeTask} onDelete={() => {}} onMoveLeft={() => {}} onMoveRight={() => {}} canMoveLeft={false} canMoveRight={false} prevColName="" nextColName="" onClick={() => {}} disableEntrance />
             </div>
           )}
         </DragOverlay>
       </DndContext>
 
       {showIntegratedSetup && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setShowIntegratedSetup(false); }}>
+          <div className="w-full max-w-lg rounded-2xl bg-white p-5 shadow-2xl" onMouseDown={(event) => event.stopPropagation()}>
             <p className="text-xs font-semibold text-indigo-600">통합 칸반 설정</p>
             <h3 className="mt-1 text-lg font-bold text-slate-900">통합 칸반에 표시할 열을 설정하세요</h3>
             <p className="mt-2 text-sm leading-6 text-slate-500">이 사업의 열이 아직 통합 화면에 연결되지 않았습니다. 각 열의 공통 상태를 선택하면 통합 칸반에서 카드 진행 상황을 확인하고 이동할 수 있습니다.</p>

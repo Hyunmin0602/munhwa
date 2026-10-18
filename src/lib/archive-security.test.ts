@@ -26,7 +26,7 @@ const params = { params: Promise.resolve({ projectId: "project", postId: "post",
 type Handler = (request: NextRequest, context: typeof params) => Promise<Response>;
 
 function fixture() {
-  const state = { userId: "member" as string | null, authorId: "author", member: true, manager: false, collaborators: [] as { userId: string }[] };
+  const state = { userId: "member" as string | null, authorId: "author", member: true, manager: false, editable: true, collaborators: [] as { userId: string }[] };
   let storageReads = 0;
   let metadataReads = 0;
   const image = { id: "image", storageKey: "archive/post/image.png", url: "local:archive/post/image.png", mimeType: "image/png", uploaderId: "author", post: { id: "post", projectId: "project", collaborators: [] } };
@@ -45,7 +45,8 @@ function fixture() {
     "@/lib/db-retry": { withDbReadRetry: (fn: () => unknown) => fn(), withDbWrite: (fn: () => unknown) => fn() },
     "@/lib/api-error": errors, "@/lib/validation": validation,
     "@/lib/archive-visibility": visibility, "@/lib/archive-images": imageValidation,
-    "@/lib/server-utils": { assertProjectMember: async () => state.member,
+    "@/lib/notifications": { createInAppNotification: async () => {} },
+    "@/lib/server-utils": { assertProjectMember: async () => state.member, assertProjectEditor: async () => state.editable, recordActivity: async () => {},
       canManageProject: async () => state.manager, canViewAllArchivePosts: async () => state.manager },
     "@/lib/archive-image-storage": { localArchiveImagePath: (key: string) => `/private/${key}`,
       archiveImageResponse: async () => { storageReads++; return new Response("image", { headers: { "Cache-Control": "private, no-store" } }); } },
@@ -130,13 +131,13 @@ test("registration responses match for new, existing, and concurrently created e
       create: async () => { writes++; if (duplicate) throw Object.assign(new Error("duplicate"), { code: "P2002" }); return { id: "user" }; } } } };
   const { POST } = load<{ POST: (request: NextRequest) => Promise<Response> }>("src/app/api/register/route.ts", mocks);
   const request = () => new NextRequest("https://app.test/api/register", { method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: "Name", email: "user@example.test", password: "long-password!", cohortId: "cohort" }) });
+    body: JSON.stringify({ name: "Name", email: "user@example.com", password: "long-password!", cohortId: "cohort" }) });
   for (const scenario of ["new", "existing", "concurrent"]) {
     exists = scenario === "existing";
     duplicate = scenario === "concurrent";
     const response = await POST(request());
     assert.equal(response.status, 201);
-    assert.deepEqual(await response.json(), { ok: true });
+    assert.deepEqual(await response.json(), { ok: true, pendingApproval: true });
   }
   assert.equal(writes, 2);
   assert.equal(hashes, 3);
@@ -187,4 +188,17 @@ test("authenticated attachment paths cannot use the shared Next image optimizer"
     assert.equal(hasLocalMatch(config.default.images.localPatterns, url), false);
   }
   assert.equal(hasLocalMatch(config.default.images.localPatterns, "/assets/logo.png"), true);
+});
+
+
+test("read-only archived projects reject attachment mutations", async () => {
+  const { state, mocks, counts } = fixture();
+  state.userId = "author";
+  state.editable = false;
+  const { POST } = load<{ POST: Handler }>("src/app/api/projects/[projectId]/archive/[postId]/images/route.ts", mocks);
+  const { DELETE } = load<{ DELETE: Handler }>("src/app/api/projects/[projectId]/archive/[postId]/images/[imageId]/route.ts", mocks);
+  const request = new NextRequest("https://app.test/api/image");
+  assert.equal((await POST(request, params)).status, 403);
+  assert.equal((await DELETE(request, params)).status, 403);
+  assert.deepEqual(counts(), { storageReads: 0, metadataReads: 0 });
 });

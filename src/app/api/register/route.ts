@@ -10,6 +10,9 @@ export async function POST(req: NextRequest) {
     const data = await readJsonObject(req);
     const name = requiredText(data.name, "이름", 50);
     const email = normalizeEmail(data.email);
+    if (!email.endsWith(".com")) {
+      return NextResponse.json({ error: "이메일 주소는 .com으로 끝나야 합니다." }, { status: 400 });
+    }
     const plainPassword = password(data.password);
     const cohortId = requiredText(data.cohortId, "기수", 64);
 
@@ -26,15 +29,15 @@ export async function POST(req: NextRequest) {
     const existing = await withDbReadRetry(() => prisma.user.findUnique({ where: { email } }), { operation: `auth:check-user:${email}` });
     // Hash on both paths so an existing email does not skip the expensive work.
     const hashed = await bcrypt.hash(plainPassword, 10);
-    if (existing) return NextResponse.json({ ok: true }, { status: 201 });
+    if (existing) return NextResponse.json({ ok: true, pendingApproval: true }, { status: 201 });
     await withDbWrite(
       () =>
-        prisma.user.create({ data: { name, email, password: hashed, cohortId }, select: { id: true } })
+        prisma.user.create({ data: { name, email, password: hashed, cohortId, registrationStatus: "PENDING" }, select: { id: true } })
     );
 
-    return NextResponse.json({ ok: true }, { status: 201 });
+    return NextResponse.json({ ok: true, pendingApproval: true }, { status: 201 });
   } catch (error) {
-    if (error && typeof error === "object" && "code" in error && error.code === "P2002") return NextResponse.json({ ok: true }, { status: 201 });
+    if (error && typeof error === "object" && "code" in error && error.code === "P2002") return NextResponse.json({ ok: true, pendingApproval: true }, { status: 201 });
     if (error instanceof InputValidationError) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }

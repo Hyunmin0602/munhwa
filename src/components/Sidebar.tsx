@@ -6,7 +6,7 @@ import { signOut, useSession } from "next-auth/react";
 import {
   FolderKanban,
   CalendarDays,
-  BookOpen,
+  CheckSquare,
   LogOut,
   ChevronRight,
   Plus,
@@ -18,6 +18,8 @@ import {
   ListOrdered,
   ShieldCheck,
   Users,
+  UserRound,
+  Bell,
 } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 
@@ -26,10 +28,13 @@ interface Project {
   name: string;
   description: string | null;
   color: string;
+  isArchived?: boolean;
+  accessScope?: "SPACE" | "MEMBERS";
 }
 
 interface SidebarProps {
   projects: Project[];
+  spaceName: string;
   onNewProject: () => void;
   onEditProject: (project: Project) => void;
   onMoveProject: (projectId: string, direction: "up" | "down") => void;
@@ -37,13 +42,14 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, onClose }: SidebarProps) {
+function SidebarContent({ projects, spaceName, onNewProject, onEditProject, onMoveProject, onClose }: SidebarProps) {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [isReordering, setIsReordering] = useState(false);
   const [projectQuery, setProjectQuery] = useState("");
   const [isSpaceAdmin, setIsSpaceAdmin] = useState(false);
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
   const visibleProjects = projects.filter((project) => !projectQuery.trim() || project.name.toLowerCase().includes(projectQuery.trim().toLowerCase()));
 
   useEffect(() => {
@@ -56,6 +62,22 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
         if (!cancelled) setIsSpaceAdmin(false);
       });
     return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      try {
+        const response = await apiFetch("/api/notifications?limit=1", undefined, { showGlobalError: false });
+        if (response.ok) {
+          const data = await response.json();
+          if (!cancelled) setUnreadNotifications(Number(data.unreadCount) || 0);
+        }
+      } catch { /* Notification counts are a convenience; navigation stays available offline. */ }
+    };
+    void refresh();
+    const timer = window.setInterval(() => void refresh(), 60_000);
+    return () => { cancelled = true; window.clearInterval(timer); };
   }, []);
 
   useEffect(() => {
@@ -81,11 +103,11 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
   }, []);
 
   return (
-    <aside className="w-64 bg-white flex flex-col h-full">
+    <aside className="dashboard-sidebar w-64 bg-white flex flex-col h-full">
       {/* Logo */}
-      <div className="px-5 py-5 border-b border-gray-100 flex items-center justify-between">
+      <div className="dashboard-brand px-5 py-5 border-b border-gray-100 flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">문화체육위원회</h1>
+          <h1 className="text-lg font-bold text-gray-900">{spaceName}</h1>
           <p className="text-xs text-gray-400 mt-0.5">내부 업무 관리</p>
         </div>
         {/* 모바일 닫기 버튼 */}
@@ -96,14 +118,24 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
         )}
       </div>
 
+      <div className="border-b border-gray-100 px-3 py-3">
+        <Link href="/dashboard/notifications" onClick={onClose} className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/notifications" ? "bg-indigo-50 font-semibold text-indigo-700" : "text-gray-700 hover:bg-gray-100"}`}>
+          <Bell size={16} />알림함
+          {unreadNotifications > 0 && <span className="ml-auto min-w-5 rounded-full bg-rose-100 px-1.5 py-0.5 text-center text-[10px] font-bold text-rose-700">{unreadNotifications > 99 ? "99+" : unreadNotifications}</span>}
+        </Link>
+        <Link href="/dashboard/my-account" onClick={onClose} className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/my-account" ? "bg-indigo-50 font-semibold text-indigo-700" : "text-gray-700 hover:bg-gray-100"}`}>
+          <UserRound size={16} />내 정보
+        </Link>
+      </div>
+
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-1">
+      <nav className="dashboard-navigation flex-1 overflow-y-auto px-3 py-4 space-y-1">
         <div className="mt-4">
           <Link
             href="/dashboard/integrated"
             onClick={onClose}
             className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${
-              pathname === "/dashboard/integrated" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"
+              pathname === "/dashboard/integrated" ? "bg-white font-semibold text-indigo-600 border-r-2 border-indigo-600" : "text-gray-600 hover:bg-gray-100"
             }`}
           >
             <LayoutGrid size={16} />
@@ -113,7 +145,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
             <Link
               href="/dashboard/admin"
               onClick={onClose}
-              className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/admin" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"}`}
+              className={`mb-1 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/admin" ? "bg-white font-semibold text-indigo-600 border-r-2 border-indigo-600" : "text-gray-600 hover:bg-gray-100"}`}
             >
               <ShieldCheck size={16} />
               시스템 관리자
@@ -123,7 +155,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
             <Link
               href="/dashboard/space-management"
               onClick={onClose}
-              className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/space-management" ? "bg-indigo-50 font-medium text-indigo-700" : "text-gray-600 hover:bg-gray-100"}`}
+              className={`mb-4 flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors ${pathname === "/dashboard/space-management" ? "bg-white font-semibold text-indigo-600 border-r-2 border-indigo-600" : "text-gray-600 hover:bg-gray-100"}`}
             >
               <Users size={16} />
               공간 관리
@@ -160,7 +192,7 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
               <div key={p.id}>
                 <div
                   className={`group flex items-center rounded-lg transition-colors ${
-                    isActive ? "bg-indigo-50 text-indigo-700 font-medium" : "text-gray-600 hover:bg-gray-100"
+                    isActive ? "bg-white text-indigo-700 font-medium border-r-2 border-indigo-600" : "text-gray-600 hover:bg-gray-100"
                   }`}
                 >
                   <Link
@@ -169,8 +201,8 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
                     className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-sm"
                   >
                     <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
-                    <span className="truncate flex-1">{p.name}</span>
-                    {isActive && <ChevronRight size={12} className="flex-shrink-0" />}
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5"><span className="truncate">{p.name}</span>{p.isArchived && <span className="shrink-0 bg-slate-100 px-1 py-0.5 text-[9px] font-semibold text-slate-500">기록</span>}</span>
+                    <ChevronRight size={12} className={`flex-shrink-0 transition-transform duration-200 motion-reduce:transition-none ${isActive ? "rotate-90" : "rotate-0"}`} />
                   </Link>
                   <button
                     type="button"
@@ -197,12 +229,17 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
                     </button>
                   </div>}
                 </div>
-                {isActive && (
-                  <div className="ml-6 mt-0.5 space-y-0.5">
+                <div
+                  inert={!isActive}
+                  aria-hidden={!isActive}
+                  className={`grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none ${isActive ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0"}`}
+                >
+                  <div className="min-h-0 overflow-hidden">
+                  <div className="ml-6 pt-0.5 space-y-0.5">
                     {[
                       { href: `${base}/kanban`, label: "칸반", Icon: FolderKanban },
                       { href: `${base}/schedule`, label: "일정", Icon: CalendarDays },
-                      { href: `${base}/archive`, label: "아카이브", Icon: BookOpen },
+                      { href: `${base}/archive`, label: "아카이브", Icon: CheckSquare },
                     ].map(({ href, label, Icon: SubIcon }) => (
                       <Link
                         key={href}
@@ -217,7 +254,8 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
                       </Link>
                     ))}
                   </div>
-                )}
+                  </div>
+                </div>
               </div>
             );
           })}
@@ -248,12 +286,12 @@ function SidebarContent({ projects, onNewProject, onEditProject, onMoveProject, 
   );
 }
 
-export default function Sidebar({ projects, onNewProject, onEditProject, onMoveProject, open = false, onClose }: SidebarProps) {
+export default function Sidebar({ projects, spaceName, onNewProject, onEditProject, onMoveProject, open = false, onClose }: SidebarProps) {
   return (
     <>
       {/* 데스크탑 사이드바 */}
       <div className="hidden lg:flex border-r border-gray-200 h-screen sticky top-0">
-        <SidebarContent projects={projects} onNewProject={onNewProject} onEditProject={onEditProject} onMoveProject={onMoveProject} />
+        <SidebarContent projects={projects} spaceName={spaceName} onNewProject={onNewProject} onEditProject={onEditProject} onMoveProject={onMoveProject} />
       </div>
 
       {/* 모바일 오버레이 드로어 */}
@@ -265,6 +303,7 @@ export default function Sidebar({ projects, onNewProject, onEditProject, onMoveP
           <div className="absolute left-0 top-0 h-full shadow-xl">
             <SidebarContent
               projects={projects}
+              spaceName={spaceName}
               onNewProject={onNewProject}
               onEditProject={onEditProject}
               onMoveProject={onMoveProject}

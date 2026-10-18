@@ -6,6 +6,7 @@ import { put, del } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
+import { recordActivity } from "@/lib/server-utils";
 import { getArchiveAccess } from "@/lib/archive-access";
 import { localArchiveImagePath } from "@/lib/archive-image-storage";
 import { archiveImageExtension, hasValidArchiveImageSignature, isArchiveImageMimeType, MAX_ARCHIVE_IMAGE_BYTES } from "@/lib/archive-images";
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest, { params }: Params) {
       data: { postId, uploaderId: session.user.id, storageKey: persistedStorageKey, url: imageUrl, mimeType: file.type, byteSize: file.size },
       select: { id: true, mimeType: true, byteSize: true, createdAt: true },
     }));
+    await recordActivity({ actorId: session.user.id, projectId, type: "문서", action: "이미지 추가", entityType: "ARCHIVE_IMAGE", entityId: image.id, title: "아카이브 이미지 추가", afterData: { postId, mimeType: file.type, byteSize: file.size } });
     return NextResponse.json({ ...image, url: `/api/projects/${projectId}/archive/${postId}/images/${image.id}` }, { status: 201 });
   } catch (error) {
     if (blob) await del(blob.url).catch(() => {});

@@ -3,6 +3,7 @@ import { del } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
+import { recordActivity } from "@/lib/server-utils";
 import { getArchiveAccess } from "@/lib/archive-access";
 import { archiveImageResponse, isLocalArchiveImage, removeLocalArchiveImage } from "@/lib/archive-image-storage";
 import { forbidden, internalError, notFound, unauthorized } from "@/lib/api-error";
@@ -34,10 +35,10 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     const session = await auth();
     if (!session?.user?.id) return unauthorized();
     const access = await getArchiveAccess(session.user.id, projectId, postId);
-    if (!access?.canRead) return forbidden();
+    if (!access?.canRead || !access.canEditProject) return forbidden();
     const image = await withDbReadRetry(() => prisma.archiveImage.findFirst({
       where: { id: imageId, postId, post: { projectId } },
-      select: { id: true, storageKey: true, url: true, uploaderId: true, post: { select: { collaborators: { select: { userId: true } } } } },
+      select: { id: true, storageKey: true, url: true, uploaderId: true, mimeType: true, byteSize: true, post: { select: { collaborators: { select: { userId: true } } } } },
     }));
     if (!image) return notFound();
     const collaborator = image.post.collaborators.some(({ userId }) => userId === session.user.id);
@@ -45,6 +46,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     if (isLocalArchiveImage(image.url)) await removeLocalArchiveImage(image.storageKey, image.url);
     else await del(image.url);
     await withDbWrite(() => prisma.archiveImage.delete({ where: { id: image.id } }));
+    await recordActivity({ actorId: session.user.id, projectId, type: "문서", action: "이미지 삭제", entityType: "ARCHIVE_IMAGE", entityId: image.id, title: "아카이브 이미지 삭제", beforeData: { postId, mimeType: image.mimeType, byteSize: image.byteSize } });
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[archive-images] delete failed", error);

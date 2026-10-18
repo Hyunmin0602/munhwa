@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { withDbRetry } from "@/lib/db-retry";
+import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
-import { assertProjectMember, recordActivity } from "@/lib/server-utils";
+import { assertProjectEditor, recordActivity } from "@/lib/server-utils";
 import { eventAllDay, eventDates, eventScope, eventType, InputValidationError, optionalText, projectColor, readJsonObject, requiredText } from "@/lib/validation";
 
 function logApiError(action: string, error: unknown) {
@@ -15,12 +15,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   try {
     const { projectId, eventId } = await params;
     const session = await auth();
-    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
 
-    if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!(await assertProjectEditor(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const existing = await withDbRetry(() => prisma.event.findFirst({ where: { id: eventId, projectId } }));
+    const existing = await withDbReadRetry(() => prisma.event.findFirst({ where: { id: eventId, projectId } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const data = await readJsonObject(req);
@@ -32,7 +32,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     const type = eventType(data.type);
     const scope = eventScope(data.scope);
     if (scope !== "PROJECT") return NextResponse.json({ error: "사업 일정은 사업별 공개 범위만 사용할 수 있습니다." }, { status: 400 });
-    const event = await withDbRetry(() =>
+    const requestedLabelId = typeof data.labelId === "string" && data.labelId.trim() ? data.labelId.trim() : null;
+    const project = await withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { color: true } }));
+    if (!project) return NextResponse.json({ error: "사업을 찾을 수 없습니다." }, { status: 404 });
+    const label = requestedLabelId
+      ? await withDbReadRetry(() => prisma.eventLabel.findUnique({ where: { id: requestedLabelId }, select: { id: true, color: true } }))
+      : null;
+    if (requestedLabelId && !label) return NextResponse.json({ error: "존재하지 않는 라벨입니다." }, { status: 400 });
+    const event = await withDbWrite(() =>
       prisma.event.update({
         where: { id: eventId },
         data: {
@@ -41,13 +48,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
           startDate: start,
           endDate: end,
           allDay,
-          color,
+          color: label?.color ?? project.color ?? color,
+          labelId: label?.id ?? null,
           type,
           scope,
         },
+        include: { project: { select: { color: true } }, label: { select: { id: true, name: true, description: true, color: true } } },
       })
     );
-    await recordActivity({ actorId: userId, projectId, type: "일정", action: "수정", entityType: "EVENT", entityId: event.id, title: event.title, beforeData: { title: existing.title, description: existing.description, startDate: existing.startDate, endDate: existing.endDate, allDay: existing.allDay, color: existing.color }, afterData: { title: event.title, description: event.description, startDate: event.startDate, endDate: event.endDate, allDay: event.allDay, color: event.color } });
+    await recordActivity({ actorId: userId, projectId, type: "일정", action: "수정", entityType: "EVENT", entityId: event.id, title: event.title, beforeData: { title: existing.title, description: existing.description, startDate: existing.startDate, endDate: existing.endDate, allDay: existing.allDay, color: existing.color, labelId: existing.labelId }, afterData: { title: event.title, description: event.description, startDate: event.startDate, endDate: event.endDate, allDay: event.allDay, color: event.color, labelId: event.labelId } });
     return NextResponse.json(event);
   } catch (error) {
     if (error instanceof InputValidationError) return NextResponse.json({ error: error.message }, { status: 400 });
@@ -60,15 +69,15 @@ export async function DELETE(_: NextRequest, { params }: Params) {
   try {
     const { projectId, eventId } = await params;
     const session = await auth();
-    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
 
-    if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!(await assertProjectEditor(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    const existing = await withDbRetry(() => prisma.event.findFirst({ where: { id: eventId, projectId } }));
+    const existing = await withDbReadRetry(() => prisma.event.findFirst({ where: { id: eventId, projectId } }));
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-    await withDbRetry(() => prisma.event.delete({ where: { id: eventId } }));
+    await withDbWrite(() => prisma.event.delete({ where: { id: eventId } }));
     await recordActivity({ actorId: userId, projectId, type: "일정", action: "삭제", entityType: "EVENT", entityId: eventId, title: existing.title, beforeData: { title: existing.title, description: existing.description, startDate: existing.startDate, endDate: existing.endDate, allDay: existing.allDay, color: existing.color } });
     return NextResponse.json({ ok: true });
   } catch (error) {

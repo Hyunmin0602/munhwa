@@ -14,6 +14,7 @@ model User {
   password      String?
   image         String?
   role          String    @default("member")
+  registrationStatus String @default("APPROVED")
   cohortId      String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -26,6 +27,8 @@ model User {
   archivePosts ArchivePost[]
   archiveImages ArchiveImage[]
   events       Event[]
+  eventComments EventComment[]
+  taskComments TaskComment[]
   cohort       Cohort?   @relation(fields: [cohortId], references: [id], onDelete: SetNull)
   ownedProjects Project[] @relation("ProjectOwner")
   spaceMemberships SpaceMember[]
@@ -38,7 +41,13 @@ model User {
   administeredSpaces Space[] @relation("SpaceAdministrator")
   adminAuditLogs AdminAuditLog[] @relation("AdminAuditActor")
   activityLogs ActivityLog[] @relation("ActivityActor")
+  createdEventLabels EventLabel[] @relation("EventLabelCreator")
   archiveCollaborations ArchivePostCollaborator[]
+  notifications Notification[] @relation("NotificationRecipient")
+  sentNotifications Notification[] @relation("NotificationActor")
+  notificationPreference NotificationPreference?
+
+  @@index([registrationStatus, createdAt])
 }
 
 model Space {
@@ -206,6 +215,8 @@ model Project {
   color       String   @default("#6366f1")
   order       Int       @default(0)
   sharingMode String    @default("PUBLIC")
+  isArchived  Boolean   @default(false)
+  accessScope String    @default("MEMBERS")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -284,8 +295,55 @@ model Task {
   column   KanbanColumn @relation(fields: [columnId], references: [id], onDelete: Cascade)
   assignee User?        @relation("TaskAssignee", fields: [assigneeId], references: [id])
   creator  User         @relation("TaskCreator", fields: [creatorId], references: [id])
+  comments TaskComment[]
 
   @@index([dueDate])
+}
+
+model TaskComment {
+  id        String   @id @default(cuid())
+  taskId    String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([taskId, createdAt, id])
+  @@index([authorId, createdAt])
+}
+
+model Notification {
+  id          String   @id @default(cuid())
+  recipientId String
+  actorId     String?
+  type        String
+  title       String
+  body        String
+  href        String
+  readAt      DateTime?
+  createdAt   DateTime @default(now())
+  dedupeKey   String?  @unique
+
+  recipient User  @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User? @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([recipientId, createdAt, id])
+  @@index([recipientId, readAt])
+}
+
+model NotificationPreference {
+  userId                String  @id
+  mentionNotifications  Boolean @default(true)
+  assignmentNotifications Boolean @default(true)
+  dueDateNotifications Boolean @default(true)
+  meetingNotifications Boolean @default(true)
+  approvalNotifications Boolean @default(true)
+  updatedAt             DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model ArchivePost {
@@ -353,6 +411,7 @@ model Event {
   endDate     DateTime
   allDay      Boolean  @default(false)
   color       String   @default("#6366f1")
+  labelId     String?
   type        String   @default("BUSINESS")
   scope       String   @default("PROJECT")
   spaceId     String
@@ -363,9 +422,43 @@ model Event {
 
   space   Space   @relation("SpaceEvents", fields: [spaceId], references: [id], onDelete: Cascade)
   project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  label   EventLabel? @relation(fields: [labelId], references: [id], onDelete: SetNull)
   creator User    @relation(fields: [creatorId], references: [id])
+  comments EventComment[]
 
   @@index([spaceId, startDate])
   @@index([projectId, startDate])
+  @@index([labelId])
   @@index([creatorId, startDate])
+}
+
+model EventComment {
+  id        String   @id @default(cuid())
+  eventId   String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event  Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([eventId, createdAt, id])
+  @@index([authorId, createdAt])
+}
+
+model EventLabel {
+  id          String   @id @default(cuid())
+  name        String
+  nameKey     String   @unique
+  description String?
+  color       String   @default("#6366f1")
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  creator User?  @relation("EventLabelCreator", fields: [createdBy], references: [id], onDelete: SetNull)
+  events  Event[]
+
+  @@index([createdBy, createdAt])
 }

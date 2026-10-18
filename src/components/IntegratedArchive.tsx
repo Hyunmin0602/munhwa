@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
-import { BookOpen, FileText, Globe, Lock, Plus, RotateCw, Search, Trash2 } from "lucide-react";
+import { Globe, Lock, Plus, RotateCw, Search, Trash2 } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -61,13 +61,14 @@ async function fetchPosts(types: ArchiveType[], query: string, cursors: Cursors,
 function ArchiveListSkeleton() {
   return (
     <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-      <div className="hidden grid-cols-[minmax(0,1fr)_10rem_8rem_7rem] gap-4 border-b border-gray-100 bg-gray-50 px-4 py-2 md:grid">
-        {["w-12", "w-10", "w-12", "w-14"].map((width, index) => <Skeleton key={`${width}-${index}`} className={`h-3 ${width} rounded`} />)}
+      <div className="hidden grid-cols-[minmax(0,1fr)_8rem_7rem_7rem] gap-4 border-b border-gray-100 bg-gray-50 px-4 py-2 md:grid">
+        {["w-12", "w-10", "w-12", "w-14"].map((width, index) => (
+          <Skeleton key={`${width}-${index}`} className={`h-3 ${width} rounded`} />
+        ))}
       </div>
       {[...Array(6)].map((_, index) => (
-        <div key={index} className="grid gap-2 border-b border-gray-100 px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_10rem_8rem_7rem] md:items-center md:gap-4">
+        <div key={index} className="grid gap-2 border-b border-gray-100 px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_8rem_7rem_7rem] md:items-center md:gap-4">
           <div className="flex items-center gap-3">
-            <Skeleton className="h-8 w-8 flex-shrink-0 rounded-md" />
             <div className="min-w-0 flex-1 space-y-2">
               <Skeleton className="h-3.5 w-2/3 rounded" />
               <Skeleton className="h-3 w-1/3 rounded" />
@@ -302,7 +303,7 @@ export default function IntegratedArchive() {
               maxLength={256}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="제목, 작성자, 사업명으로 검색"
-              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-3 pr-9 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              className="w-full rounded-md border border-gray-200 bg-white py-2.5 pl-3 pr-9 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
             />
           </div>
         </div>
@@ -320,7 +321,7 @@ export default function IntegratedArchive() {
           </div>
         ) : filteredPosts.length === 0 ? (
           <div className="flex h-64 flex-col items-center justify-center text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50"><FileText size={28} className="text-indigo-400" /></div>
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50" />
             <p className="font-medium text-gray-700">표시할 문서가 없습니다</p>
             <p className="mt-1 text-sm text-gray-400">검색어나 유형을 바꿔 다시 확인하세요.</p>
           </div>
@@ -331,27 +332,23 @@ export default function IntegratedArchive() {
               <span className="hidden sm:inline">최근 수정 순</span>
             </div>
             <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
-              <div className="hidden grid-cols-[minmax(0,1fr)_14rem_8rem_7rem_2.5rem] gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2 text-[11px] font-semibold text-gray-400 md:grid">
+              <div className="hidden grid-cols-[minmax(0,1fr)_12rem_6.5rem_7rem_2.5rem] gap-3 border-b border-gray-100 bg-gray-50 px-4 py-2 text-[11px] font-semibold text-gray-400 md:grid">
                 <span>문서</span><span>사업</span><span>작성자</span><span>공개 범위</span><span aria-hidden="true" />
               </div>
               {filteredPosts.map((post) => {
                 const project = post.project;
-                const accent = project?.color ?? "#6366f1";
                 return (
                   <div key={post.id} className="group relative border-b border-gray-100 last:border-b-0">
-                    <Link href={`/dashboard/projects/${post.projectId}/archive/${post.id}`} className="grid grid-cols-2 gap-1.5 px-3 py-2.5 pr-14 transition-colors hover:bg-indigo-50/40 md:grid-cols-[minmax(0,1fr)_14rem_8rem_7rem_2.5rem] md:items-center md:gap-3 md:px-4 md:py-2.5 md:pr-4">
-                    <div className="col-span-2 flex min-w-0 items-center gap-3 md:col-span-1">
-                      <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md" style={{ backgroundColor: `${accent}18`, color: accent }}>
-                        {post.kind === "MEETING" ? <BookOpen size={15} /> : <FileText size={15} />}
-                      </div>
+                    <Link href={`/dashboard/projects/${post.projectId}/archive/${post.id}`} className="grid grid-cols-2 gap-1.5 px-3 py-2.5 pr-14 transition-colors hover:bg-indigo-50/40 md:grid-cols-[minmax(0,1fr)_12rem_6.5rem_7rem_2.5rem] md:items-center md:gap-3 md:px-4 md:py-2.5 md:pr-4">
+                    <div className="col-span-2 flex min-w-0 items-start gap-2 md:col-span-1 md:items-center">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-semibold text-gray-900 group-hover:text-indigo-700">{post.title}</p>
                         <p className="mt-0.5 text-[11px] text-gray-400">{post.kind === "MEETING" ? "회의록" : "문서"} · {dayjs(post.updatedAt).format("YYYY.MM.DD HH:mm")}</p>
                       </div>
                     </div>
-                    <div className="col-span-2 flex min-w-0 items-center gap-2 pl-11 pr-12 md:contents">
-                      <p className="min-w-0 max-w-[50%] truncate text-xs font-medium text-gray-600 md:max-w-none">{project?.name ?? "알 수 없는 사업"}</p>
-                      <p className="min-w-0 max-w-[28%] truncate text-xs text-gray-500 md:max-w-none">{post.author.name ?? "작성자 없음"}</p>
+                    <div className="col-span-2 flex min-w-0 items-center gap-2 pl-0 pr-12 md:contents">
+                      <p className="min-w-0 truncate text-xs font-medium text-gray-600 md:max-w-none">{project?.name ?? "알 수 없는 사업"}</p>
+                      <p className="min-w-0 truncate text-xs text-gray-500 md:max-w-none">{post.author.name ?? "작성자 없음"}</p>
                       <div className="ml-auto shrink-0"><VisibilityBadge visibility={post.visibility} /></div>
                     </div>
                     <span aria-hidden="true" className="hidden md:block" />

@@ -19,6 +19,7 @@ export async function GET(request: Request, { params }: Params) {
         where: { id: projectId },
         select: {
           id: true,
+          spaceId: true,
           columns: {
             orderBy: { order: "asc" },
             select: {
@@ -31,13 +32,38 @@ export async function GET(request: Request, { params }: Params) {
               tasks: { orderBy: [{ order: "asc" }, { updatedAt: "desc" }], select: { id: true, title: true, priority: true, dueDate: true, columnId: true, assignee: { select: { id: true, name: true } } } },
             },
           },
-          members: { select: { role: true, user: { select: { id: true, name: true } } } },
+          members: { select: { role: true, user: { select: { id: true, name: true, email: true } } } },
+          owner: { select: { id: true, name: true, email: true } },
+          space: {
+            select: {
+              admin: { select: { id: true, name: true, email: true } },
+              members: {
+                where: { user: { registrationStatus: "APPROVED" } },
+                select: { role: true, user: { select: { id: true, name: true, email: true } } },
+              },
+            },
+          },
         },
       }),
       Promise.all([assertProjectOwner(userId, projectId), canManageProject(userId, projectId)]).then(([isOwner, isManager]) => isOwner || isManager),
     ]), { operation: `project:kanban-summary:${projectId}` });
     if (!project) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json({ ...project, permissions: { canManageColumns } });
+    const projectMembers = project.members;
+    const memberIds = new Set(projectMembers.map((member) => member.user.id));
+    const assignableMembers = projectMembers.map((member) => ({ ...member, mentionable: true }));
+    for (const { role, user } of project.space?.members ?? []) {
+      if (!memberIds.has(user.id)) {
+        assignableMembers.push({ role, user, mentionable: false });
+        memberIds.add(user.id);
+      }
+    }
+    for (const user of [project.owner, project.space?.admin]) {
+      if (user && !memberIds.has(user.id)) {
+        assignableMembers.push({ role: "manager", user, mentionable: user.id === project.owner?.id });
+        memberIds.add(user.id);
+      }
+    }
+    return NextResponse.json({ ...project, members: assignableMembers, permissions: { canManageColumns } });
   } catch (error) {
     console.error("[api/projects/:projectId/kanban/summary] GET failed", error);
     return NextResponse.json({ error: "칸반 요약을 불러오지 못했습니다." }, { status: 500 });

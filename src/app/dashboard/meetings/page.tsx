@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
-import { BookOpen, CalendarDays, Globe, Lock } from "lucide-react";
+import { CalendarDays, Globe, Lock } from "lucide-react";
 import { apiFetch } from "@/lib/client-fetch";
 import { Skeleton } from "@/components/ui/Skeleton";
 
@@ -77,7 +77,7 @@ export default function MeetingsPage() {
           <div className="mx-auto max-w-4xl divide-y divide-gray-100 rounded-xl border border-gray-100 bg-white">
             {meetings.map((meeting) => (
               <Link key={meeting.id} href={`/dashboard/projects/${meeting.project.id}/archive/${meeting.id}`} className="flex items-center gap-4 px-4 py-4 transition-colors hover:bg-gray-50 md:px-5">
-                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg" style={{ backgroundColor: `${meeting.project.color}18`, color: meeting.project.color }}><BookOpen size={17} /></div>
+                <div className="h-9 w-1.5 flex-shrink-0 rounded-full" style={{ backgroundColor: meeting.project.color }} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-gray-900">{meeting.title}</p>
                   <p className="mt-1 truncate text-xs text-gray-400"><span className="font-medium text-gray-600">{meeting.project.name}</span> · {meeting.author.name ?? "작성자 없음"} · {dayjs(meeting.updatedAt).format("YYYY.MM.DD")}</p>

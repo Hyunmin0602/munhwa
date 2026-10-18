@@ -5,7 +5,7 @@ import {
   Save, Globe, Lock, ArrowLeft, ExternalLink, ChevronDown,
   Bold, Italic, Strikethrough, Code, Link2,
   List, ListOrdered, Quote, Minus, Heading1, Heading2, Heading3,
-  CheckSquare, CircleHelp, Columns2, ImageIcon, LayoutPanelLeft, Upload,
+  CheckSquare, CircleHelp, Columns2, ImageIcon, LayoutPanelLeft, Trash2, Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "./ui/Skeleton";
@@ -153,6 +153,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const [content, setContent] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -170,6 +171,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   const [collaboratorData, setCollaboratorData] = useState<CollaboratorData | null>(null);
   const [canManageCollaborators, setCanManageCollaborators] = useState(false);
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
+  const [mobileDetailsOpen, setMobileDetailsOpen] = useState(false);
   const [selectedCollaborators, setSelectedCollaborators] = useState<string[]>([]);
   const [savingCollaborators, setSavingCollaborators] = useState(false);
   const [draggingImages, setDraggingImages] = useState(false);
@@ -375,6 +377,28 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
     }
   };
 
+  const deletePost = async () => {
+    if (!window.confirm(`'${title || "제목 없음"}' 문서를 삭제하시겠습니까? 삭제 후 복구할 수 없습니다.`)) return;
+    setDeleting(true);
+    setActionError(null);
+    try {
+      const res = await apiFetch(`/api/projects/${projectId}/archive/${postId}`, { method: "DELETE" }, { showGlobalError: false });
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null);
+        const message = typeof payload?.error === "string"
+          ? payload.error
+          : (typeof payload?.error?.message === "string" ? payload.error.message : "문서를 삭제하지 못했습니다.");
+        setActionError(message);
+        return;
+      }
+      router.push(`/dashboard/projects/${projectId}/archive`);
+    } catch (error) {
+      setActionError(getModalExceptionMessage(error, "문서 삭제"));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "s") { e.preventDefault(); save(); }
@@ -435,9 +459,9 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const response = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`, { method: "POST", body: formData });
+      const response = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`, { method: "POST", body: formData }, { showGlobalError: false });
+      if (!response.ok) throw new Error(await getModalRequestErrorMessage(response, "이미지 업로드"));
       const image = await response.json();
-      if (!response.ok) throw new Error(image.error?.message ?? (typeof image.error === "string" ? image.error : "이미지 업로드에 실패했습니다."));
       setImages((current) => [image, ...current]);
       if (onUploaded) onUploaded(image);
       else if (textarea) {
@@ -549,18 +573,18 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-white">
+    <div className="flex min-h-0 h-full flex-1 flex-col bg-white">
       {/* ── Top Bar ── */}
-      <div className="flex items-center justify-between px-3 md:px-5 py-3 border-b border-gray-100 flex-shrink-0 bg-white z-10">
+      <div className="flex flex-wrap items-center justify-between gap-y-2 px-3 py-3 md:flex-nowrap md:px-5 border-b border-gray-100 flex-shrink-0 bg-white z-10">
         {/* Left */}
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="flex min-w-0 basis-full items-center gap-3 md:w-auto md:basis-auto md:flex-1">
           <button type="button" onClick={navigateBack} aria-label="아카이브 목록으로 돌아가기" className="text-gray-400 hover:text-gray-700 flex-shrink-0 transition-colors">
             <ArrowLeft size={16} />
           </button>
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            className="text-base font-bold text-gray-900 bg-transparent outline-none border-none min-w-0 flex-1 placeholder-gray-300 hover:bg-gray-50 focus:bg-gray-50 rounded-lg px-2 py-1 transition-colors"
+            className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-base font-bold text-gray-900 outline-none placeholder-gray-400 transition-colors hover:border-indigo-300 focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
             placeholder="문서 제목"
           />
         </div>
@@ -581,11 +605,11 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         </div>
 
         {/* Right */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="hidden w-full min-w-0 flex-wrap items-center gap-2 md:flex md:w-auto md:flex-nowrap md:flex-shrink-0">
           {saved && (
             <span className="text-xs text-emerald-600 font-medium animate-fade-in">저장됨 ✓</span>
           )}
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
             <select
               value={kind}
               onChange={(e) => setKind(e.target.value as ArchiveKind)}
@@ -640,14 +664,103 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
           )}
           <button
             onClick={save}
-            disabled={saving}
+            disabled={saving || deleting}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-sm hover:shadow-md hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:translate-y-0"
           >
             <Save size={12} />
             {saving ? "저장 중…" : "저장"}
           </button>
+          <button
+            type="button"
+            onClick={() => void deletePost()}
+            disabled={deleting || saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-rose-600 border border-rose-200 rounded-xl hover:bg-rose-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            title="문서 삭제"
+          >
+            <Trash2 size={12} />
+            {deleting ? "삭제 중…" : "삭제"}
+          </button>
         </div>
+        <button
+          type="button"
+          onClick={() => setMobileDetailsOpen((current) => !current)}
+          aria-expanded={mobileDetailsOpen}
+          className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-600 md:hidden"
+        >
+          <span>상세 설정</span>
+          <ChevronDown size={14} className={`transition-transform ${mobileDetailsOpen ? "rotate-180" : ""}`} />
+        </button>
       </div>
+
+      {mobileDetailsOpen && (
+        <div className="flex flex-col gap-3 border-b border-gray-100 bg-gray-50/80 px-3 py-3 md:hidden">
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={kind}
+              onChange={(e) => setKind(e.target.value as ArchiveKind)}
+              className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 outline-none focus:border-indigo-300"
+            >
+              <option value="DOCUMENT">일반 문서</option>
+              <option value="MEETING">회의록</option>
+            </select>
+            <select
+              value={visibility}
+              onChange={(e) => setVisibility(e.target.value as ArchiveVisibility)}
+              className="min-w-0 flex-1 rounded-xl border border-gray-200 bg-white px-2.5 py-2 text-xs font-medium text-gray-700 outline-none focus:border-indigo-300"
+            >
+              <option value="PRIVATE">비공개</option>
+              <option value="INTERNAL">내부 공유</option>
+              <option value="EXTERNAL">외부 공유</option>
+            </select>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={togglePublish}
+              disabled={publishing}
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium ${
+                visibility === "EXTERNAL"
+                  ? "bg-emerald-50 text-emerald-700"
+                  : visibility === "INTERNAL"
+                    ? "bg-sky-50 text-sky-700"
+                    : "bg-gray-200 text-gray-600"
+              }`}
+            >
+              {visibility === "EXTERNAL" ? <Globe size={12} /> : visibility === "INTERNAL" ? <Globe size={12} /> : <Lock size={12} />}
+              {visibility === "EXTERNAL" ? "외부 공개" : visibility === "INTERNAL" ? "내부 공유" : "비공개"}
+            </button>
+            {visibility === "EXTERNAL" && post.shareEnabled && post.shareToken && (
+              <a href={`/p/${post.shareToken}`} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-indigo-600">
+                <ExternalLink size={12} />
+                공개 링크
+              </a>
+            )}
+            {visibility === "EXTERNAL" && (
+              <button type="button" onClick={() => updateShareLink(post.shareEnabled ? "revoke" : "regenerate")} disabled={sharing} className="text-xs font-medium text-gray-500 disabled:opacity-50">
+                {sharing ? "처리 중..." : post.shareEnabled ? "링크 폐기" : "링크 재생성"}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => void deletePost()}
+              disabled={deleting || saving}
+              className="flex items-center gap-1.5 rounded-xl border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+            >
+              <Trash2 size={12} />
+              {deleting ? "삭제 중…" : "삭제"}
+            </button>
+            <button
+              type="button"
+              onClick={save}
+              disabled={saving || deleting}
+              className="ml-auto flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              <Save size={12} />
+              {saving ? "저장 중…" : "저장"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {actionError && (
         <div className="flex-shrink-0 border-b border-rose-100 bg-rose-50 px-4 py-2 text-xs font-medium text-rose-700">
@@ -778,15 +891,16 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       </div>
 
       {/* ── Editor / Preview Body ── */}
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
         {/* Editor pane - 모바일에서 split일 때 editor만 표시 */}
         {(viewMode === "editor" || viewMode === "split") && (
-          <div className={`flex flex-col ${viewMode === "split" ? "hidden md:flex w-1/2 border-r border-gray-100" : "w-full"} overflow-hidden`}>
+          <div className={`flex min-h-0 flex-col ${viewMode === "split" ? "hidden md:flex w-1/2 border-r border-gray-100" : "w-full"} overflow-hidden`}>
             {viewMode === "split" && (
               <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex-shrink-0">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">편집</span>
               </div>
             )}
+            <div className="flex-1 min-h-0 flex flex-col h-full relative bg-white">
             <textarea
               ref={textareaRef}
               value={content}
@@ -800,12 +914,13 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
               className={`flex-1 p-4 md:p-6 text-sm text-gray-800 leading-relaxed resize-none outline-none font-mono bg-white placeholder-gray-300 ${draggingImages ? "bg-indigo-50 ring-2 ring-inset ring-indigo-300" : ""}`}
               placeholder={`# 문서 제목\n\n내용을 마크다운으로 작성하세요...\n\n**굵게**, _기울임_, \`코드\`, [링크](url)\n\n- 목록 항목\n- [ ] 체크리스트\n\n> 인용문`}
             />
+            </div>
           </div>
         )}
 
         {/* Preview pane */}
         {(viewMode === "preview" || viewMode === "split") && (
-          <div className={`flex flex-col ${viewMode === "split" ? "w-full md:w-1/2" : "w-full"} overflow-hidden`}>
+          <div className={`flex min-h-0 flex-col ${viewMode === "split" ? "w-full md:w-1/2" : "w-full"} overflow-hidden`}>
             {viewMode === "split" && (
               <div className="px-4 py-2 bg-gray-50 border-b border-gray-100 flex-shrink-0">
                 <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide">미리보기</span>

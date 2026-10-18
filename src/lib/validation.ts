@@ -93,6 +93,11 @@ export function projectStatus(value: unknown) {
   return value;
 }
 
+export function projectAccessScope(value: unknown) {
+  if (value === "SPACE" || value === "MEMBERS") return value;
+  return invalid("사업 열람 범위가 올바르지 않습니다.");
+}
+
 export function projectColor(value: unknown) {
   if (value === undefined || value === null) return "#6366f1";
   if (typeof value !== "string" || !/^#[0-9a-f]{6}$/i.test(value)) invalid("올바른 색상 값을 선택해주세요.");

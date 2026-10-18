@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { del } from "@vercel/blob";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
 import { canReadArchivePost, normalizeArchiveVisibility } from "@/lib/archive-visibility";
-import { assertProjectMember, canManageProject, canViewAllArchivePosts, recordActivity } from "@/lib/server-utils";
+import { assertProjectEditor, assertProjectMember, canManageProject, canViewAllArchivePosts, recordActivity } from "@/lib/server-utils";
 
 function logApiError(action: string, error: unknown) {
   console.error(`[api/projects/:projectId/archive/:postId] ${action} failed`, error);
@@ -14,6 +14,8 @@ function logApiError(action: string, error: unknown) {
 import { InputValidationError, MAX_JSON_BODY_BYTES, readJsonObject, requiredText } from "@/lib/validation";
 import { internalError, validationError } from "@/lib/api-error";
 import { isLocalArchiveImage, removeLocalArchiveImage } from "@/lib/archive-image-storage";
+
+import { createInAppNotification } from "@/lib/notifications";
 
 type Params = { params: Promise<{ projectId: string; postId: string }> };
 
@@ -54,7 +56,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
 
-    if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!(await assertProjectEditor(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const canManage = await canManageProject(userId, projectId);
 
     const existing = await withDbReadRetry(() => prisma.archivePost.findFirst({
@@ -118,6 +120,14 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       })
     );
     await recordActivity({ actorId: userId, projectId, type: "문서", action: "수정", entityType: "ARCHIVE_POST", entityId: post.id, title: post.title, beforeData: { title: existing.title, content: existing.content, kind: existing.kind, visibility: existing.visibility }, afterData: { title: post.title, content: post.content, kind: post.kind, visibility: post.visibility } });
+    if (post.kind === "MEETING" && post.visibility !== "PRIVATE" && (existing.kind !== "MEETING" || existing.visibility === "PRIVATE")) {
+      const members = await withDbReadRetry(() => prisma.projectMember.findMany({ where: { projectId, userId: { not: userId } }, select: { userId: true } }));
+      const project = await withDbReadRetry(() => prisma.project.findUnique({ where: { id: projectId }, select: { name: true, ownerId: true } }));
+      if (project) {
+        const recipients = [...new Set([...members.map((member) => member.userId), project.ownerId].filter((id): id is string => !!id && id !== userId))];
+        await Promise.all(recipients.map((recipientId) => createInAppNotification({ recipientId, actorId: userId, category: "meeting", title: "회의록이 공유되었습니다.", body: `${project.name} · ${post.title}`, href: `/dashboard/projects/${projectId}/archive/${post.id}` })));
+      }
+    }
     return NextResponse.json(post);
   } catch (error) {
     if (error instanceof InputValidationError) return validationError(error.message);
@@ -133,7 +143,7 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const userId = session.user.id;
 
-    if (!(await assertProjectMember(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!(await assertProjectEditor(userId, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     const canManage = await canManageProject(userId, projectId);
 
     const existing = await withDbReadRetry(() => prisma.archivePost.findFirst({ where: { id: postId, projectId } }));
@@ -147,7 +157,11 @@ export async function DELETE(_: NextRequest, { params }: Params) {
     if (remoteImages.length > 0 && !process.env.BLOB_READ_WRITE_TOKEN) return internalError("첨부 이미지를 삭제할 수 없습니다.");
     if (remoteImages.length > 0) await del(remoteImages.map((image) => image.url));
     for (const image of images.filter((image) => isLocalArchiveImage(image.url))) await removeLocalArchiveImage(image.storageKey, image.url);
-    await withDbWrite(() => prisma.archivePost.delete({ where: { id: postId } }));
+    await withDbWrite(() => prisma.$transaction(async (tx) => {
+      await tx.archivePostCollaborator.deleteMany({ where: { postId } });
+      await tx.archiveImage.deleteMany({ where: { postId } });
+      await tx.archivePost.delete({ where: { id: postId } });
+    }));
     await recordActivity({ actorId: userId, projectId, type: "문서", action: "삭제", entityType: "ARCHIVE_POST", entityId: postId, title: existing.title, beforeData: { title: existing.title, content: existing.content, kind: existing.kind, visibility: existing.visibility } });
     return NextResponse.json({ ok: true });
   } catch (error) {
