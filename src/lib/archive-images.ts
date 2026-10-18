@@ -10,7 +10,7 @@ const IMAGE_TYPES = {
 export type ArchiveImageMimeType = keyof typeof IMAGE_TYPES;
 
 export function isArchiveImageMimeType(value: string): value is ArchiveImageMimeType {
-  return value in IMAGE_TYPES;
+  return Object.hasOwn(IMAGE_TYPES, value);
 }
 
 export function archiveImageExtension(mimeType: ArchiveImageMimeType) {

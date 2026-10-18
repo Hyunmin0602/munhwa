@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import dayjs from "dayjs";
@@ -18,6 +18,7 @@ type ArchivePost = {
   updatedAt: string;
   author: { name: string | null };
   projectId: string;
+  project: Project;
 };
 
 type IntegratedArchiveResponse = {
@@ -31,8 +32,31 @@ type IntegratedArchiveResponse = {
     project: Project;
   }>;
   nextCursor: string | null;
-  filters?: { projects?: Project[] };
 };
+
+type ArchiveType = "archive" | "meeting";
+type Cursors = Partial<Record<ArchiveType, string | null>>;
+
+async function fetchPosts(types: ArchiveType[], query: string, cursors: Cursors, signal: AbortSignal) {
+  const pages = await Promise.all(types.map(async (type) => {
+    const params = new URLSearchParams({ type, range: "all", query });
+    if (cursors[type]) params.set("cursor", cursors[type]);
+    const response = await apiFetch(`/api/dashboard/integrated?${params}`, { signal });
+    if (!response.ok) throw new Error("Archive request failed");
+    return { type, payload: await response.json() as IntegratedArchiveResponse };
+  }));
+  const nextCursors: Cursors = {};
+  const posts: ArchivePost[] = [];
+  for (const { type, payload } of pages) {
+    nextCursors[type] = payload.nextCursor;
+    posts.push(...payload.items.map((item) => ({
+      id: item.id, title: item.title, kind: item.type === "meeting" ? "MEETING" as const : "DOCUMENT" as const,
+      visibility: item.visibility, updatedAt: item.timestamp, author: { name: item.authorName },
+      projectId: item.project.id, project: item.project,
+    })));
+  }
+  return { posts, cursors: nextCursors };
+}
 
 function ArchiveListSkeleton() {
   return (
@@ -82,46 +106,112 @@ export default function IntegratedArchive() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const items: IntegratedArchiveResponse["items"] = [];
-        let cursor = "";
-        do {
-          const query = new URLSearchParams({ type: "archive,meeting", range: "all", limit: "50" });
-          if (cursor) query.set("cursor", cursor);
-          const response = await apiFetch(`/api/dashboard/integrated?${query.toString()}`);
-          if (!response.ok) throw new Error("Archive request failed");
-          const payload = await response.json() as IntegratedArchiveResponse;
-          if (Array.isArray(payload.items)) items.push(...payload.items);
-          cursor = payload.nextCursor ?? "";
-          if (!cursor) {
-            setProjects(Array.isArray(payload.filters?.projects) ? payload.filters.projects : []);
-            setSelectedProjectId((current) => current || payload.filters?.projects?.[0]?.id || "");
-          }
-        } while (cursor);
+  const [cursors, setCursors] = useState<Cursors>({});
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [projectQuery, setProjectQuery] = useState("");
+  const [projectSearch, setProjectSearch] = useState("");
+  const [projectCursor, setProjectCursor] = useState<string | null>(null);
+  const [loadingProjects, setLoadingProjects] = useState(false);
+  const pageController = useRef<AbortController | null>(null);
+  const projectController = useRef<AbortController | null>(null);
 
-        if (cancelled) return;
-        setPosts(items.map((item) => ({
-          id: item.id,
-          title: item.title,
-          kind: item.type === "meeting" ? "MEETING" : "DOCUMENT",
-          visibility: item.visibility,
-          updatedAt: item.timestamp,
-          author: { name: item.authorName },
-          projectId: item.project.id,
-        })));
+  useEffect(() => {
+    const timer = setTimeout(() => setSearchQuery(query.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+  useEffect(() => {
+    const timer = setTimeout(() => setProjectSearch(projectQuery.trim()), 300);
+    return () => clearTimeout(timer);
+  }, [projectQuery]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    pageController.current = controller;
+    const types: ArchiveType[] = kindFilter === "all" ? ["archive", "meeting"]
+      : [kindFilter === "MEETING" ? "meeting" : "archive"];
+    void (async () => {
+      setLoading(true);
+      setLoadingMore(false);
+      setLoadMoreError(null);
+      setError(null);
+      setCursors({});
+      try {
+        const page = await fetchPosts(types, searchQuery, {}, controller.signal);
+        if (controller.signal.aborted) return;
+        setPosts(page.posts);
+        setCursors(page.cursors);
       } catch {
-        if (!cancelled) setError("통합 아카이브를 불러오지 못했습니다.");
+        if (!controller.signal.aborted) setError("통합 아카이브를 불러오지 못했습니다.");
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!controller.signal.aborted) setLoading(false);
       }
     })();
-    return () => { cancelled = true; };
-  }, [reloadKey]);
+    return () => controller.abort();
+  }, [reloadKey, kindFilter, searchQuery]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    projectController.current = controller;
+    void (async () => {
+      setLoadingProjects(true);
+      setProjectCursor(null);
+      try {
+        const params = new URLSearchParams({ view: "filters", query: projectSearch });
+        const response = await apiFetch(`/api/dashboard/integrated?${params}`, { signal: controller.signal });
+        if (!response.ok) throw new Error();
+        const payload = await response.json() as { items: Project[]; nextCursor: string | null };
+        if (controller.signal.aborted) return;
+        setProjects(payload.items);
+        setProjectCursor(payload.nextCursor);
+        setSelectedProjectId((current) => payload.items.some((project) => project.id === current) ? current : payload.items[0]?.id ?? "");
+      } catch {
+        if (!controller.signal.aborted) setActionError("사업 목록을 불러오지 못했습니다.");
+      } finally {
+        if (!controller.signal.aborted) setLoadingProjects(false);
+      }
+    })();
+    return () => controller.abort();
+  }, [projectSearch, reloadKey]);
+
+  const loadMore = async () => {
+    const controller = pageController.current;
+    if (!controller || controller.signal.aborted || loadingMore) return;
+    const types = (["archive", "meeting"] as const).filter((type) => cursors[type]);
+    if (!types.length) return;
+    setLoadingMore(true);
+    setLoadMoreError(null);
+    try {
+      const page = await fetchPosts(types, searchQuery, cursors, controller.signal);
+      if (controller.signal.aborted) return;
+      setPosts((current) => [...new Map([...current, ...page.posts].map((post) => [post.id, post])).values()]);
+      setCursors((current) => ({ ...current, ...page.cursors }));
+    } catch {
+      if (!controller.signal.aborted) setLoadMoreError("다음 문서를 불러오지 못했습니다. 다시 시도해주세요.");
+    } finally {
+      if (!controller.signal.aborted) setLoadingMore(false);
+    }
+  };
+
+  const loadMoreProjects = async () => {
+    const controller = projectController.current;
+    if (!controller || controller.signal.aborted || !projectCursor || loadingProjects) return;
+    setLoadingProjects(true);
+    try {
+      const params = new URLSearchParams({ view: "filters", query: projectSearch, cursor: projectCursor });
+      const response = await apiFetch(`/api/dashboard/integrated?${params}`, { signal: controller.signal });
+      if (!response.ok) throw new Error();
+      const payload = await response.json() as { items: Project[]; nextCursor: string | null };
+      if (controller.signal.aborted) return;
+      setProjects((current) => [...new Map([...current, ...payload.items].map((project) => [project.id, project])).values()]);
+      setProjectCursor(payload.nextCursor);
+    } catch {
+      if (!controller.signal.aborted) setActionError("다음 사업을 불러오지 못했습니다.");
+    } finally {
+      if (!controller.signal.aborted) setLoadingProjects(false);
+    }
+  };
 
   const createPost = async () => {
     if (!selectedProjectId) {
@@ -137,7 +227,7 @@ export default function IntegratedArchive() {
         body: JSON.stringify({ title: "제목 없음" }),
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok) throw new Error(payload?.error ?? "문서를 만들지 못했습니다.");
+      if (!response.ok) throw new Error(payload?.error?.message ?? (typeof payload?.error === "string" ? payload.error : "문서를 만들지 못했습니다."));
       router.push(`/dashboard/projects/${selectedProjectId}/archive/${payload.id}`);
     } catch (cause) {
       setActionError(cause instanceof Error ? cause.message : "문서를 만들지 못했습니다.");
@@ -154,7 +244,7 @@ export default function IntegratedArchive() {
       const response = await apiFetch(`/api/projects/${post.projectId}/archive/${post.id}`, { method: "DELETE" });
       if (!response.ok) {
         const payload = await response.json().catch(() => null);
-        throw new Error(payload?.error ?? "문서를 삭제하지 못했습니다.");
+        throw new Error(payload?.error?.message ?? (typeof payload?.error === "string" ? payload.error : "문서를 삭제하지 못했습니다."));
       }
       setPosts((current) => current.filter((item) => item.id !== post.id));
     } catch (cause) {
@@ -164,20 +254,9 @@ export default function IntegratedArchive() {
     }
   };
 
-  const projectsById = useMemo(() => new Map(projects.map((project) => [project.id, project])), [projects]);
-
-  const filteredPosts = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return posts
-      .filter((post) => kindFilter === "all" || post.kind === kindFilter)
-      .filter((post) => {
-        if (!normalizedQuery) return true;
-        const project = projectsById.get(post.projectId);
-        const haystack = `${post.title} ${post.author.name ?? ""} ${project?.name ?? ""}`.toLowerCase();
-        return haystack.includes(normalizedQuery);
-      })
-      .sort((a, b) => dayjs(b.updatedAt).valueOf() - dayjs(a.updatedAt).valueOf());
-  }, [posts, kindFilter, query, projectsById]);
+  const filteredPosts = useMemo(() => [...posts].sort((a, b) =>
+    dayjs(b.updatedAt).valueOf() - dayjs(a.updatedAt).valueOf() || b.id.localeCompare(a.id)), [posts]);
+  const hasMore = Object.values(cursors).some(Boolean);
 
   const documentCount = posts.filter((post) => post.kind === "DOCUMENT").length;
   const meetingCount = posts.filter((post) => post.kind === "MEETING").length;
@@ -190,10 +269,12 @@ export default function IntegratedArchive() {
             <h1 className="text-xl font-bold tracking-tight text-gray-900">통합 아카이브</h1>
           </div>
           <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
-            <select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)} disabled={projects.length === 0 || creating} aria-label="문서를 만들 사업 선택" className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs text-gray-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 sm:w-40 sm:flex-none">
+            <input value={projectQuery} onChange={(event) => setProjectQuery(event.target.value)} maxLength={256} aria-label="문서를 만들 사업 검색" placeholder="사업 검색" className="w-24 min-w-0 rounded-lg border border-gray-200 px-2 py-2 text-xs sm:w-28" />
+            <select value={selectedProjectId} onChange={(event) => setSelectedProjectId(event.target.value)} disabled={projects.length === 0 || creating || loadingProjects} aria-label="문서를 만들 사업 선택" className="min-w-0 flex-1 rounded-lg border border-gray-200 bg-white px-2.5 py-2 text-xs text-gray-700 outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100 sm:w-40 sm:flex-none">
               {projects.length === 0 ? <option value="">사업 없음</option> : projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
             </select>
-            <button type="button" onClick={() => void createPost()} disabled={creating || projects.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />{creating ? "생성 중" : "새 문서"}</button>
+            {projectCursor && <button type="button" onClick={() => void loadMoreProjects()} disabled={loadingProjects} className="shrink-0 text-xs text-indigo-600 disabled:opacity-50">사업 더 보기</button>}
+            <button type="button" onClick={() => void createPost()} disabled={creating || loadingProjects || projects.length === 0} className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />{creating ? "생성 중" : "새 문서"}</button>
           </div>
         </div>
         {actionError && <p className="mt-3 text-sm font-medium text-rose-600">{actionError}</p>}
@@ -218,6 +299,7 @@ export default function IntegratedArchive() {
             <Search size={15} className="pointer-events-none absolute right-0 top-1/2 mr-3 -translate-y-1/2 text-gray-400" />
             <input
               value={query}
+              maxLength={256}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="제목, 작성자, 사업명으로 검색"
               className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-3 pr-9 text-sm outline-none transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
@@ -245,7 +327,7 @@ export default function IntegratedArchive() {
         ) : (
           <div>
             <div className="mb-2 flex items-center justify-between text-xs text-gray-400">
-              <span>검색 결과 {filteredPosts.length}개</span>
+              <span>불러온 검색 결과 {filteredPosts.length}개{hasMore ? " · 다음 페이지 있음" : ""}</span>
               <span className="hidden sm:inline">최근 수정 순</span>
             </div>
             <div className="overflow-hidden rounded-lg border border-gray-200 bg-white">
@@ -253,7 +335,7 @@ export default function IntegratedArchive() {
                 <span>문서</span><span>사업</span><span>작성자</span><span>공개 범위</span><span aria-hidden="true" />
               </div>
               {filteredPosts.map((post) => {
-                const project = projectsById.get(post.projectId);
+                const project = post.project;
                 const accent = project?.color ?? "#6366f1";
                 return (
                   <div key={post.id} className="group relative border-b border-gray-100 last:border-b-0">
@@ -290,6 +372,10 @@ export default function IntegratedArchive() {
             </div>
           </div>
         )}
+        {!loading && !error && hasMore && <div className="mt-4 flex flex-col items-center gap-2">
+          <button type="button" onClick={() => void loadMore()} disabled={loadingMore} className="rounded-lg border border-gray-200 px-4 py-2 text-sm text-gray-600 disabled:opacity-50">{loadingMore ? "불러오는 중..." : "더 불러오기"}</button>
+          {loadMoreError && <p className="text-xs text-rose-600">{loadMoreError}</p>}
+        </div>}
       </div>
     </div>
   );

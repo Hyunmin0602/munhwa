@@ -5,12 +5,14 @@ import {
   Save, Globe, Lock, ArrowLeft, ExternalLink, ChevronDown,
   Bold, Italic, Strikethrough, Code, Link2,
   List, ListOrdered, Quote, Minus, Heading1, Heading2, Heading3,
-  CheckSquare, CircleHelp, Columns2, ImageIcon, LayoutPanelLeft, Trash2, Upload,
+  CheckSquare, CircleHelp, Columns2, ImageIcon, LayoutPanelLeft, Upload,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Skeleton } from "./ui/Skeleton";
 import { apiFetch, getModalExceptionMessage, getModalRequestErrorMessage } from "@/lib/client-fetch";
 import MarkdownRenderer from "./MarkdownRenderer";
+import ArchiveImageAttachment from "./ArchiveImageAttachment";
+import { escapeImageAlt, isSafeArchiveImageUrl } from "@/lib/archive-editor-images";
 import ModalFrame, { ModalCloseButton } from "@/components/ui/ModalFrame";
 
 type ArchiveVisibility = "PRIVATE" | "INTERNAL" | "EXTERNAL";
@@ -38,7 +40,6 @@ interface Props {
 
 interface ArchiveImage {
   id: string;
-  storageKey: string;
   url: string;
   mimeType: string;
   byteSize: number;
@@ -144,10 +145,6 @@ function insertTemplate(
 
 function escapeHtml(value: string) {
   return value.replace(/[&<>"']/g, (character) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ?? character);
-}
-
-function isSafeImageUrl(value: string) {
-  try { return new URL(value).protocol === "https:"; } catch { return false; }
 }
 
 export default function ArchiveEditor({ projectId, postId }: Props) {
@@ -421,11 +418,11 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       insertTemplate(textarea, `<section class="md-grid md-grid--two">\n  <div>\n    ${left}\n  </div>\n  <div>\n    ${right}\n  </div>\n</section>\n`, left, setContent);
     } else {
       const url = imageUrl.trim();
-      if (!isSafeImageUrl(url)) { setLayoutError("HTTPS 이미지 주소를 입력하거나 업로드한 이미지를 선택하세요."); return; }
+      if (!isSafeArchiveImageUrl(url)) { setLayoutError("HTTPS 이미지 주소를 입력하거나 업로드한 이미지를 선택하세요."); return; }
       const alt = escapeHtml(imageAlt.trim() || "이미지");
       const caption = escapeHtml(imageCaption.trim());
       const captionMarkup = caption ? `\n  <figcaption>${caption}</figcaption>` : "";
-      insertTemplate(textarea, `<figure class="md-figure md-figure--${imageAlign} md-figure--${imageSize} md-figure--rounded">\n  <img src="${url}" alt="${alt}" />${captionMarkup}\n</figure>\n`, alt, setContent);
+      insertTemplate(textarea, `<figure class="md-figure md-figure--${imageAlign} md-figure--${imageSize} md-figure--rounded">\n  <img src="${escapeHtml(url)}" alt="${alt}" />${captionMarkup}\n</figure>\n`, alt, setContent);
     }
     setLayoutBuilder(null);
   };
@@ -440,11 +437,11 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
       formData.append("file", file);
       const response = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images`, { method: "POST", body: formData });
       const image = await response.json();
-      if (!response.ok) throw new Error(image.error ?? "이미지 업로드에 실패했습니다.");
+      if (!response.ok) throw new Error(image.error?.message ?? (typeof image.error === "string" ? image.error : "이미지 업로드에 실패했습니다."));
       setImages((current) => [image, ...current]);
       if (onUploaded) onUploaded(image);
       else if (textarea) {
-        const alt = file.name.replace(/\.[^.]+$/, "") || "이미지";
+        const alt = escapeImageAlt(file.name.replace(/\.[^.]+$/, "") || "이미지");
         insertTemplate(textarea, `![${alt}](${image.url})\n`, alt, setContent);
       }
     } catch (error) {
@@ -471,7 +468,7 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
     try {
       const response = await apiFetch(`/api/projects/${projectId}/archive/${postId}/images/${image.id}`, { method: "DELETE" });
       const result = await response.json();
-      if (!response.ok) throw new Error(result.error ?? "이미지 삭제에 실패했습니다.");
+      if (!response.ok) throw new Error(result.error?.message ?? (typeof result.error === "string" ? result.error : "이미지 삭제에 실패했습니다."));
       setImages((current) => current.filter((item) => item.id !== image.id));
     } catch (error) {
       alert(error instanceof Error ? error.message : "이미지 삭제에 실패했습니다.");
@@ -760,11 +757,8 @@ export default function ArchiveEditor({ projectId, postId }: Props) {
         <div className="flex items-center gap-2 overflow-x-auto border-b border-gray-100 bg-white px-5 py-2">
           <span className="flex-shrink-0 text-xs font-medium text-gray-400">첨부 이미지 {images.length}개 · 클릭해 삽입</span>
           {images.map((image) => (
-            <div key={image.id} className="group relative flex h-10 w-10 flex-shrink-0 overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <button type="button" onClick={() => insertUploadedImage(image)} className="h-full w-full"><img src={image.url} alt="업로드한 첨부 이미지" className="h-full w-full object-cover" /></button>
-              <button type="button" onClick={() => void deleteImage(image)} className="absolute inset-0 flex items-center justify-center bg-black/50 text-white opacity-0 transition-opacity group-hover:opacity-100" aria-label="첨부 이미지 삭제" title="첨부 이미지 삭제"><Trash2 size={14} /></button>
-            </div>
+            <ArchiveImageAttachment key={image.id} url={image.url}
+              onInsert={() => insertUploadedImage(image)} onDelete={() => void deleteImage(image)} />
           ))}
         </div>
       )}

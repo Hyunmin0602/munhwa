@@ -35,3 +35,28 @@ test("optional text accepts an empty description", () => {
   assert.equal(optionalText("", "일정 설명", 2_000), null);
   assert.equal(optionalText("   ", "일정 설명", 2_000), null);
 });
+test("streaming JSON stops and cancels at the byte budget without trusting content-length", async () => {
+  let reads = 0;
+  let cancelled = false;
+  const body = new ReadableStream<Uint8Array>({
+    pull(controller) { reads++; controller.enqueue(new Uint8Array(10)); },
+    cancel() { cancelled = true; },
+  }, { highWaterMark: 0 });
+  const request = new Request("https://example.test", {
+    method: "POST", headers: { "content-type": "application/json", "content-length": "1" }, body, duplex: "half",
+  } as RequestInit);
+  await assert.rejects(readJsonObject(request, 16), InputValidationError);
+  assert.equal(reads, 2);
+  assert.equal(cancelled, true);
+});
+
+test("streamed JSON preserves multibyte UTF-8 split across chunks", async () => {
+  const bytes = new TextEncoder().encode(JSON.stringify({ title: "사진" }));
+  const body = new ReadableStream<Uint8Array>({ start(controller) {
+    for (const byte of bytes) controller.enqueue(new Uint8Array([byte]));
+    controller.close();
+  } });
+  assert.deepEqual(await readJsonObject(new Request("https://example.test", {
+    method: "POST", headers: { "content-type": "application/json" }, body, duplex: "half",
+  } as RequestInit)), { title: "사진" });
+});

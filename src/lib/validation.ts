@@ -6,18 +6,41 @@ function invalid(message: string): never {
   throw new InputValidationError(message);
 }
 
+export async function readRequestBytes(request: Request, maxBytes: number) {
+  const contentLength = Number(request.headers.get("content-length"));
+  if (Number.isFinite(contentLength) && contentLength > maxBytes) {
+    await request.body?.cancel().catch(() => {});
+    invalid("요청 본문이 너무 큽니다.");
+  }
+  const reader = request.body?.getReader();
+  if (!reader) return new Uint8Array(0);
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > maxBytes) {
+        await reader.cancel().catch(() => {});
+        invalid("요청 본문이 너무 큽니다.");
+      }
+      chunks.push(value);
+    }
+  } finally { reader.releaseLock(); }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
+  return bytes;
+}
+
 export async function readJsonObject(request: Request, maxBytes = MAX_JSON_BODY_BYTES): Promise<Record<string, unknown>> {
-  if (!request.headers.get("content-type")?.toLowerCase().includes("application/json")) {
+  if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get("content-type") ?? "")) {
     invalid("JSON 요청만 허용됩니다.");
   }
-
-  const contentLength = Number(request.headers.get("content-length"));
-  if (Number.isFinite(contentLength) && contentLength > maxBytes) invalid("요청 본문이 너무 큽니다.");
-
-  const text = await request.text();
-  if (new TextEncoder().encode(text).byteLength > maxBytes) invalid("요청 본문이 너무 큽니다.");
+  const bytes = await readRequestBytes(request, maxBytes);
   try {
-    const value: unknown = JSON.parse(text);
+    const value: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     if (!value || typeof value !== "object" || Array.isArray(value)) invalid("올바른 요청 형식이 아닙니다.");
     return value as Record<string, unknown>;
   } catch (error) {

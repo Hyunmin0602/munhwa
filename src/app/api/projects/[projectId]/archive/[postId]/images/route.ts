@@ -5,107 +5,91 @@ import path from "node:path";
 import { put, del } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { withDbRetry } from "@/lib/db-retry";
-import { assertProjectMember, canManageProject } from "@/lib/server-utils";
+import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
+import { getArchiveAccess } from "@/lib/archive-access";
+import { localArchiveImagePath } from "@/lib/archive-image-storage";
 import { archiveImageExtension, hasValidArchiveImageSignature, isArchiveImageMimeType, MAX_ARCHIVE_IMAGE_BYTES } from "@/lib/archive-images";
+import { InputValidationError, readRequestBytes } from "@/lib/validation";
+import { apiError, forbidden, internalError, unauthorized, validationError } from "@/lib/api-error";
 
 export const runtime = "nodejs";
-
 type Params = { params: Promise<{ projectId: string; postId: string }> };
+const MAX_MULTIPART_BYTES = MAX_ARCHIVE_IMAGE_BYTES + 64 * 1024;
+
 function isUploadFile(value: FormDataEntryValue | null): value is File {
-  return !!value
-    && typeof value === "object"
-    && typeof (value as Partial<File>).type === "string"
-    && typeof (value as Partial<File>).size === "number"
-    && typeof (value as Partial<File>).arrayBuffer === "function";
-}
-
-function localImagePath(storageKey: string) {
-  return path.join(process.cwd(), "public", "uploads", storageKey);
-}
-
-async function canEditArchiveImage(userId: string, projectId: string, postId: string) {
-  if (!(await assertProjectMember(userId, projectId))) return false;
-  const [post, canManage] = await withDbRetry(() => Promise.all([
-    prisma.archivePost.findFirst({ where: { id: postId, projectId }, select: { authorId: true, visibility: true, collaborators: { select: { userId: true } } } }),
-    canManageProject(userId, projectId),
-  ]));
-  if (!post) return false;
-  if (canManage) return true;
-  if (post.visibility === "PRIVATE" || post.visibility === "EXTERNAL") return post.authorId === userId || post.collaborators.some(({ userId: collaboratorId }) => collaboratorId === userId);
-  return true;
+  return !!value && typeof value === "object" && typeof value.arrayBuffer === "function";
 }
 
 export async function GET(_: NextRequest, { params }: Params) {
-  const { projectId, postId } = await params;
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await canEditArchiveImage(session.user.id, projectId, postId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-  const images = await withDbRetry(() => prisma.archiveImage.findMany({
-    where: { postId },
-    select: { id: true, storageKey: true, url: true, mimeType: true, byteSize: true, createdAt: true },
-    orderBy: { createdAt: "desc" },
-  }));
-  return NextResponse.json(images.map((image) => ({
-    ...image,
-    url: image.url.startsWith("/uploads/") ? image.url : `/api/projects/${projectId}/archive/${postId}/images/${image.id}`,
-  })));
+  try {
+    const { projectId, postId } = await params;
+    const session = await auth();
+    if (!session?.user?.id) return unauthorized();
+    const access = await getArchiveAccess(session.user.id, projectId, postId);
+    if (!access?.canRead) return forbidden();
+    const images = await withDbReadRetry(() => prisma.archiveImage.findMany({
+      where: { postId }, select: { id: true, mimeType: true, byteSize: true, createdAt: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    }));
+    return NextResponse.json(images.map((image) => ({ ...image,
+      url: `/api/projects/${projectId}/archive/${postId}/images/${image.id}`,
+    })));
+  } catch (error) {
+    console.error("[archive-images] list failed", error);
+    return internalError("첨부 이미지를 불러오지 못했습니다.");
+  }
 }
 
 export async function POST(request: NextRequest, { params }: Params) {
-  const { projectId, postId } = await params;
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await canEditArchiveImage(session.user.id, projectId, postId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const formData = await request.formData();
-  const file = formData.get("file");
-  if (!isUploadFile(file)) return NextResponse.json({ error: "이미지 파일이 필요합니다." }, { status: 400 });
-  if (!isArchiveImageMimeType(file.type)) return NextResponse.json({ error: "JPEG, PNG, WebP, GIF 파일만 업로드할 수 있습니다." }, { status: 400 });
-  if (file.size === 0 || file.size > MAX_ARCHIVE_IMAGE_BYTES) return NextResponse.json({ error: "이미지는 4MB 이하만 업로드할 수 있습니다." }, { status: 400 });
-
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!hasValidArchiveImageSignature(bytes, file.type)) {
-    return NextResponse.json({ error: "파일 내용이 이미지 형식과 일치하지 않습니다." }, { status: 400 });
-  }
-
-  const storageKey = `archive/${postId}/${randomUUID()}.${archiveImageExtension(file.type)}`;
-  const hasBlobStorage = !!process.env.BLOB_READ_WRITE_TOKEN;
-  const useLocalStorage = !hasBlobStorage && !process.env.VERCEL;
-  if (!hasBlobStorage && !useLocalStorage) {
-    return NextResponse.json({ error: "이미지 저장소가 아직 설정되지 않았습니다. BLOB_READ_WRITE_TOKEN을 설정해주세요." }, { status: 503 });
-  }
   let blob: Awaited<ReturnType<typeof put>> | undefined;
   let localFilePath: string | undefined;
-  let uploadStage = "저장 준비";
   try {
+    const { projectId, postId } = await params;
+    const session = await auth();
+    if (!session?.user?.id) return unauthorized();
+    const access = await getArchiveAccess(session.user.id, projectId, postId);
+    if (!access?.canEdit) return forbidden();
+    const contentType = request.headers.get("content-type") ?? "";
+    if (!/^multipart\/form-data\s*;/i.test(contentType)) return validationError("이미지 파일 요청이 필요합니다.");
+    const bytes = await readRequestBytes(request, MAX_MULTIPART_BYTES);
+    let formData: FormData;
+    try { formData = await new Response(bytes, { headers: { "Content-Type": contentType } }).formData(); }
+    catch { return validationError("올바른 이미지 파일 요청이 필요합니다."); }
+    const file = formData.get("file");
+    if (!isUploadFile(file) || formData.getAll("file").length !== 1) return validationError("이미지 파일 하나가 필요합니다.");
+    if (!isArchiveImageMimeType(file.type)) return validationError("JPEG, PNG, WebP, GIF 파일만 업로드할 수 있습니다.");
+    if (file.size === 0 || file.size > MAX_ARCHIVE_IMAGE_BYTES) return validationError("이미지는 4MB 이하만 업로드할 수 있습니다.");
+    const imageBytes = new Uint8Array(await file.arrayBuffer());
+    if (!hasValidArchiveImageSignature(imageBytes, file.type)) return validationError("파일 내용이 이미지 형식과 일치하지 않습니다.");
+
+    const storageKey = `archive/${postId}/${randomUUID()}.${archiveImageExtension(file.type)}`;
+    const hasBlobStorage = !!process.env.BLOB_READ_WRITE_TOKEN;
+    const useLocalStorage = !hasBlobStorage && !process.env.VERCEL;
+    if (!hasBlobStorage && !useLocalStorage) return apiError("INTERNAL_ERROR", "이미지 저장소를 사용할 수 없습니다.", 503);
     let imageUrl: string;
     let persistedStorageKey: string;
     if (hasBlobStorage) {
-      uploadStage = "Blob 업로드";
-      const uploadBody = new Blob([bytes], { type: file.type });
-      const uploadedBlob = await put(storageKey, uploadBody, { access: "private", token: process.env.BLOB_READ_WRITE_TOKEN, contentType: file.type, addRandomSuffix: false });
-      blob = uploadedBlob;
-      imageUrl = uploadedBlob.url;
-      persistedStorageKey = uploadedBlob.pathname;
+      blob = await put(storageKey, new Blob([imageBytes]), { access: "private", token: process.env.BLOB_READ_WRITE_TOKEN,
+        contentType: file.type, addRandomSuffix: false });
+      imageUrl = blob.url;
+      persistedStorageKey = blob.pathname;
     } else {
-      uploadStage = "로컬 파일 저장";
-      localFilePath = localImagePath(storageKey);
+      localFilePath = localArchiveImagePath(storageKey);
       await mkdir(path.dirname(localFilePath), { recursive: true });
-      await writeFile(localFilePath, bytes);
-      imageUrl = `/uploads/${storageKey}`;
+      await writeFile(localFilePath, imageBytes);
+      imageUrl = `local:${storageKey}`;
       persistedStorageKey = storageKey;
     }
-    uploadStage = "데이터베이스 기록";
-    const image = await withDbRetry(() => prisma.archiveImage.create({
+    const image = await withDbWrite(() => prisma.archiveImage.create({
       data: { postId, uploaderId: session.user.id, storageKey: persistedStorageKey, url: imageUrl, mimeType: file.type, byteSize: file.size },
+      select: { id: true, mimeType: true, byteSize: true, createdAt: true },
     }));
     return NextResponse.json({ ...image, url: `/api/projects/${projectId}/archive/${postId}/images/${image.id}` }, { status: 201 });
   } catch (error) {
     if (blob) await del(blob.url).catch(() => {});
     if (localFilePath) await unlink(localFilePath).catch(() => {});
-    const reason = error instanceof Error ? error.message : "알 수 없는 오류";
-    console.error("[archive-images] upload failed", { stage: uploadStage, reason, postId });
-    return NextResponse.json({ error: `${uploadStage} 단계에서 이미지 업로드에 실패했습니다. (${reason})` }, { status: 500 });
+    if (error instanceof InputValidationError) return validationError(error.message);
+    console.error("[archive-images] upload failed", error);
+    return internalError("이미지 업로드에 실패했습니다. 잠시 후 다시 시도해주세요.");
   }
 }

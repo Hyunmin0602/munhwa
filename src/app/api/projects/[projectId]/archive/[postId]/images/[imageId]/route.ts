@@ -1,59 +1,53 @@
 import { NextRequest, NextResponse } from "next/server";
-import { unlink } from "node:fs/promises";
-import path from "node:path";
-import { del, get } from "@vercel/blob";
+import { del } from "@vercel/blob";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
-import { withDbRetry } from "@/lib/db-retry";
-import { assertProjectMember, canManageProject } from "@/lib/server-utils";
+import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
+import { getArchiveAccess } from "@/lib/archive-access";
+import { archiveImageResponse, isLocalArchiveImage, removeLocalArchiveImage } from "@/lib/archive-image-storage";
+import { forbidden, internalError, notFound, unauthorized } from "@/lib/api-error";
 
 export const runtime = "nodejs";
-
 type Params = { params: Promise<{ projectId: string; postId: string; imageId: string }> };
 
-export async function GET(request: NextRequest, { params }: Params) {
-  const { projectId, postId, imageId } = await params;
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await assertProjectMember(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  const image = await withDbRetry(() => prisma.archiveImage.findFirst({ where: { id: imageId, postId, post: { projectId } }, select: { storageKey: true, url: true, mimeType: true } }));
-  if (!image) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (image.url.startsWith("/uploads/")) return NextResponse.redirect(new URL(image.url, request.url));
+export async function GET(_: NextRequest, { params }: Params) {
   try {
-    const result = await get(image.storageKey, { access: "private", token: process.env.BLOB_READ_WRITE_TOKEN });
-    if (!result || result.statusCode === 304 || !result.stream) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return new Response(result.stream, { headers: { "Content-Type": result.blob.contentType ?? image.mimeType, "Cache-Control": "private, max-age=3600" } });
+    const { projectId, postId, imageId } = await params;
+    const session = await auth();
+    if (!session?.user?.id) return unauthorized();
+    const access = await getArchiveAccess(session.user.id, projectId, postId);
+    if (!access?.canRead) return forbidden();
+    const image = await withDbReadRetry(() => prisma.archiveImage.findFirst({
+      where: { id: imageId, postId, post: { projectId } }, select: { storageKey: true, url: true, mimeType: true },
+    }));
+    if (!image) return notFound();
+    return await archiveImageResponse(image) ?? notFound();
   } catch (error) {
-    console.error("[archive-images] private blob read failed", error);
-    return NextResponse.json({ error: "이미지를 불러오지 못했습니다." }, { status: 500 });
+    console.error("[archive-images] read failed", error);
+    return internalError("이미지를 불러오지 못했습니다.");
   }
 }
 
 export async function DELETE(_: NextRequest, { params }: Params) {
-  const { projectId, postId, imageId } = await params;
-  const session = await auth();
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  if (!(await assertProjectMember(session.user.id, projectId))) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-  const [image, canManage] = await withDbRetry(() => Promise.all([
-    prisma.archiveImage.findFirst({
-      where: { id: imageId, postId, post: { projectId } },
-      select: { id: true, url: true, uploaderId: true, post: { select: { collaborators: { select: { userId: true } } } } },
-    }),
-    canManageProject(session.user.id, projectId),
-  ]));
-  if (!image) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  const isCollaborator = image.post.collaborators.some(({ userId }) => userId === session.user.id);
-  if (!canManage && image.uploaderId !== session.user.id && !isCollaborator) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  if (!process.env.BLOB_READ_WRITE_TOKEN && !image.url.startsWith("/uploads/")) return NextResponse.json({ error: "이미지 저장소가 아직 설정되지 않았습니다." }, { status: 503 });
-
   try {
-    if (process.env.BLOB_READ_WRITE_TOKEN) await del(image.url);
-    else await unlink(path.join(process.cwd(), "public", image.url.replace(/^\//, ""))).catch(() => {});
-    await withDbRetry(() => prisma.archiveImage.delete({ where: { id: image.id } }));
+    const { projectId, postId, imageId } = await params;
+    const session = await auth();
+    if (!session?.user?.id) return unauthorized();
+    const access = await getArchiveAccess(session.user.id, projectId, postId);
+    if (!access?.canRead) return forbidden();
+    const image = await withDbReadRetry(() => prisma.archiveImage.findFirst({
+      where: { id: imageId, postId, post: { projectId } },
+      select: { id: true, storageKey: true, url: true, uploaderId: true, post: { select: { collaborators: { select: { userId: true } } } } },
+    }));
+    if (!image) return notFound();
+    const collaborator = image.post.collaborators.some(({ userId }) => userId === session.user.id);
+    if (!access.canManage && image.uploaderId !== session.user.id && !collaborator) return forbidden();
+    if (isLocalArchiveImage(image.url)) await removeLocalArchiveImage(image.storageKey, image.url);
+    else await del(image.url);
+    await withDbWrite(() => prisma.archiveImage.delete({ where: { id: image.id } }));
     return NextResponse.json({ ok: true });
   } catch (error) {
     console.error("[archive-images] delete failed", error);
-    return NextResponse.json({ error: "이미지 삭제에 실패했습니다." }, { status: 500 });
+    return internalError("이미지 삭제에 실패했습니다.");
   }
 }

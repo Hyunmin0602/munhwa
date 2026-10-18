@@ -3,6 +3,15 @@ import { NextResponse } from "next/server";
 import { checkRateLimit, getClientIp, LOGIN_IP_LIMIT, rateLimitResponse } from "@/lib/rate-limit";
 
 export const proxy = auth(async (req) => {
+  if (req.nextUrl.pathname.startsWith("/uploads/")) {
+    if (!req.nextUrl.pathname.startsWith("/uploads/archive/")) return new NextResponse(null, { status: 404 });
+    const imageUrl = req.nextUrl.clone();
+    imageUrl.pathname = "/api/archive-images";
+    imageUrl.search = "";
+    imageUrl.searchParams.set("key", req.nextUrl.pathname.slice("/uploads/".length));
+    return NextResponse.rewrite(imageUrl);
+  }
+
   if (req.nextUrl.pathname === "/api/auth/callback/credentials" && req.method === "POST") {
     const result = await checkRateLimit(req, "login-ip", getClientIp(req), LOGIN_IP_LIMIT);
     if (!result.allowed) return rateLimitResponse(result);
@@ -21,5 +30,5 @@ export const proxy = auth(async (req) => {
 });
 
 export const config = {
-  matcher: ["/dashboard/:path*", "/api/auth/callback/credentials"],
+  matcher: ["/dashboard/:path*", "/api/auth/callback/credentials", "/uploads/:path*"],
 };

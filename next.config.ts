@@ -13,6 +13,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // Authenticated attachments must never enter the shared image optimizer cache.
+  images: { localPatterns: [{ pathname: "/assets/**", search: "" }] },
   serverExternalPackages: [
     "@prisma/client",
     "@prisma/adapter-libsql",

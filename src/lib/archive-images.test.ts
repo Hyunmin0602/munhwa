@@ -7,6 +7,8 @@ test("only approved archive image MIME types are accepted", () => {
   assert.equal(isArchiveImageMimeType("image/png"), true);
   assert.equal(isArchiveImageMimeType("image/svg+xml"), false);
   assert.equal(isArchiveImageMimeType("text/html"), false);
+  assert.equal(isArchiveImageMimeType("constructor"), false);
+  assert.equal(isArchiveImageMimeType("__proto__"), false);
 });
 
 test("archive image signatures must match their MIME type", () => {

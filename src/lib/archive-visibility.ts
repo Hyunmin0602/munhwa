@@ -22,3 +22,8 @@ export function getEffectiveArchiveVisibility(post?: { visibility?: string | nul
 export function isArchivePublic(post?: { visibility?: string | null; published?: boolean | null }) {
   return getEffectiveArchiveVisibility(post) === "EXTERNAL";
 }
+
+export function canReadArchivePost(post: { authorId: string; visibility: string; collaborators: { userId: string }[] }, userId: string, canViewAll: boolean) {
+  return canViewAll || post.visibility !== "PRIVATE" || post.authorId === userId
+    || post.collaborators.some((collaborator) => collaborator.userId === userId);
+}
