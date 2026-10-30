@@ -66,18 +66,22 @@ function SidebarContent({ projects, spaceName, onNewProject, onEditProject, onMo
 
   useEffect(() => {
     let cancelled = false;
+    let requestId = 0;
     const refresh = async () => {
+      const currentRequest = ++requestId;
       try {
         const response = await apiFetch("/api/notifications?limit=1", undefined, { showGlobalError: false });
         if (response.ok) {
           const data = await response.json();
-          if (!cancelled) setUnreadNotifications(Number(data.unreadCount) || 0);
+          if (!cancelled && currentRequest === requestId) setUnreadNotifications(Number(data.unreadCount) || 0);
         }
       } catch { /* Notification counts are a convenience; navigation stays available offline. */ }
     };
     void refresh();
     const timer = window.setInterval(() => void refresh(), 60_000);
-    return () => { cancelled = true; window.clearInterval(timer); };
+    const onChange = () => void refresh();
+    window.addEventListener("notifications:changed", onChange);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("notifications:changed", onChange); };
   }, []);
 
   useEffect(() => {

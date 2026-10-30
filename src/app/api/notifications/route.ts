@@ -3,17 +3,23 @@ import { auth } from "@/auth";
 import { apiError, internalError, unauthorized } from "@/lib/api-error";
 import { withDbReadRetry, withDbWrite } from "@/lib/db-retry";
 import { prisma } from "@/lib/prisma";
-import { readJsonObject } from "@/lib/validation";
+import { InputValidationError, readJsonObject } from "@/lib/validation";
 
 export async function GET(request: NextRequest) {
   const session = await auth();
   const userId = session?.user?.id;
   if (!userId) return unauthorized();
-  const limit = Math.min(Math.max(Number(request.nextUrl.searchParams.get("limit")) || 30, 1), 50);
+  const requestedLimit = request.nextUrl.searchParams.get("limit");
+  const parsedLimit = requestedLimit === null ? 30 : Number(requestedLimit);
+  if (!Number.isInteger(parsedLimit) || parsedLimit < 1) return apiError("VALIDATION_ERROR", "조회 개수가 올바르지 않습니다.", 400);
+  const limit = Math.min(parsedLimit, 50);
+  const unreadOnly = request.nextUrl.searchParams.get("unreadOnly") ?? "false";
+  if (unreadOnly !== "true" && unreadOnly !== "false") return apiError("VALIDATION_ERROR", "알림 조회 조건이 올바르지 않습니다.", 400);
   const encodedCursor = request.nextUrl.searchParams.get("cursor");
   let cursor: { createdAt: Date; id: string } | null = null;
   if (encodedCursor) {
     try {
+      if (encodedCursor.length > 1024 || !/^[A-Za-z0-9_-]+$/.test(encodedCursor)) throw new Error("invalid cursor");
       const [timestamp, id] = Buffer.from(encodedCursor, "base64url").toString("utf8").split("|");
       const createdAt = new Date(timestamp);
       if (!id || Number.isNaN(createdAt.getTime())) throw new Error("invalid cursor");
@@ -25,7 +31,7 @@ export async function GET(request: NextRequest) {
   try {
     const [rows, unreadCount, preference] = await Promise.all([
       withDbReadRetry(() => prisma.notification.findMany({
-        where: { recipientId: userId, ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}) },
+        where: { recipientId: userId, ...(unreadOnly === "true" ? { readAt: null } : {}), ...(cursor ? { OR: [{ createdAt: { lt: cursor.createdAt } }, { createdAt: cursor.createdAt, id: { lt: cursor.id } }] } : {}) },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }], take: limit + 1,
         select: { id: true, type: true, title: true, body: true, href: true, readAt: true, createdAt: true },
       })),
@@ -48,14 +54,17 @@ export async function PATCH(request: NextRequest) {
   if (!userId) return unauthorized();
   try {
     const data = await readJsonObject(request);
-    if (data.markAllRead === true) {
-      await withDbWrite(() => prisma.notification.updateMany({ where: { recipientId: userId, readAt: null }, data: { readAt: new Date() } }));
-      return NextResponse.json({ ok: true });
-    }
-    if (typeof data.notificationId !== "string" || !data.notificationId) return apiError("VALIDATION_ERROR", "알림을 지정해주세요.", 400);
-    await withDbWrite(() => prisma.notification.updateMany({ where: { id: data.notificationId as string, recipientId: userId, readAt: null }, data: { readAt: new Date() } }));
-    return NextResponse.json({ ok: true });
-  } catch {
+    const markAllRead = data.markAllRead === true;
+    if (markAllRead ? data.notificationId !== undefined : data.markAllRead !== undefined || typeof data.notificationId !== "string" || !data.notificationId.trim() || data.notificationId.length > 200) return apiError("VALIDATION_ERROR", "읽음 처리할 알림을 올바르게 지정해주세요.", 400);
+    const notificationId = typeof data.notificationId === "string" ? data.notificationId.trim() : null;
+    const readAt = new Date();
+    const result = await withDbWrite(() => prisma.notification.updateMany({
+      where: { recipientId: userId, readAt: null, ...(markAllRead ? { createdAt: { lte: readAt } } : { id: notificationId! }) },
+      data: { readAt },
+    }));
+    return NextResponse.json({ ok: true, readAt: readAt.toISOString(), updatedCount: result.count });
+  } catch (error) {
+    if (error instanceof InputValidationError) return apiError("VALIDATION_ERROR", error.message, 400);
     return internalError("알림 상태를 변경하지 못했습니다.");
   }
 }
